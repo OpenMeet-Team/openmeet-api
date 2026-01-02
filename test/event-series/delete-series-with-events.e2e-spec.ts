@@ -1,10 +1,6 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import {
-  createEvent,
-  loginAsTester,
-  loginAsAdmin,
-} from '../utils/functions';
+import { createEvent, loginAsTester, loginAsAdmin } from '../utils/functions';
 import {
   EventType,
   EventVisibility,
@@ -182,9 +178,7 @@ describe('Delete Series With Events (e2e)', () => {
         .set('Authorization', `Bearer ${testerToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      console.log(
-        `  Event ${event.slug}: status ${eventCheckResponse.status}`,
-      );
+      console.log(`  Event ${event.slug}: status ${eventCheckResponse.status}`);
       expect(eventCheckResponse.status).toBe(404);
     }
 

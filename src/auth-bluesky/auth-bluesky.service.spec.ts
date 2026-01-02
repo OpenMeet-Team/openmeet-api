@@ -12,7 +12,11 @@ import { BadRequestException } from '@nestjs/common';
 describe('AuthBlueskyService - Error Handling', () => {
   let service: AuthBlueskyService;
   let mockConfigService: { get: jest.Mock };
-  let mockElastiCacheService: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
+  let mockElastiCacheService: {
+    set: jest.Mock;
+    get: jest.Mock;
+    del: jest.Mock;
+  };
 
   beforeEach(async () => {
     mockConfigService = {
@@ -147,11 +151,7 @@ describe('AuthBlueskyService - Error Handling', () => {
       jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
 
       // Act
-      await service.createAuthUrl(
-        'test.bsky.social',
-        'tenant-123',
-        'android',
-      );
+      await service.createAuthUrl('test.bsky.social', 'tenant-123', 'android');
 
       // Assert: Redis should be called with a generated appState (random)
       // The service generates its own appState via crypto.randomBytes
@@ -171,10 +171,7 @@ describe('AuthBlueskyService - Error Handling', () => {
       jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
 
       // Act
-      await service.createAuthUrl(
-        'test.bsky.social',
-        'tenant-123',
-      );
+      await service.createAuthUrl('test.bsky.social', 'tenant-123');
 
       // Assert: Redis should NOT be called for platform storage
       expect(mockElastiCacheService.set).not.toHaveBeenCalled();
@@ -189,11 +186,7 @@ describe('AuthBlueskyService - Error Handling', () => {
       jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
 
       // Act
-      await service.createAuthUrl(
-        'test.bsky.social',
-        'tenant-123',
-        'ios',
-      );
+      await service.createAuthUrl('test.bsky.social', 'tenant-123', 'ios');
 
       // Assert: Redis should be called with a generated appState (random)
       expect(mockElastiCacheService.set).toHaveBeenCalledWith(
@@ -313,13 +306,11 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
     });
 
     it('should redirect to frontend domain when platform is web', () => {
-      const result = service.buildRedirectUrl(
-        'tenant-123',
-        testParams,
-        'web',
-      );
+      const result = service.buildRedirectUrl('tenant-123', testParams, 'web');
 
-      expect(result).toMatch(/^https:\/\/platform\.openmeet\.net\/auth\/bluesky\/callback\?/);
+      expect(result).toMatch(
+        /^https:\/\/platform\.openmeet\.net\/auth\/bluesky\/callback\?/,
+      );
       expect(result).toContain('token=test-token');
     });
 
@@ -330,7 +321,9 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
         undefined,
       );
 
-      expect(result).toMatch(/^https:\/\/platform\.openmeet\.net\/auth\/bluesky\/callback\?/);
+      expect(result).toMatch(
+        /^https:\/\/platform\.openmeet\.net\/auth\/bluesky\/callback\?/,
+      );
     });
 
     it('should redirect to custom URL scheme when platform is android', () => {
@@ -340,29 +333,31 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
         'android',
       );
 
-      expect(result).toMatch(/^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/);
+      expect(result).toMatch(
+        /^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/,
+      );
       expect(result).toContain('token=test-token');
     });
 
     it('should redirect to custom URL scheme when platform is ios', () => {
-      const result = service.buildRedirectUrl(
-        'tenant-123',
-        testParams,
-        'ios',
-      );
+      const result = service.buildRedirectUrl('tenant-123', testParams, 'ios');
 
-      expect(result).toMatch(/^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/);
+      expect(result).toMatch(
+        /^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/,
+      );
       expect(result).toContain('token=test-token');
     });
 
     it('should use configurable custom URL scheme', () => {
       // Override config to return custom scheme
-      mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
-        if (key === 'MOBILE_CUSTOM_URL_SCHEME') {
-          return 'com.custom.app';
-        }
-        return defaultValue;
-      });
+      mockConfigService.get.mockImplementation(
+        (key: string, defaultValue?: string) => {
+          if (key === 'MOBILE_CUSTOM_URL_SCHEME') {
+            return 'com.custom.app';
+          }
+          return defaultValue;
+        },
+      );
 
       const result = service.buildRedirectUrl(
         'tenant-123',
@@ -381,7 +376,9 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
       );
 
       // Parse URL by replacing custom scheme with http for URL parsing
-      const url = new URL(result.replace('net.openmeet.platform:', 'http://localhost'));
+      const url = new URL(
+        result.replace('net.openmeet.platform:', 'http://localhost'),
+      );
       expect(url.searchParams.has('token')).toBe(true);
       expect(url.searchParams.has('refreshToken')).toBe(true);
       expect(url.searchParams.has('tokenExpires')).toBe(true);
@@ -390,9 +387,11 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
 
     it('should use default scheme when MOBILE_CUSTOM_URL_SCHEME is not set', () => {
       // Clear the mock to return undefined for MOBILE_CUSTOM_URL_SCHEME
-      mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
-        return defaultValue;
-      });
+      mockConfigService.get.mockImplementation(
+        (key: string, defaultValue?: string) => {
+          return defaultValue;
+        },
+      );
 
       const result = service.buildRedirectUrl(
         'tenant-123',
@@ -401,7 +400,9 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
       );
 
       // Should fall back to default scheme
-      expect(result).toMatch(/^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/);
+      expect(result).toMatch(
+        /^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/,
+      );
     });
   });
 });

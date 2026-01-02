@@ -26,7 +26,7 @@ export class HomeService {
 
   getRootRedirect() {
     return {
-      url: "/docs",
+      url: '/docs',
       statusCode: 302,
     };
   }
