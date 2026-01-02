@@ -220,6 +220,45 @@ describe('BlueskyService', () => {
       );
     });
 
+    it('should use DID from existingUser.socialId, not from user parameter (JWT payload)', async () => {
+      // Arrange
+      // Simulate JWT payload user (no socialId, as JWT doesn't include it)
+      const jwtUser = {
+        id: 1,
+        // socialId is NOT in JWT payload, so it's undefined
+        socialId: undefined,
+        preferences: {},
+      } as UserEntity;
+
+      const tenantId = 'test-tenant';
+
+      // Database user has the correct socialId
+      mockUserService.findById.mockResolvedValue({
+        id: 1,
+        socialId: 'did:plc:database-user-did',
+        preferences: { existingPref: true },
+      });
+
+      // Act
+      const result = await service.connectAccount(jwtUser, tenantId);
+
+      // Assert
+      expect(result.success).toBe(true);
+      // The DID should come from existingUser (database), not from user parameter (JWT)
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          preferences: expect.objectContaining({
+            bluesky: expect.objectContaining({
+              did: 'did:plc:database-user-did', // From database, not undefined
+              connected: true,
+            }),
+          }),
+        }),
+        tenantId,
+      );
+    });
+
     it('should throw if user not found', async () => {
       // Arrange
       const user = {
@@ -271,6 +310,51 @@ describe('BlueskyService', () => {
         expect.objectContaining({
           preferences: expect.objectContaining({
             bluesky: expect.objectContaining({
+              connected: false,
+            }),
+          }),
+        }),
+        tenantId,
+      );
+    });
+
+    it('should use DID from existingUser.socialId, not from user parameter (JWT payload)', async () => {
+      // Arrange
+      // Simulate JWT payload user (no socialId, as JWT doesn't include it)
+      const jwtUser = {
+        id: 1,
+        // socialId is NOT in JWT payload, so it's undefined
+        socialId: undefined,
+        preferences: {},
+      } as UserEntity;
+
+      const tenantId = 'test-tenant';
+
+      // Database user has the correct socialId
+      mockUserService.findById.mockResolvedValue({
+        id: 1,
+        socialId: 'did:plc:database-user-did',
+        preferences: {
+          bluesky: {
+            did: 'did:plc:database-user-did',
+            connected: true,
+            handle: 'test.user',
+          },
+        },
+      });
+
+      // Act
+      const result = await service.disconnectAccount(jwtUser, tenantId);
+
+      // Assert
+      expect(result.success).toBe(true);
+      // The DID should come from existingUser (database), not from user parameter (JWT)
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          preferences: expect.objectContaining({
+            bluesky: expect.objectContaining({
+              did: 'did:plc:database-user-did', // From database, not undefined
               connected: false,
             }),
           }),

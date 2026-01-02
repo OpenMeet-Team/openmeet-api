@@ -1555,7 +1555,10 @@ describe('UserService', () => {
     });
   });
 
-  describe('showProfile - Bluesky Handle Persistence', () => {
+  describe('showProfile - Bluesky Handle Resolution', () => {
+    // Design: Handles are resolved dynamically for display, not persisted.
+    // DID is the permanent identifier; handles can change on Bluesky at any time.
+    // See commit c3e042f for rationale.
     let mockUsersRepository: any;
     let mockBlueskyIdentityService: jest.Mocked<BlueskyIdentityService>;
 
@@ -1564,12 +1567,12 @@ describe('UserService', () => {
       mockBlueskyIdentityService = module.get(BlueskyIdentityService);
     });
 
-    it('should persist updated handle to database when Bluesky handle has changed', async () => {
+    it('should resolve and return updated handle in-memory when Bluesky handle has changed', async () => {
       const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
       const oldHandle = 'openmeet.bsky.social';
       const newHandle = 'openmeet.net';
 
-      // Arrange: User with old handle in database
+      // Arrange: User with old handle (stale data that would be in database)
       const userWithOldHandle = {
         id: 1,
         slug: 'openmeet-abc123',
@@ -1578,7 +1581,7 @@ describe('UserService', () => {
         preferences: {
           bluesky: {
             did,
-            handle: oldHandle, // Old handle in database
+            handle: oldHandle, // Old handle
             connected: true,
           },
         },
@@ -1602,39 +1605,22 @@ describe('UserService', () => {
         }),
       };
 
-      // Mock Bluesky identity service to return NEW handle
+      // Mock Bluesky identity service to return NEW handle (current on Bluesky)
       mockBlueskyIdentityService.resolveProfile.mockResolvedValue({
         handle: newHandle, // Resolved to new handle
         did,
       });
 
-      // Mock save method to track if it's called
-      mockUsersRepository.save = jest.fn().mockResolvedValue({
-        ...userWithOldHandle,
-        preferences: {
-          bluesky: {
-            did,
-            handle: newHandle,
-            connected: true,
-          },
-        },
-      });
+      // Mock save method to ensure it's NOT called (we don't persist handles)
+      mockUsersRepository.save = jest.fn();
 
       // Act: Call showProfile
       const result = await userService.showProfile('openmeet-abc123');
 
-      // Assert: The user should be saved with updated handle
-      expect(mockUsersRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          preferences: expect.objectContaining({
-            bluesky: expect.objectContaining({
-              handle: newHandle,
-            }),
-          }),
-        }),
-      );
+      // Assert: save should NOT be called (handles are resolved dynamically, not persisted)
+      expect(mockUsersRepository.save).not.toHaveBeenCalled();
 
-      // Assert: The returned user should have the new handle
+      // Assert: The returned user should have the new handle for display
       expect(result?.preferences?.bluesky?.handle).toBe(newHandle);
     });
 
@@ -1744,12 +1730,12 @@ describe('UserService', () => {
       expect(result?.preferences?.bluesky?.handle).toBe(did);
     });
 
-    it('should persist handle when resolved via extractHandleFromDid fallback', async () => {
+    it('should resolve handle via extractHandleFromDid fallback when primary resolution fails', async () => {
       const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
       const oldHandle = 'openmeet.bsky.social';
       const newHandle = 'openmeet.net';
 
-      // Arrange: User with old handle in database
+      // Arrange: User with old handle
       const userWithOldHandle = {
         id: 1,
         slug: 'openmeet-abc123',
@@ -1780,9 +1766,9 @@ describe('UserService', () => {
         }),
       };
 
-      // Mock primary resolution to FAIL
+      // Mock primary resolution to FAIL (e.g., PDS requires auth)
       mockBlueskyIdentityService.resolveProfile.mockRejectedValue(
-        new Error('Profile fetch failed'),
+        new Error('Authentication Required'),
       );
 
       // Mock fallback extractHandleFromDid to return NEW handle
@@ -1790,31 +1776,16 @@ describe('UserService', () => {
         newHandle,
       );
 
-      mockUsersRepository.save = jest.fn().mockResolvedValue({
-        ...userWithOldHandle,
-        preferences: {
-          bluesky: {
-            did,
-            handle: newHandle,
-            connected: true,
-          },
-        },
-      });
+      // Mock save to ensure it's NOT called
+      mockUsersRepository.save = jest.fn();
 
       // Act
       const result = await userService.showProfile('openmeet-abc123');
 
-      // Assert: save should be called with updated handle
-      expect(mockUsersRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          preferences: expect.objectContaining({
-            bluesky: expect.objectContaining({
-              handle: newHandle,
-            }),
-          }),
-        }),
-      );
+      // Assert: save should NOT be called (handles are resolved dynamically, not persisted)
+      expect(mockUsersRepository.save).not.toHaveBeenCalled();
 
+      // Assert: The returned user should have the new handle from fallback
       expect(result?.preferences?.bluesky?.handle).toBe(newHandle);
     });
   });
