@@ -284,6 +284,9 @@ export class UserService {
     // Resolve and update Bluesky handle from DID (only for authenticated Bluesky users, not shadow accounts)
     // Shadow accounts already have their handle in firstName field
     if (user?.preferences?.bluesky?.did && !user.isShadowAccount) {
+      // Capture original handle before resolution to detect changes
+      const originalHandle = user.preferences.bluesky.handle;
+
       try {
         const profile = await this.blueskyIdentityService.resolveProfile(
           user.preferences.bluesky.did,
@@ -316,6 +319,17 @@ export class UserService {
           );
           user.preferences.bluesky.handle = user.preferences.bluesky.did;
         }
+      }
+
+      // Persist updated handle to database if it changed (fixes issue #424)
+      if (
+        user.preferences.bluesky.handle !== originalHandle &&
+        user.preferences.bluesky.handle !== user.preferences.bluesky.did
+      ) {
+        this.logger.log(
+          `Bluesky handle changed from "${originalHandle}" to "${user.preferences.bluesky.handle}", persisting to database`,
+        );
+        await this.usersRepository.save(user);
       }
     }
 

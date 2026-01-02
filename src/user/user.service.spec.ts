@@ -1554,4 +1554,268 @@ describe('UserService', () => {
       expect(result.email).toBe(email);
     });
   });
+
+  describe('showProfile - Bluesky Handle Persistence', () => {
+    let mockUsersRepository: any;
+    let mockBlueskyIdentityService: jest.Mocked<BlueskyIdentityService>;
+
+    beforeEach(() => {
+      mockUsersRepository = module.get(Repository);
+      mockBlueskyIdentityService = module.get(BlueskyIdentityService);
+    });
+
+    it('should persist updated handle to database when Bluesky handle has changed', async () => {
+      const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
+      const oldHandle = 'openmeet.bsky.social';
+      const newHandle = 'openmeet.net';
+
+      // Arrange: User with old handle in database
+      const userWithOldHandle = {
+        id: 1,
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle: oldHandle, // Old handle in database
+            connected: true,
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      // Mock repository findOne to return user with old handle
+      mockUsersRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(userWithOldHandle);
+
+      // Mock manager for the related queries (events, groups, etc.)
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      // Mock Bluesky identity service to return NEW handle
+      mockBlueskyIdentityService.resolveProfile.mockResolvedValue({
+        handle: newHandle, // Resolved to new handle
+        did,
+      });
+
+      // Mock save method to track if it's called
+      mockUsersRepository.save = jest.fn().mockResolvedValue({
+        ...userWithOldHandle,
+        preferences: {
+          bluesky: {
+            did,
+            handle: newHandle,
+            connected: true,
+          },
+        },
+      });
+
+      // Act: Call showProfile
+      const result = await userService.showProfile('openmeet-abc123');
+
+      // Assert: The user should be saved with updated handle
+      expect(mockUsersRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preferences: expect.objectContaining({
+            bluesky: expect.objectContaining({
+              handle: newHandle,
+            }),
+          }),
+        }),
+      );
+
+      // Assert: The returned user should have the new handle
+      expect(result?.preferences?.bluesky?.handle).toBe(newHandle);
+    });
+
+    it('should NOT save to database when handle has not changed', async () => {
+      const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
+      const handle = 'openmeet.net';
+
+      // Arrange: User with same handle in database
+      const userWithSameHandle = {
+        id: 1,
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle, // Same handle
+            connected: true,
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      mockUsersRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(userWithSameHandle);
+
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      // Mock Bluesky identity service to return SAME handle
+      mockBlueskyIdentityService.resolveProfile.mockResolvedValue({
+        handle, // Same handle as stored
+        did,
+      });
+
+      mockUsersRepository.save = jest.fn();
+
+      // Act
+      await userService.showProfile('openmeet-abc123');
+
+      // Assert: save should NOT be called (no change)
+      expect(mockUsersRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should NOT save to database when handle resolution fails', async () => {
+      const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
+      const oldHandle = 'openmeet.bsky.social';
+
+      // Arrange: User with handle in database
+      const userWithHandle = {
+        id: 1,
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle: oldHandle,
+            connected: true,
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      mockUsersRepository.findOne = jest.fn().mockResolvedValue(userWithHandle);
+
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      // Mock Bluesky identity service to FAIL
+      mockBlueskyIdentityService.resolveProfile.mockRejectedValue(
+        new Error('Network error'),
+      );
+
+      // Mock extractHandleFromDid to also fail
+      mockBlueskyIdentityService.extractHandleFromDid.mockRejectedValue(
+        new Error('DID resolution failed'),
+      );
+
+      mockUsersRepository.save = jest.fn();
+
+      // Act
+      const result = await userService.showProfile('openmeet-abc123');
+
+      // Assert: save should NOT be called (resolution failed, using DID as fallback)
+      // When both resolution methods fail, we fall back to DID
+      expect(mockUsersRepository.save).not.toHaveBeenCalled();
+
+      // Assert: The handle should fall back to DID
+      expect(result?.preferences?.bluesky?.handle).toBe(did);
+    });
+
+    it('should persist handle when resolved via extractHandleFromDid fallback', async () => {
+      const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
+      const oldHandle = 'openmeet.bsky.social';
+      const newHandle = 'openmeet.net';
+
+      // Arrange: User with old handle in database
+      const userWithOldHandle = {
+        id: 1,
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle: oldHandle,
+            connected: true,
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      mockUsersRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(userWithOldHandle);
+
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      // Mock primary resolution to FAIL
+      mockBlueskyIdentityService.resolveProfile.mockRejectedValue(
+        new Error('Profile fetch failed'),
+      );
+
+      // Mock fallback extractHandleFromDid to return NEW handle
+      mockBlueskyIdentityService.extractHandleFromDid.mockResolvedValue(
+        newHandle,
+      );
+
+      mockUsersRepository.save = jest.fn().mockResolvedValue({
+        ...userWithOldHandle,
+        preferences: {
+          bluesky: {
+            did,
+            handle: newHandle,
+            connected: true,
+          },
+        },
+      });
+
+      // Act
+      const result = await userService.showProfile('openmeet-abc123');
+
+      // Assert: save should be called with updated handle
+      expect(mockUsersRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preferences: expect.objectContaining({
+            bluesky: expect.objectContaining({
+              handle: newHandle,
+            }),
+          }),
+        }),
+      );
+
+      expect(result?.preferences?.bluesky?.handle).toBe(newHandle);
+    });
+  });
 });
