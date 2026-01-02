@@ -126,7 +126,10 @@ export class AuthBlueskyService {
     const platform = appState
       ? await this.getStoredPlatform(appState)
       : undefined;
-    this.logger.debug('Retrieved platform from appState', { appState, platform });
+    this.logger.debug('Retrieved platform from appState', {
+      appState,
+      platform,
+    });
 
     const restoredSession = await client.restore(oauthSession.did);
     this.logger.debug('Restored session with tokens');

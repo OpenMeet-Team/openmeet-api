@@ -177,7 +177,9 @@ describe('AuthGithubService', () => {
     it('should build the correct redirect URI for callback endpoint without query params', () => {
       const result = service.getCallbackRedirectUri();
 
-      expect(result).toBe('https://api.openmeet.net/api/v1/auth/github/callback');
+      expect(result).toBe(
+        'https://api.openmeet.net/api/v1/auth/github/callback',
+      );
     });
 
     it('should use BACKEND_DOMAIN from config', () => {
@@ -192,7 +194,9 @@ describe('AuthGithubService', () => {
 
       const result = service.getCallbackRedirectUri();
 
-      expect(result).toBe('https://api-dev.openmeet.net/api/v1/auth/github/callback');
+      expect(result).toBe(
+        'https://api-dev.openmeet.net/api/v1/auth/github/callback',
+      );
     });
   });
 

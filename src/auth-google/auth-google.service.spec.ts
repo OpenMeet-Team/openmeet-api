@@ -183,7 +183,9 @@ describe('AuthGoogleService', () => {
     it('should build the correct redirect URI for callback endpoint without query params', () => {
       const result = service.getCallbackRedirectUri();
 
-      expect(result).toBe('https://api.openmeet.net/api/v1/auth/google/callback');
+      expect(result).toBe(
+        'https://api.openmeet.net/api/v1/auth/google/callback',
+      );
     });
 
     it('should use BACKEND_DOMAIN from config', () => {
@@ -198,7 +200,9 @@ describe('AuthGoogleService', () => {
 
       const result = service.getCallbackRedirectUri();
 
-      expect(result).toBe('https://api-dev.openmeet.net/api/v1/auth/google/callback');
+      expect(result).toBe(
+        'https://api-dev.openmeet.net/api/v1/auth/google/callback',
+      );
     });
   });
 

@@ -200,7 +200,7 @@ export class BlueskyService {
     this.logger.debug('Connecting Bluesky account:', {
       userId: user.id,
       existingPreferences: existingUser.preferences?.bluesky,
-      socialId: user.socialId,
+      socialId: existingUser.socialId,
     });
 
     // Prepare updated preferences while preserving existing data
@@ -210,7 +210,7 @@ export class BlueskyService {
         ...existingUser.preferences,
         bluesky: {
           ...existingUser.preferences?.bluesky, // Preserve all existing Bluesky preferences
-          did: user.socialId, // Ensure DID is set from socialId
+          did: existingUser.socialId, // Use socialId from database, not JWT payload
           connected: true,
           connectedAt: new Date(),
         },
@@ -250,7 +250,7 @@ export class BlueskyService {
     this.logger.debug('Disconnecting Bluesky account:', {
       userId: user.id,
       existingPreferences: existingUser.preferences?.bluesky,
-      socialId: user.socialId,
+      socialId: existingUser.socialId,
     });
 
     // Prepare updated preferences while preserving existing data
@@ -260,7 +260,7 @@ export class BlueskyService {
         ...existingUser.preferences,
         bluesky: {
           ...existingUser.preferences?.bluesky, // Preserve all existing Bluesky preferences
-          did: user.socialId, // Ensure DID is preserved from socialId
+          did: existingUser.socialId, // Use socialId from database, not JWT payload
           connected: false,
           disconnectedAt: new Date(),
         },

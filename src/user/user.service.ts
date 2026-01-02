@@ -34,6 +34,7 @@ import { SocialInterface } from '../social/interfaces/social.interface';
 import { StatusDto } from '../status/dto/status.dto';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.service';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { ProfileSummaryDto } from './dto/profile-summary.dto';
 
@@ -54,6 +55,7 @@ export class UserService {
     private readonly fileService: FilesS3PresignedService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
     private readonly blueskyIdentityService: BlueskyIdentityService,
+    private readonly atprotoHandleCacheService: AtprotoHandleCacheService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -69,6 +71,43 @@ export class UserService {
     this.usersRepository = dataSource.getRepository(UserEntity);
     this.userPermissionRepository =
       dataSource.getRepository(UserPermissionEntity);
+  }
+
+  /**
+   * Resolves the current Bluesky handle for a user from their DID.
+   * Uses AtprotoHandleCacheService for efficient caching (15-min Redis TTL).
+   *
+   * Design: Handles are resolved dynamically, not stored. DID is the permanent identifier,
+   * handles can change on Bluesky at any time. See commit c3e042f for rationale.
+   *
+   * Benefits of using AtprotoHandleCacheService:
+   * - Consistent 15-min Redis cache shared across all API nodes
+   * - Prometheus metrics and OpenTelemetry tracing built-in
+   * - Graceful fallback to DID on resolution failure
+   * - DRY - single code path for handle resolution (activity feed, profiles, etc.)
+   *
+   * @param user - The user entity with bluesky preferences
+   * @returns The resolved handle (or undefined if not a Bluesky user)
+   */
+  async resolveBlueskyHandle(user: UserEntity): Promise<string | undefined> {
+    // Only process authenticated Bluesky users (not shadow accounts)
+    if (!user?.preferences?.bluesky?.did || user.isShadowAccount) {
+      return user?.preferences?.bluesky?.handle;
+    }
+
+    const did = user.preferences.bluesky.did;
+
+    // Use cache service for handle resolution (handles caching and fallback internally)
+    const resolvedHandle =
+      await this.atprotoHandleCacheService.resolveHandle(did);
+
+    // Update user object in-memory for display purposes (no database persistence)
+    // This allows the response to include the current handle without storing stale data
+    if (resolvedHandle && user.preferences?.bluesky) {
+      user.preferences.bluesky.handle = resolvedHandle;
+    }
+
+    return resolvedHandle;
   }
 
   async getUserPermissions(userId: number): Promise<UserPermissionEntity[]> {
@@ -281,43 +320,8 @@ export class UserService {
       attendeeStatus: record.status,
     }));
 
-    // Resolve and update Bluesky handle from DID (only for authenticated Bluesky users, not shadow accounts)
-    // Shadow accounts already have their handle in firstName field
-    if (user?.preferences?.bluesky?.did && !user.isShadowAccount) {
-      try {
-        const profile = await this.blueskyIdentityService.resolveProfile(
-          user.preferences.bluesky.did,
-        );
-        this.logger.debug(
-          `Resolved Bluesky profile for ${user.preferences.bluesky.did}: handle=${profile.handle}, did=${profile.did}`,
-        );
-        // Replace stored handle with current resolved handle, fallback to DID if empty
-        user.preferences.bluesky.handle =
-          profile.handle || user.preferences.bluesky.did;
-        this.logger.debug(
-          `Set user.preferences.bluesky.handle to: ${user.preferences.bluesky.handle}`,
-        );
-      } catch (error) {
-        this.logger.warn(
-          `Failed to fetch full Bluesky profile for DID ${user.preferences.bluesky.did}: ${error.message}`,
-        );
-        // Fallback: Extract handle directly from DID document (lightweight, always works)
-        try {
-          user.preferences.bluesky.handle =
-            await this.blueskyIdentityService.extractHandleFromDid(
-              user.preferences.bluesky.did,
-            );
-          this.logger.debug(
-            `Extracted handle from DID document: ${user.preferences.bluesky.handle}`,
-          );
-        } catch {
-          this.logger.warn(
-            `Failed to extract handle from DID document, using DID as fallback`,
-          );
-          user.preferences.bluesky.handle = user.preferences.bluesky.did;
-        }
-      }
-    }
+    // Resolve Bluesky handle dynamically for display (see commit c3e042f for design rationale)
+    await this.resolveBlueskyHandle(user);
 
     // Keep existing socialProfiles and profileEndpoints code for backward compatibility
     if (user && user.preferences?.bluesky) {
@@ -538,22 +542,9 @@ export class UserService {
       groupMemberships,
     };
 
-    // Resolve Bluesky handle if needed (same logic as showProfile)
-    if (user?.preferences?.bluesky?.did && !user.isShadowAccount) {
-      try {
-        const profile = await this.blueskyIdentityService.resolveProfile(
-          user.preferences.bluesky.did,
-        );
-        const blueskyPrefs = summary.preferences?.bluesky as
-          | { handle?: string; did?: string }
-          | undefined;
-        if (blueskyPrefs) {
-          blueskyPrefs.handle = profile.handle || user.preferences.bluesky.did;
-        }
-      } catch (error) {
-        this.logger.warn(`Failed to resolve Bluesky handle: ${error.message}`);
-      }
-    }
+    // Resolve Bluesky handle dynamically for display (see commit c3e042f for design rationale)
+    // Note: summary.preferences references user.preferences, so the update propagates
+    await this.resolveBlueskyHandle(user);
 
     return summary;
   }

@@ -296,8 +296,14 @@ describe('Occurrence Date Offset Bug (#421)', () => {
           },
           { provide: EventQueryService, useValue: eventQueryService },
           { provide: RecurrencePatternService, useValue: {} },
-          { provide: UserService, useValue: { findById: jest.fn().mockResolvedValue(mockUser) } },
-          { provide: TenantConnectionService, useValue: { getTenantConnection: jest.fn() } },
+          {
+            provide: UserService,
+            useValue: { findById: jest.fn().mockResolvedValue(mockUser) },
+          },
+          {
+            provide: TenantConnectionService,
+            useValue: { getTenantConnection: jest.fn() },
+          },
           { provide: REQUEST, useValue: { tenantId: mockTenantId } },
         ],
       }).compile();
@@ -305,12 +311,18 @@ describe('Occurrence Date Offset Bug (#421)', () => {
       const svc = await module.resolve<EventSeriesOccurrenceService>(
         EventSeriesOccurrenceService,
       );
-      const evtMgmt = module.get<EventManagementService>(EventManagementService);
+      const evtMgmt = module.get<EventManagementService>(
+        EventManagementService,
+      );
 
       let capturedDto: any = null;
       jest.spyOn(evtMgmt, 'create').mockImplementation((dto: any) => {
         capturedDto = dto;
-        return Promise.resolve({ ...updatedTemplateEvent, ...dto, id: 2 } as any);
+        return Promise.resolve({
+          ...updatedTemplateEvent,
+          ...dto,
+          id: 2,
+        } as any);
       });
 
       // Use UTC ISO string for March occurrence
@@ -384,7 +396,11 @@ describe('RecurrencePatternService output format', () => {
     console.log('\n=== generateOccurrences output analysis ===');
     occurrences.forEach((iso, i) => {
       const utcDatePart = iso.split('T')[0];
-      const localDatePart = formatInTimeZone(new Date(iso), timezone, 'yyyy-MM-dd');
+      const localDatePart = formatInTimeZone(
+        new Date(iso),
+        timezone,
+        'yyyy-MM-dd',
+      );
       const localDay = formatInTimeZone(new Date(iso), timezone, 'EEEE');
       const mismatch = utcDatePart !== localDatePart ? ' ⚠️ DATE MISMATCH' : '';
       console.log(
@@ -397,7 +413,11 @@ describe('RecurrencePatternService output format', () => {
     expect(marchOcc).toBeDefined();
 
     const marchUtcDate = marchOcc!.split('T')[0];
-    const marchLocalDate = formatInTimeZone(new Date(marchOcc!), timezone, 'yyyy-MM-dd');
+    const marchLocalDate = formatInTimeZone(
+      new Date(marchOcc!),
+      timezone,
+      'yyyy-MM-dd',
+    );
 
     console.log(`\nMarch occurrence demonstrates the bug:`);
     console.log(`  UTC date (split): ${marchUtcDate}`);

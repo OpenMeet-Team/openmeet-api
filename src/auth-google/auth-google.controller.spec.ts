@@ -80,7 +80,10 @@ describe('AuthGoogleController', () => {
 
     it('should redirect to custom scheme for android platform', async () => {
       const res = mockResponse();
-      const state = createState({ tenantId: 'tenant-123', platform: 'android' });
+      const state = createState({
+        tenantId: 'tenant-123',
+        platform: 'android',
+      });
       mockAuthGoogleService.handleCallback.mockResolvedValue({
         redirectUrl:
           'net.openmeet.platform:/auth/google/callback?token=jwt-token',

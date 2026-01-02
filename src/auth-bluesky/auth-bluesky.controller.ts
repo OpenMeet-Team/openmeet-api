@@ -36,7 +36,11 @@ export class AuthBlueskyController {
     @Query('tenantId') tenantId: string,
     @Query('platform') platform?: OAuthPlatform,
   ) {
-    return await this.authBlueskyService.createAuthUrl(handle, tenantId, platform);
+    return await this.authBlueskyService.createAuthUrl(
+      handle,
+      tenantId,
+      platform,
+    );
   }
 
   @Public()
@@ -58,7 +62,10 @@ export class AuthBlueskyController {
     });
 
     const { redirectUrl, sessionId } =
-      await this.authBlueskyService.handleAuthCallback(query, effectiveTenantId);
+      await this.authBlueskyService.handleAuthCallback(
+        query,
+        effectiveTenantId,
+      );
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (sessionId) {

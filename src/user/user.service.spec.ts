@@ -23,6 +23,7 @@ import { Repository } from 'typeorm';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.service';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { StatusEnum } from '../status/status.enum';
 
@@ -89,6 +90,15 @@ describe('UserService', () => {
             extractHandleFromDid: jest
               .fn()
               .mockResolvedValue('vlad.sitalo.org'),
+            resolveHandleToDid: jest.fn(),
+          },
+        },
+        {
+          provide: AtprotoHandleCacheService,
+          useValue: {
+            resolveHandle: jest.fn().mockResolvedValue('vlad.sitalo.org'),
+            resolveHandles: jest.fn(),
+            invalidate: jest.fn(),
           },
         },
       ],
@@ -1552,6 +1562,225 @@ describe('UserService', () => {
       // Should NOT update (email is the same)
       expect(updateSpy).not.toHaveBeenCalled();
       expect(result.email).toBe(email);
+    });
+  });
+
+  describe('showProfile - Bluesky Handle Resolution', () => {
+    // Design: Handles are resolved dynamically for display via AtprotoHandleCacheService.
+    // DID is the permanent identifier; handles can change on Bluesky at any time.
+    // The cache service provides 15-min Redis caching and handles all fallback logic.
+    // See commit c3e042f for rationale.
+    let mockUsersRepository: any;
+    let mockAtprotoHandleCacheService: jest.Mocked<AtprotoHandleCacheService>;
+
+    beforeEach(() => {
+      mockUsersRepository = module.get(Repository);
+      mockAtprotoHandleCacheService = module.get(AtprotoHandleCacheService);
+    });
+
+    it('should resolve and return updated handle in-memory when Bluesky handle has changed', async () => {
+      const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
+      const oldHandle = 'openmeet.bsky.social';
+      const newHandle = 'openmeet.net';
+
+      // Arrange: User with old handle (stale data that would be in database)
+      const userWithOldHandle = {
+        id: 1,
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle: oldHandle, // Old handle
+            connected: true,
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      // Mock repository findOne to return user with old handle
+      mockUsersRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(userWithOldHandle);
+
+      // Mock manager for the related queries (events, groups, etc.)
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      // Mock AtprotoHandleCacheService to return NEW handle (current on Bluesky)
+      mockAtprotoHandleCacheService.resolveHandle.mockResolvedValue(newHandle);
+
+      // Mock save method to ensure it's NOT called (we don't persist handles)
+      mockUsersRepository.save = jest.fn();
+
+      // Act: Call showProfile
+      const result = await userService.showProfile('openmeet-abc123');
+
+      // Assert: Cache service should be called with the DID
+      expect(mockAtprotoHandleCacheService.resolveHandle).toHaveBeenCalledWith(
+        did,
+      );
+
+      // Assert: save should NOT be called (handles are resolved dynamically, not persisted)
+      expect(mockUsersRepository.save).not.toHaveBeenCalled();
+
+      // Assert: The returned user should have the new handle for display
+      expect(result?.preferences?.bluesky?.handle).toBe(newHandle);
+    });
+
+    it('should NOT save to database when handle has not changed', async () => {
+      const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
+      const handle = 'openmeet.net';
+
+      // Arrange: User with same handle in database
+      const userWithSameHandle = {
+        id: 1,
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle, // Same handle
+            connected: true,
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      mockUsersRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(userWithSameHandle);
+
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      // Mock AtprotoHandleCacheService to return SAME handle
+      mockAtprotoHandleCacheService.resolveHandle.mockResolvedValue(handle);
+
+      mockUsersRepository.save = jest.fn();
+
+      // Act
+      await userService.showProfile('openmeet-abc123');
+
+      // Assert: save should NOT be called (no change)
+      expect(mockUsersRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should use DID as fallback when handle resolution fails (cache service returns DID)', async () => {
+      const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
+      const oldHandle = 'openmeet.bsky.social';
+
+      // Arrange: User with handle in database
+      const userWithHandle = {
+        id: 1,
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle: oldHandle,
+            connected: true,
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      mockUsersRepository.findOne = jest.fn().mockResolvedValue(userWithHandle);
+
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      // Mock AtprotoHandleCacheService to return DID as fallback (this is what it does on error)
+      mockAtprotoHandleCacheService.resolveHandle.mockResolvedValue(did);
+
+      mockUsersRepository.save = jest.fn();
+
+      // Act
+      const result = await userService.showProfile('openmeet-abc123');
+
+      // Assert: save should NOT be called (resolution failed, using DID as fallback)
+      expect(mockUsersRepository.save).not.toHaveBeenCalled();
+
+      // Assert: The handle should fall back to DID
+      expect(result?.preferences?.bluesky?.handle).toBe(did);
+    });
+
+    it('should call cache service only once per showProfile call', async () => {
+      const did = 'did:plc:tbhegjbdy7fabqewbby5nbf3';
+      const handle = 'openmeet.net';
+
+      // Arrange: User with Bluesky preferences
+      const userWithBluesky = {
+        id: 1,
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle: 'old.handle.social',
+            connected: true,
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      mockUsersRepository.findOne = jest.fn().mockResolvedValue(userWithBluesky);
+
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockAtprotoHandleCacheService.resolveHandle.mockResolvedValue(handle);
+      mockUsersRepository.save = jest.fn();
+
+      // Act
+      const result = await userService.showProfile('openmeet-abc123');
+
+      // Assert: Cache service called exactly once with the DID
+      expect(mockAtprotoHandleCacheService.resolveHandle).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(mockAtprotoHandleCacheService.resolveHandle).toHaveBeenCalledWith(
+        did,
+      );
+
+      // Assert: Handle is updated in-memory
+      expect(result?.preferences?.bluesky?.handle).toBe(handle);
     });
   });
 });

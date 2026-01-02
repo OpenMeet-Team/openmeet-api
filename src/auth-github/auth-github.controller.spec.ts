@@ -81,7 +81,10 @@ describe('AuthGithubController', () => {
 
     it('should redirect to custom scheme for android platform', async () => {
       const res = mockResponse();
-      const state = createState({ tenantId: 'tenant-123', platform: 'android' });
+      const state = createState({
+        tenantId: 'tenant-123',
+        platform: 'android',
+      });
       mockAuthGithubService.handleCallback.mockResolvedValue({
         redirectUrl:
           'net.openmeet.platform:/auth/github/callback?token=jwt-token',
