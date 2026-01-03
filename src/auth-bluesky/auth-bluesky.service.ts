@@ -1,10 +1,5 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  forwardRef,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { ConfigService } from '@nestjs/config';
 import { Agent } from '@atproto/api';
@@ -27,10 +22,18 @@ export class AuthBlueskyService {
     private authService: AuthService,
     private elasticacheService: ElastiCacheService,
     private blueskyService: BlueskyService,
-    @Inject(forwardRef(() => UserService))
-    private userService: UserService,
-  ) {
-    this.logger.log('AuthBlueskyService constructed');
+    private moduleRef: ModuleRef,
+  ) {}
+
+  /**
+   * Get UserService via ModuleRef.resolve() for REQUEST-scoped providers.
+   * Must be resolved per-request as UserService has Scope.REQUEST.
+   * Using strict: false to search across all modules.
+   */
+  private async getUserService(): Promise<UserService> {
+    return await this.moduleRef.resolve(UserService, undefined, {
+      strict: false,
+    });
   }
 
   public async initializeClient(tenantId: string) {
@@ -172,7 +175,8 @@ export class AuthBlueskyService {
     });
 
     // Get existing user if any to preserve preferences
-    const existingUser = (await this.userService.findBySocialIdAndProvider(
+    const userService = await this.getUserService();
+    const existingUser = (await userService.findBySocialIdAndProvider(
       {
         socialId: profileData.did,
         provider: 'bluesky',
@@ -208,7 +212,7 @@ export class AuthBlueskyService {
         });
 
         // Update preferences to include DID (handle is resolved from DID when needed)
-        await this.userService.update(
+        await userService.update(
           existingUser.id,
           {
             preferences: {
