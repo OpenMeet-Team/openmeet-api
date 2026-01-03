@@ -28,7 +28,7 @@ export async function initializeOAuthClient(
   elasticacheService: ElastiCacheService,
 ): Promise<NodeOAuthClient> {
   const redisConfig = elasticacheService.getRedisConfig();
-  const requestLock = createRequestLock({
+  const requestLock = await createRequestLock({
     host: redisConfig.host as string,
     port: Number(redisConfig.port),
     tls: redisConfig.tls,

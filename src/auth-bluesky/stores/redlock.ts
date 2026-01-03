@@ -7,13 +7,14 @@ import { Logger } from '@nestjs/common';
 let cachedRedlock: Redlock | null = null;
 let cachedRedis: Redis | null = null;
 let connectionPromise: Promise<void> | null = null;
+let isInitialized = false;
 
-export function createRequestLock(redisConfig: {
+export async function createRequestLock(redisConfig: {
   host: string;
   port: number;
   tls?: boolean;
   password?: string;
-}): RuntimeLock {
+}): Promise<RuntimeLock> {
   const logger = new Logger('RequestLock');
 
   // Reuse existing connection if available
@@ -31,8 +32,18 @@ export function createRequestLock(redisConfig: {
       logger.error('Failed to connect Redis for request lock', err);
       cachedRedis = null;
       connectionPromise = null;
+      isInitialized = false;
       throw err;
     });
+  }
+
+  // CRITICAL: Wait for Redis connection before creating Redlock
+  // This prevents race conditions on first request after restart
+  if (connectionPromise && !isInitialized) {
+    logger.debug('Awaiting Redis connection for request lock...');
+    await connectionPromise;
+    isInitialized = true;
+    logger.debug('Redis connection established for request lock');
   }
 
   if (!cachedRedlock) {
@@ -61,11 +72,6 @@ export function createRequestLock(redisConfig: {
   const redlock = cachedRedlock;
 
   return async (key: string, fn: () => Promise<any>) => {
-    // Wait for Redis connection to be established on first use
-    if (connectionPromise) {
-      await connectionPromise;
-    }
-
     const resource = `bluesky:lock:${key}`;
     const duration = 45000; // 45 second lock
 
