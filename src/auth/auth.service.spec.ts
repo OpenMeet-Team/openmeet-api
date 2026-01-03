@@ -37,6 +37,7 @@ describe('AuthService', () => {
     findById: jest.fn(),
     findOrCreateUser: jest.fn(),
     update: jest.fn(),
+    resolveBlueskyHandle: jest.fn(),
   };
 
   const mockJwtService = {
@@ -540,6 +541,139 @@ describe('AuthService', () => {
         // Assert - Should log error but not throw
         expect(result).toHaveProperty('token');
       });
+    });
+  });
+
+  describe('me - Bluesky Handle Resolution', () => {
+    it('should resolve Bluesky handle for authenticated user', async () => {
+      // Arrange
+      const mockUser = {
+        id: 1,
+        slug: 'test-user',
+        role: { id: 1 },
+        preferences: {
+          bluesky: {
+            did: 'did:plc:test123',
+            handle: 'old-handle.bsky.social',
+            connected: true,
+          },
+        },
+      };
+      const jwtPayload = {
+        id: 1,
+        sessionId: 'test-session',
+        role: { id: 1 },
+        slug: 'test-user',
+        tenantId: 'test-tenant',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+
+      mockUserService.findById.mockResolvedValue(mockUser);
+      mockUserService.resolveBlueskyHandle.mockResolvedValue(
+        'new-handle.bsky.social',
+      );
+
+      // Act
+      await authService.me(jwtPayload);
+
+      // Assert
+      expect(mockUserService.resolveBlueskyHandle).toHaveBeenCalledWith(
+        mockUser,
+      );
+    });
+
+    it('should return user with resolved Bluesky handle', async () => {
+      // Arrange
+      const mockUser = {
+        id: 1,
+        slug: 'test-user',
+        role: { id: 1 },
+        preferences: {
+          bluesky: {
+            did: 'did:plc:test123',
+            handle: 'old-handle.bsky.social',
+            connected: true,
+          },
+        },
+      };
+      const jwtPayload = {
+        id: 1,
+        sessionId: 'test-session',
+        role: { id: 1 },
+        slug: 'test-user',
+        tenantId: 'test-tenant',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+
+      mockUserService.findById.mockResolvedValue(mockUser);
+      // resolveBlueskyHandle modifies user.preferences.bluesky.handle in-place
+      mockUserService.resolveBlueskyHandle.mockImplementation((user) => {
+        user.preferences.bluesky.handle = 'resolved-handle.bsky.social';
+        return Promise.resolve('resolved-handle.bsky.social');
+      });
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(result?.preferences?.bluesky?.handle).toBe(
+        'resolved-handle.bsky.social',
+      );
+    });
+
+    it('should handle non-Bluesky users gracefully', async () => {
+      // Arrange
+      const mockUser = {
+        id: 1,
+        slug: 'test-user',
+        role: { id: 1 },
+        preferences: null,
+      };
+      const jwtPayload = {
+        id: 1,
+        sessionId: 'test-session',
+        role: { id: 1 },
+        slug: 'test-user',
+        tenantId: 'test-tenant',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+
+      mockUserService.findById.mockResolvedValue(mockUser);
+      mockUserService.resolveBlueskyHandle.mockResolvedValue(undefined);
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(mockUserService.resolveBlueskyHandle).toHaveBeenCalledWith(
+        mockUser,
+      );
+      expect(result).toEqual(mockUser);
+    });
+
+    it('should return null when user not found', async () => {
+      // Arrange
+      const jwtPayload = {
+        id: 999,
+        sessionId: 'test-session',
+        role: { id: 1 },
+        slug: 'test-user',
+        tenantId: 'test-tenant',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      mockUserService.findById.mockResolvedValue(null);
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(result).toBeNull();
+      // Should not call resolveBlueskyHandle when user is null
+      expect(mockUserService.resolveBlueskyHandle).not.toHaveBeenCalled();
     });
   });
 });

@@ -586,7 +586,16 @@ export class AuthService {
 
   async me(userJwtPayload: JwtPayloadType): Promise<NullableType<User>> {
     try {
-      return await this.userService.findById(userJwtPayload.id);
+      const user = await this.userService.findById(userJwtPayload.id);
+
+      // Resolve Bluesky handle dynamically if user exists
+      // This ensures /auth/me returns current handle, not stale database value
+      // See commit c3e042f for design rationale on dynamic handle resolution
+      if (user) {
+        await this.userService.resolveBlueskyHandle(user);
+      }
+
+      return user;
     } catch (error) {
       this.logger.error('Error in me() method:', {
         userId: userJwtPayload.id,
