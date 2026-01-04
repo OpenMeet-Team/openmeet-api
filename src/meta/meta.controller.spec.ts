@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { MetaController } from './meta.controller';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupService } from '../group/group.service';
+import { EventSeriesService } from '../event-series/services/event-series.service';
 import { EventVisibility, GroupVisibility } from '../core/constants/constant';
 import { REQUEST } from '@nestjs/core';
 
@@ -30,6 +31,10 @@ describe('MetaController', () => {
     findGroupBySlug: jest.fn(),
   };
 
+  const mockEventSeriesService = {
+    findBySlug: jest.fn(),
+  };
+
   const mockRequest = {};
 
   beforeEach(async () => {
@@ -39,6 +44,7 @@ describe('MetaController', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: EventQueryService, useValue: mockEventQueryService },
         { provide: GroupService, useValue: mockGroupService },
+        { provide: EventSeriesService, useValue: mockEventSeriesService },
         { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();
@@ -138,16 +144,32 @@ describe('MetaController', () => {
       expect(html).not.toContain(`${frontendDomain}/tenant123`);
     });
 
-    it('should use backend domain when file driver is not cloudfront', () => {
-      const backendDomain = 'https://api.openmeet.net';
-      const frontendDomain = 'https://platform.openmeet.net';
+    it('should use backend domain when file driver is not cloudfront', async () => {
+      // Create a separate module with different config for this test
+      const localConfigService = {
+        get: jest.fn((key: string, _options?: any) => {
+          const config = {
+            'app.frontendDomain': 'https://platform.openmeet.net',
+            'file.cloudfrontDistributionDomain': null,
+            'file.driver': 'local',
+            'app.backendDomain': 'https://api.openmeet.net',
+          };
+          return config[key];
+        }),
+      };
 
-      jest.spyOn(configService, 'get').mockImplementation((key: string) => {
-        if (key === 'file.driver') return 'local';
-        if (key === 'app.backendDomain') return backendDomain;
-        if (key === 'app.frontendDomain') return frontendDomain;
-        return null;
-      });
+      const localModule: TestingModule = await Test.createTestingModule({
+        controllers: [MetaController],
+        providers: [
+          { provide: ConfigService, useValue: localConfigService },
+          { provide: EventQueryService, useValue: mockEventQueryService },
+          { provide: GroupService, useValue: mockGroupService },
+          { provide: EventSeriesService, useValue: mockEventSeriesService },
+          { provide: REQUEST, useValue: mockRequest },
+        ],
+      }).compile();
+
+      const localController = localModule.get<MetaController>(MetaController);
 
       const mockEvent = {
         name: 'Test Event',
@@ -159,9 +181,9 @@ describe('MetaController', () => {
         },
       };
 
-      const html = controller['renderMetaHTML']('event', mockEvent);
+      const html = localController['renderMetaHTML']('event', mockEvent);
 
-      const expectedImageUrl = `${backendDomain}/uploads/image.jpg`;
+      const expectedImageUrl = 'https://api.openmeet.net/uploads/image.jpg';
       expect(html).toContain(expectedImageUrl);
     });
 
@@ -453,6 +475,101 @@ describe('MetaController', () => {
     });
   });
 
+  describe('Event OG Description - Date/Time/Location Enhancement (Issue #442)', () => {
+    it('should include formatted date/time in og:description for events', () => {
+      // Use Jan 3, 2026 which is a Saturday
+      const mockEvent = {
+        name: 'Monthly Meetup',
+        slug: 'monthly-meetup',
+        description: 'Join us for our monthly community gathering',
+        visibility: EventVisibility.Public,
+        startDate: new Date('2026-01-03T19:00:00Z'),
+        location: 'Coffee Shop Downtown',
+      };
+
+      const html = controller['renderMetaHTML']('event', mockEvent);
+
+      // og:description should start with date/time/location before the description
+      expect(html).toMatch(
+        /<meta property="og:description" content="[^"]*Sat[^"]*Jan[^"]*3[^"]*Coffee Shop Downtown/,
+      );
+    });
+
+    it('should include location in og:description when available', () => {
+      const mockEvent = {
+        name: 'Tech Talk',
+        slug: 'tech-talk',
+        description: 'A discussion about new technologies',
+        visibility: EventVisibility.Public,
+        startDate: new Date('2026-01-15T18:30:00Z'),
+        location: 'Innovation Hub, 123 Main St',
+      };
+
+      const html = controller['renderMetaHTML']('event', mockEvent);
+
+      // og:description should include location
+      expect(html).toMatch(
+        /<meta property="og:description" content="[^"]*Innovation Hub, 123 Main St/,
+      );
+    });
+
+    it('should handle events without location gracefully', () => {
+      const mockEvent = {
+        name: 'Online Webinar',
+        slug: 'online-webinar',
+        description: 'Learn about web development',
+        visibility: EventVisibility.Public,
+        startDate: new Date('2026-02-10T14:00:00Z'),
+      };
+
+      const html = controller['renderMetaHTML']('event', mockEvent);
+
+      // Should still include date/time but skip location separator
+      expect(html).toMatch(
+        /<meta property="og:description" content="[^"]*Feb[^"]*10/,
+      );
+      // Description should still be included
+      expect(html).toMatch(
+        /<meta property="og:description" content="[^"]*Learn about web development/,
+      );
+    });
+
+    it('should format date in a user-friendly way (e.g., "Sat, Jan 3 at 2:00 PM")', () => {
+      // Use Jan 3, 2026 which is a Saturday
+      const mockEvent = {
+        name: 'Evening Social',
+        slug: 'evening-social',
+        description: 'Casual evening get-together',
+        visibility: EventVisibility.Public,
+        startDate: new Date('2026-01-03T19:00:00Z'),
+      };
+
+      const html = controller['renderMetaHTML']('event', mockEvent);
+
+      // Should have abbreviated weekday, month, day, and time format
+      // Note: exact format depends on locale, but should be readable
+      expect(html).toMatch(
+        /<meta property="og:description" content="[^"]*Sat[^"]*Jan[^"]*3[^"]*/,
+      );
+    });
+
+    it('should not include date/time in og:description for groups', () => {
+      const mockGroup = {
+        name: 'Photography Club',
+        slug: 'photography-club',
+        description: 'For photography enthusiasts',
+        visibility: GroupVisibility.Public,
+      };
+
+      const html = controller['renderMetaHTML']('group', mockGroup);
+
+      // Group description should be the actual description, not prefixed with date
+      expect(html).toMatch(
+        /<meta property="og:description" content="For photography enthusiasts/,
+      );
+    });
+  });
+
   describe('Group Link Previews - Bot Access Behavior', () => {
     let mockResponse: any;
 
@@ -536,6 +653,143 @@ describe('MetaController', () => {
       const sentContent = mockResponse.send.mock.calls[0][0];
       expect(sentContent).not.toContain('Secret Society');
       expect(sentContent).not.toContain('Members only');
+    });
+  });
+
+  describe('Event Series Link Previews (Issue #442)', () => {
+    let mockResponse: any;
+
+    beforeEach(() => {
+      mockResponse = {
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+      };
+    });
+
+    it('should serve meta tags for event series', async () => {
+      const mockSeries = {
+        slug: 'weekly-yoga',
+        name: 'Weekly Yoga Sessions',
+        description: 'Relaxing yoga every week',
+        recurrenceRule: { frequency: 'WEEKLY', byweekday: ['TU'] },
+        recurrenceDescription: 'Every Tuesday',
+        image: { path: 'tenant123/yoga.png' },
+        user: { firstName: 'Jane', lastName: 'Doe' },
+      };
+
+      mockEventSeriesService.findBySlug.mockResolvedValue(mockSeries);
+
+      await controller.getEventSeriesMeta('weekly-yoga', mockResponse);
+
+      const sentHtml = mockResponse.send.mock.calls[0][0];
+      expect(sentHtml).toContain('Weekly Yoga Sessions');
+      expect(sentHtml).toContain('Relaxing yoga every week');
+      expect(mockResponse.status).not.toHaveBeenCalledWith(404);
+    });
+
+    it('should include recurrence pattern in og:description', async () => {
+      const mockSeries = {
+        slug: 'monthly-meetup',
+        name: 'Monthly Community Meetup',
+        description: 'Join us for networking and learning',
+        recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
+        recurrenceDescription: 'Every month',
+      };
+
+      mockEventSeriesService.findBySlug.mockResolvedValue(mockSeries);
+
+      await controller.getEventSeriesMeta('monthly-meetup', mockResponse);
+
+      const sentHtml = mockResponse.send.mock.calls[0][0];
+      // og:description should include recurrence pattern
+      expect(sentHtml).toMatch(
+        /<meta property="og:description" content="[^"]*Every month/,
+      );
+    });
+
+    it('should return 404 for non-existent event series', async () => {
+      mockEventSeriesService.findBySlug.mockRejectedValue(
+        new Error('Event series not found'),
+      );
+
+      await controller.getEventSeriesMeta('non-existent', mockResponse);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(mockResponse.send).toHaveBeenCalledWith('Event series not found');
+    });
+
+    it('should use series image for og:image when available', async () => {
+      const mockSeries = {
+        slug: 'weekly-yoga',
+        name: 'Weekly Yoga Sessions',
+        description: 'Relaxing yoga',
+        recurrenceRule: { frequency: 'WEEKLY' },
+        recurrenceDescription: 'Every week',
+        image: { path: 'tenant123/series-image.png' },
+      };
+
+      mockEventSeriesService.findBySlug.mockResolvedValue(mockSeries);
+
+      await controller.getEventSeriesMeta('weekly-yoga', mockResponse);
+
+      const sentHtml = mockResponse.send.mock.calls[0][0];
+      expect(sentHtml).toContain(
+        'https://ds1xtylbemsat.cloudfront.net/tenant123/series-image.png',
+      );
+    });
+
+    it('should use correct URL path for event-series', async () => {
+      const mockSeries = {
+        slug: 'weekly-yoga',
+        name: 'Weekly Yoga',
+        description: 'Yoga sessions',
+        recurrenceRule: { frequency: 'WEEKLY' },
+        recurrenceDescription: 'Every week',
+      };
+
+      mockEventSeriesService.findBySlug.mockResolvedValue(mockSeries);
+
+      await controller.getEventSeriesMeta('weekly-yoga', mockResponse);
+
+      const sentHtml = mockResponse.send.mock.calls[0][0];
+      // URL should be /event-series/slug, not /events/slug
+      expect(sentHtml).toContain(
+        'https://platform.openmeet.net/event-series/weekly-yoga',
+      );
+    });
+  });
+
+  describe('renderMetaHTML - Event Series Type', () => {
+    it('should render event-series meta tags correctly', () => {
+      const mockSeries = {
+        name: 'Weekly Book Club',
+        slug: 'weekly-book-club',
+        description: 'Discuss books every week',
+        recurrenceDescription: 'Every Thursday',
+      };
+
+      const html = controller['renderMetaHTML']('event-series', mockSeries);
+
+      expect(html).toContain('Weekly Book Club');
+      expect(html).toContain('Every Thursday');
+      expect(html).toContain('/event-series/weekly-book-club');
+    });
+
+    it('should prepend recurrence description to og:description for series', () => {
+      const mockSeries = {
+        name: 'Monthly Meetup',
+        slug: 'monthly-meetup',
+        description: 'A great networking event',
+        recurrenceDescription: 'First Monday of every month',
+      };
+
+      const html = controller['renderMetaHTML']('event-series', mockSeries);
+
+      // og:description should start with recurrence pattern
+      expect(html).toMatch(
+        /<meta property="og:description" content="First Monday of every month/,
+      );
     });
   });
 });

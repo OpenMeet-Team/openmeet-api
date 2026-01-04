@@ -14,6 +14,7 @@ import { REQUEST } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupService } from '../group/group.service';
+import { EventSeriesService } from '../event-series/services/event-series.service';
 import { EventVisibility, GroupVisibility } from '../core/constants/constant';
 
 /**
@@ -38,6 +39,7 @@ export class MetaController {
     private readonly configService: ConfigService,
     private readonly eventQueryService: EventQueryService,
     private readonly groupService: GroupService,
+    private readonly eventSeriesService: EventSeriesService,
   ) {}
 
   /**
@@ -88,15 +90,100 @@ export class MetaController {
   }
 
   /**
-   * Render meta HTML for bot crawlers
+   * Format event date/time for og:description
+   * Returns format like "Sat, Jan 4 at 7:00 PM"
    */
-  private renderMetaHTML(type: 'event' | 'group', data: any): string {
-    const title = this.escapeHtml(data.name || data.title || 'OpenMeet Event');
+  private formatEventDateTime(startDate: Date): string {
+    const dateFormatter = new Intl.DateTimeFormat('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    return dateFormatter.format(startDate);
+  }
 
-    // Strip HTML tags first (for group descriptions), then escape for safety
+  /**
+   * Build enhanced description for events with date/time/location prefix
+   */
+  private buildEventDescription(data: any): string {
+    const parts: string[] = [];
+
+    // Add formatted date/time if available
+    if (data.startDate) {
+      parts.push(this.formatEventDateTime(new Date(data.startDate)));
+    }
+
+    // Add location if available
+    if (data.location) {
+      parts.push(this.escapeHtml(data.location));
+    }
+
+    // Combine date/time and location with separator
+    const prefix = parts.join(' · ');
+
+    // Strip HTML and escape the description
     const rawDescription = data.description || '';
     const strippedDescription = this.stripHtml(rawDescription);
-    const fullDescription = this.escapeHtml(strippedDescription);
+    const escapedDescription = this.escapeHtml(strippedDescription);
+
+    // Combine prefix with description
+    if (prefix && escapedDescription) {
+      return `${prefix}\n\n${escapedDescription}`;
+    } else if (prefix) {
+      return prefix;
+    }
+    return escapedDescription;
+  }
+
+  /**
+   * Build enhanced description for event series with recurrence pattern prefix
+   */
+  private buildEventSeriesDescription(data: any): string {
+    const parts: string[] = [];
+
+    // Add recurrence description if available
+    if (data.recurrenceDescription) {
+      parts.push(this.escapeHtml(data.recurrenceDescription));
+    }
+
+    // Strip HTML and escape the description
+    const rawDescription = data.description || '';
+    const strippedDescription = this.stripHtml(rawDescription);
+    const escapedDescription = this.escapeHtml(strippedDescription);
+
+    // Combine recurrence with description
+    if (parts.length > 0 && escapedDescription) {
+      return `${parts.join(' · ')} - ${escapedDescription}`;
+    } else if (parts.length > 0) {
+      return parts.join(' · ');
+    }
+    return escapedDescription;
+  }
+
+  /**
+   * Render meta HTML for bot crawlers
+   */
+  private renderMetaHTML(
+    type: 'event' | 'group' | 'event-series',
+    data: any,
+  ): string {
+    const title = this.escapeHtml(data.name || data.title || 'OpenMeet Event');
+
+    // Build description based on type
+    let fullDescription: string;
+    if (type === 'event') {
+      fullDescription = this.buildEventDescription(data);
+    } else if (type === 'event-series') {
+      fullDescription = this.buildEventSeriesDescription(data);
+    } else {
+      // Strip HTML tags first (for group descriptions), then escape for safety
+      const rawDescription = data.description || '';
+      const strippedDescription = this.stripHtml(rawDescription);
+      fullDescription = this.escapeHtml(strippedDescription);
+    }
+
     const metaDescription = fullDescription.slice(0, 200); // Truncate for meta tags (OG standard)
 
     const frontendDomain = this.getFrontendDomain();
@@ -133,7 +220,9 @@ export class MetaController {
       image = `${frontendDomain}/default-og.jpg`;
     }
 
-    const url = `${frontendDomain}/${type}s/${data.slug}`;
+    // Construct URL path - handle event-series special case (no 's' suffix)
+    const urlPath = type === 'event-series' ? 'event-series' : `${type}s`;
+    const url = `${frontendDomain}/${urlPath}/${data.slug}`;
 
     // LinkedIn and additional metadata
     let additionalMeta = '';
@@ -352,6 +441,43 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
     } catch (error) {
       this.logger.error(`Error fetching group meta for ${slug}:`, error);
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).send('Error fetching group');
+    }
+  }
+
+  /**
+   * Handle event series meta tag requests
+   * GET /event-series/:slug
+   *
+   * Event series are always public (they don't have visibility settings)
+   */
+  @Get('event-series/:slug')
+  async getEventSeriesMeta(
+    @Param('slug') slug: string,
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
+    try {
+      const series = await this.eventSeriesService.findBySlug(slug);
+
+      if (!series) {
+        this.logger.warn(`Event series not found: ${slug}`);
+        res.status(HttpStatus.NOT_FOUND).send('Event series not found');
+        return;
+      }
+
+      const html = this.renderMetaHTML('event-series', series);
+
+      res.set({
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+        Vary: 'User-Agent',
+        'X-Robots-Tag': 'index, follow',
+      });
+
+      this.logger.debug(`Served meta HTML for event series: ${slug}`);
+      res.send(html);
+    } catch (error) {
+      this.logger.error(`Error fetching event series meta for ${slug}:`, error);
+      res.status(HttpStatus.NOT_FOUND).send('Event series not found');
     }
   }
 }
