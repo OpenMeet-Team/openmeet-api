@@ -477,7 +477,9 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
       res.send(html);
     } catch (error) {
       this.logger.error(`Error fetching event series meta for ${slug}:`, error);
-      res.status(HttpStatus.NOT_FOUND).send('Event series not found');
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .send('Error fetching event series');
     }
   }
 }

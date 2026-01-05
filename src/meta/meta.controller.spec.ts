@@ -708,15 +708,17 @@ describe('MetaController', () => {
       );
     });
 
-    it('should return 404 for non-existent event series', async () => {
+    it('should return 500 for errors fetching event series', async () => {
       mockEventSeriesService.findBySlug.mockRejectedValue(
-        new Error('Event series not found'),
+        new Error('Database connection failed'),
       );
 
       await controller.getEventSeriesMeta('non-existent', mockResponse);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(404);
-      expect(mockResponse.send).toHaveBeenCalledWith('Event series not found');
+      expect(mockResponse.status).toHaveBeenCalledWith(500);
+      expect(mockResponse.send).toHaveBeenCalledWith(
+        'Error fetching event series',
+      );
     });
 
     it('should use series image for og:image when available', async () => {
