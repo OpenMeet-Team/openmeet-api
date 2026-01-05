@@ -125,8 +125,8 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       expect(metaHtml).toContain('event:location');
       expect(metaHtml).toContain(actualEvent.location);
 
-      // Verify body content includes full description
-      expect(metaHtml).toContain(`<p>${actualEvent.description}</p>`);
+      // Verify body content includes full description (date/time prefix is added)
+      expect(metaHtml).toContain(actualEvent.description);
 
       // Verify formatted dates in body
       expect(metaHtml).toContain('<strong>When:</strong>');
@@ -170,8 +170,9 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       // Meta description should be truncated to ~200 chars
       expect(metaDescription.length).toBeLessThanOrEqual(200);
 
-      // Body should contain full description (wrapped in <p> tag)
-      expect(metaHtml).toContain(`<p>${longDescription}</p>`);
+      // Body should contain full description (not truncated like meta tags)
+      // Note: buildEventDescription() prepends date/time, so we just check the description text exists
+      expect(metaHtml).toContain(longDescription);
     });
 
     it('should handle events with images correctly', async () => {
