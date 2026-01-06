@@ -493,6 +493,21 @@ async function getGroupDetails(token: string, groupSlug: string) {
   return response.body;
 }
 
+async function updateGroup(
+  app: string,
+  authToken: string,
+  groupSlug: string,
+  groupData: any,
+): Promise<any> {
+  const response = await request(app)
+    .patch(`/api/groups/${groupSlug}`)
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .set('Authorization', `Bearer ${authToken}`)
+    .send(groupData);
+
+  return response;
+}
+
 async function getCurrentUserDetails(token: string) {
   const response = await request(TESTING_APP_URL)
     .get('/api/v1/auth/me')
@@ -570,6 +585,7 @@ async function createFile(
 export {
   getAuthToken,
   createGroup,
+  updateGroup,
   createEvent,
   deleteGroup,
   deleteEvent,

@@ -1962,6 +1962,112 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   }
 
   /**
+   * Update Matrix room alias when an entity's slug changes
+   * Creates a new alias pointing to the same room and updates canonical alias,
+   * keeping the old alias as a fallback (alt_aliases)
+   *
+   * @param entityType 'event' or 'group'
+   * @param oldSlug The previous slug
+   * @param newSlug The new slug
+   * @param tenantId The tenant ID
+   */
+  async updateRoomAliasForSlugChange(
+    entityType: 'event' | 'group',
+    oldSlug: string,
+    newSlug: string,
+    tenantId: string,
+  ): Promise<void> {
+    // Build aliases using roomAliasUtils
+    const oldAlias = this.roomAliasUtils.buildRoomAlias(
+      entityType,
+      oldSlug,
+      tenantId,
+    );
+    const newAlias = this.roomAliasUtils.buildRoomAlias(
+      entityType,
+      newSlug,
+      tenantId,
+    );
+
+    this.logger.log(
+      `Updating Matrix room alias for ${entityType} slug change: ${oldSlug} -> ${newSlug}`,
+    );
+
+    try {
+      // Create bot client for the tenant
+      const botClient = await this.createBotClient(tenantId);
+      if (!botClient) {
+        this.logger.warn(
+          `Could not create bot client for tenant ${tenantId}, skipping alias update`,
+        );
+        return;
+      }
+
+      // Get room ID from old alias
+      let roomId: string;
+      try {
+        const roomInfo = await botClient.getRoomIdForAlias(oldAlias);
+        roomId = roomInfo.room_id;
+        this.logger.debug(
+          `Resolved old alias ${oldAlias} to room ID: ${roomId}`,
+        );
+      } catch (aliasError) {
+        // Room may not exist yet - that's OK, log warning and return
+        this.logger.warn(
+          `Could not resolve old alias ${oldAlias}: ${aliasError.message}. Room may not exist yet.`,
+        );
+        return;
+      }
+
+      // Create new alias pointing to same room
+      try {
+        await botClient.createAlias(newAlias, roomId);
+        this.logger.log(`Created new alias ${newAlias} for room ${roomId}`);
+      } catch (createAliasError) {
+        // Alias might already exist (e.g., if this is a retry)
+        if (
+          createAliasError.message?.includes('already exists') ||
+          createAliasError.message?.includes('Room alias already taken')
+        ) {
+          this.logger.debug(
+            `Alias ${newAlias} already exists, continuing to update canonical alias`,
+          );
+        } else {
+          this.logger.warn(
+            `Could not create new alias ${newAlias}: ${createAliasError.message}`,
+          );
+          return;
+        }
+      }
+
+      // Update canonical alias, keep old as alternative
+      try {
+        await botClient.sendStateEvent(
+          roomId,
+          'm.room.canonical_alias',
+          {
+            alias: newAlias,
+            alt_aliases: [oldAlias],
+          },
+          '',
+        );
+        this.logger.log(
+          `Updated Matrix room canonical alias from ${oldAlias} to ${newAlias} (old kept as fallback)`,
+        );
+      } catch (canonicalError) {
+        this.logger.warn(
+          `Could not update canonical alias: ${canonicalError.message}. New alias was created but canonical not updated.`,
+        );
+      }
+    } catch (error) {
+      // Room may not exist yet - that's OK, log warning
+      this.logger.warn(
+        `Could not update Matrix alias for ${entityType} slug change: ${error.message}`,
+      );
+    }
+  }
+
+  /**
    * Check if a DM room already exists between two users by querying their m.direct account data
    */
   async findExistingDMRoom(

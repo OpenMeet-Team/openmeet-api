@@ -170,4 +170,23 @@ export class RoomAliasUtils {
       .replace(/--+/g, '-') // Replace multiple hyphens with single hyphen
       .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
   }
+
+  /**
+   * Build a Matrix room alias for either an event or group
+   * This is a convenience method that delegates to the appropriate generator
+   * @param entityType 'event' or 'group'
+   * @param slug The entity's slug
+   * @param tenantId The tenant ID
+   * @returns Full room alias (e.g., "#group-my-slug-tenant:matrix.openmeet.net")
+   */
+  buildRoomAlias(
+    entityType: 'event' | 'group',
+    slug: string,
+    tenantId: string,
+  ): string {
+    if (entityType === 'event') {
+      return this.generateEventRoomAlias(slug, tenantId);
+    }
+    return this.generateGroupRoomAlias(slug, tenantId);
+  }
 }
