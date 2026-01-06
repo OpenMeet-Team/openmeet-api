@@ -147,6 +147,13 @@ export enum PostgisSrid {
 
 export const DEFAULT_RADIUS = 200; // default radius in Miles for location searching
 
+// Slug validation constants
+// Slug must be 3-100 characters, start and end with alphanumeric, can contain hyphens
+// Note: Accepts both lower and uppercase - will be normalized to lowercase by the service
+export const SLUG_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,98}[a-zA-Z0-9]$/;
+export const SLUG_VALIDATION_MESSAGE =
+  'Slug must be 3-100 characters, alphanumeric with hyphens, and cannot start or end with a hyphen';
+
 export interface TenantConfig {
   id: string; // tenant id, ex: asdf2jkl
   name: string; // tenant name, ex: Openmeet

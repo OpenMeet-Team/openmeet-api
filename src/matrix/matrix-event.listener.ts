@@ -19,6 +19,13 @@ interface ChatMemberEvent {
   tenantId: string;
 }
 
+interface SlugChangedEvent {
+  groupId: number;
+  oldSlug: string;
+  newSlug: string;
+  tenantId: string;
+}
+
 interface MatrixSyncEvent {
   eventSlug: string;
   tenantId: string;
@@ -362,6 +369,41 @@ export class MatrixEventListener {
     } catch (error) {
       this.logger.error(
         `Failed to remove user from group room: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  @OnEvent('group.slug.changed')
+  async handleGroupSlugChanged(payload: SlugChangedEvent) {
+    try {
+      this.logger.log(
+        `Handling group.slug.changed: ${payload.oldSlug} -> ${payload.newSlug} (tenant: ${payload.tenantId})`,
+      );
+
+      // Validate required fields
+      if (!payload.oldSlug || !payload.newSlug || !payload.tenantId) {
+        this.logger.warn(
+          'Missing required fields in group.slug.changed payload',
+          payload,
+        );
+        return;
+      }
+
+      // Update Matrix room alias for the slug change
+      await this.matrixRoomService.updateRoomAliasForSlugChange(
+        'group',
+        payload.oldSlug,
+        payload.newSlug,
+        payload.tenantId,
+      );
+
+      this.logger.log(
+        `Successfully handled group slug change: ${payload.oldSlug} -> ${payload.newSlug}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle group slug change: ${error.message}`,
         error.stack,
       );
     }

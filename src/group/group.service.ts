@@ -6,6 +6,7 @@ import {
   UnprocessableEntityException,
   HttpStatus,
   BadRequestException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
@@ -24,6 +25,8 @@ import {
   GroupStatus,
   GroupVisibility,
   PostgisSrid,
+  SLUG_REGEX,
+  SLUG_VALIDATION_MESSAGE,
 } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
@@ -564,6 +567,39 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.getGroupBySlug(slug);
 
+    // Track if slug is changing for Matrix alias update
+    let slugChanged = false;
+    const oldSlug = group.slug;
+
+    // Handle slug change if provided
+    if (updateGroupDto.slug !== undefined) {
+      const newSlug = updateGroupDto.slug.toLowerCase().trim();
+
+      // Only process if slug is actually changing
+      if (newSlug !== group.slug) {
+        // Validate slug format (DTO validation should catch this, but double-check)
+        if (!SLUG_REGEX.test(newSlug)) {
+          throw new BadRequestException(SLUG_VALIDATION_MESSAGE);
+        }
+
+        // Check uniqueness
+        const existingGroup = await this.groupRepository.findOne({
+          where: { slug: newSlug },
+        });
+        if (existingGroup && existingGroup.id !== group.id) {
+          throw new ConflictException('Slug already in use');
+        }
+
+        // Update the slug in the DTO (normalized to lowercase)
+        updateGroupDto.slug = newSlug;
+        slugChanged = true;
+
+        this.logger.log(
+          `Changing group slug from "${group.slug}" to "${newSlug}"`,
+        );
+      }
+    }
+
     let categoryEntities: any[] = [];
     const categoryIds = updateGroupDto.categories;
 
@@ -633,6 +669,20 @@ export class GroupService {
       slug: savedGroup.slug,
       tenantId: this.request.tenantId,
     });
+
+    // Emit slug change event for Matrix alias update if slug changed
+    if (slugChanged) {
+      this.eventEmitter.emit('group.slug.changed', {
+        groupId: savedGroup.id,
+        oldSlug: oldSlug,
+        newSlug: savedGroup.slug,
+        tenantId: this.request.tenantId,
+      });
+      this.logger.log(
+        `Emitted group.slug.changed event: ${oldSlug} -> ${savedGroup.slug}`,
+      );
+    }
+
     return savedGroup;
   }
 
