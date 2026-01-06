@@ -6,6 +6,10 @@ import {
   updateGroup,
   getGroupDetails,
   waitForEventProcessing,
+  createTestUser,
+  joinGroup,
+  updateGroupMemberRole,
+  getGroupMembers,
 } from '../utils/functions';
 
 describe('Group Slug Change (e2e)', () => {
@@ -259,6 +263,259 @@ describe('Group Slug Change (e2e)', () => {
       );
 
       expect(updateResponse.status).toBe(409);
+    }, 15000);
+  });
+
+  describe('slug change authorization', () => {
+    let authTestGroup: any;
+    let groupAdminUser: any;
+    let groupMemberUser: any;
+    let groupGuestUser: any;
+    let nonMemberUser: any;
+    const authTestTimestamp = Date.now();
+
+    beforeAll(async () => {
+      // Create a group for authorization testing
+      authTestGroup = await createGroup(TESTING_APP_URL, ownerToken, {
+        name: 'Auth Test Group',
+        description: 'Group for testing slug change authorization',
+        visibility: 'public',
+        status: 'published',
+        allowAutoApproval: true,
+      });
+      createdGroups.push(authTestGroup.slug);
+
+      // Create test users with different roles
+      groupAdminUser = await createTestUser(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        `slug-auth-admin-${authTestTimestamp}@openmeet.net`,
+        'SlugAuth',
+        'Admin',
+      );
+
+      groupMemberUser = await createTestUser(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        `slug-auth-member-${authTestTimestamp}@openmeet.net`,
+        'SlugAuth',
+        'Member',
+      );
+
+      groupGuestUser = await createTestUser(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        `slug-auth-guest-${authTestTimestamp}@openmeet.net`,
+        'SlugAuth',
+        'Guest',
+      );
+
+      nonMemberUser = await createTestUser(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        `slug-auth-nonmember-${authTestTimestamp}@openmeet.net`,
+        'SlugAuth',
+        'NonMember',
+      );
+
+      // Have users join the group (except nonMemberUser)
+      await joinGroup(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        authTestGroup.slug,
+        groupAdminUser.token,
+      );
+      await joinGroup(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        authTestGroup.slug,
+        groupMemberUser.token,
+      );
+      await joinGroup(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        authTestGroup.slug,
+        groupGuestUser.token,
+      );
+
+      // Get member records and set roles
+      const members = await getGroupMembers(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        authTestGroup.slug,
+        ownerToken,
+      );
+
+      const adminMember = members.find(
+        (m: any) => m.user?.slug === groupAdminUser.slug,
+      );
+      const memberMember = members.find(
+        (m: any) => m.user?.slug === groupMemberUser.slug,
+      );
+      const guestMember = members.find(
+        (m: any) => m.user?.slug === groupGuestUser.slug,
+      );
+
+      // Set admin role
+      if (adminMember) {
+        await updateGroupMemberRole(
+          TESTING_APP_URL,
+          TESTING_TENANT_ID,
+          authTestGroup.slug,
+          adminMember.id,
+          'admin',
+          ownerToken,
+        );
+      }
+
+      // Set member role (may already be default)
+      if (memberMember) {
+        await updateGroupMemberRole(
+          TESTING_APP_URL,
+          TESTING_TENANT_ID,
+          authTestGroup.slug,
+          memberMember.id,
+          'member',
+          ownerToken,
+        );
+      }
+
+      // Set guest role
+      if (guestMember) {
+        await updateGroupMemberRole(
+          TESTING_APP_URL,
+          TESTING_TENANT_ID,
+          authTestGroup.slug,
+          guestMember.id,
+          'guest',
+          ownerToken,
+        );
+      }
+    }, 60000);
+
+    it('should allow group owner to change slug', async () => {
+      // Create a fresh group for this test
+      const testGroup = await createGroup(TESTING_APP_URL, ownerToken, {
+        name: 'Owner Slug Change Test',
+        description: 'Testing owner can change slug',
+        visibility: 'public',
+        status: 'published',
+      });
+      createdGroups.push(testGroup.slug);
+
+      const newSlug = `owner-changed-${Date.now()}`;
+      const updateResponse = await updateGroup(
+        TESTING_APP_URL,
+        ownerToken,
+        testGroup.slug,
+        { slug: newSlug },
+      );
+
+      expect(updateResponse.status).toBe(200);
+      expect(updateResponse.body.slug).toBe(newSlug);
+
+      // Update tracking for cleanup
+      const idx = createdGroups.indexOf(testGroup.slug);
+      if (idx > -1) createdGroups[idx] = newSlug;
+    }, 15000);
+
+    it('should allow group admin to change slug', async () => {
+      // Create a fresh group where we make the admin user an admin
+      const adminTestGroup = await createGroup(TESTING_APP_URL, ownerToken, {
+        name: 'Admin Slug Change Test',
+        description: 'Testing admin can change slug',
+        visibility: 'public',
+        status: 'published',
+        allowAutoApproval: true,
+      });
+      createdGroups.push(adminTestGroup.slug);
+
+      // Add admin user to this group
+      await joinGroup(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        adminTestGroup.slug,
+        groupAdminUser.token,
+      );
+
+      // Promote to admin
+      const members = await getGroupMembers(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        adminTestGroup.slug,
+        ownerToken,
+      );
+      const adminMember = members.find(
+        (m: any) => m.user?.slug === groupAdminUser.slug,
+      );
+      if (adminMember) {
+        await updateGroupMemberRole(
+          TESTING_APP_URL,
+          TESTING_TENANT_ID,
+          adminTestGroup.slug,
+          adminMember.id,
+          'admin',
+          ownerToken,
+        );
+      }
+
+      // Now admin should be able to change slug
+      const newSlug = `admin-changed-${Date.now()}`;
+      const updateResponse = await updateGroup(
+        TESTING_APP_URL,
+        groupAdminUser.token,
+        adminTestGroup.slug,
+        { slug: newSlug },
+      );
+
+      expect(updateResponse.status).toBe(200);
+      expect(updateResponse.body.slug).toBe(newSlug);
+
+      // Update tracking for cleanup
+      const idx = createdGroups.indexOf(adminTestGroup.slug);
+      if (idx > -1) createdGroups[idx] = newSlug;
+    }, 20000);
+
+    it('should NOT allow regular member to change slug', async () => {
+      const updateResponse = await updateGroup(
+        TESTING_APP_URL,
+        groupMemberUser.token,
+        authTestGroup.slug,
+        { slug: `member-attempt-${Date.now()}` },
+      );
+
+      expect(updateResponse.status).toBe(403);
+    }, 15000);
+
+    it('should NOT allow guest to change slug', async () => {
+      const updateResponse = await updateGroup(
+        TESTING_APP_URL,
+        groupGuestUser.token,
+        authTestGroup.slug,
+        { slug: `guest-attempt-${Date.now()}` },
+      );
+
+      expect(updateResponse.status).toBe(403);
+    }, 15000);
+
+    it('should NOT allow non-member to change slug', async () => {
+      const updateResponse = await updateGroup(
+        TESTING_APP_URL,
+        nonMemberUser.token,
+        authTestGroup.slug,
+        { slug: `nonmember-attempt-${Date.now()}` },
+      );
+
+      expect(updateResponse.status).toBe(403);
+    }, 15000);
+
+    it('should NOT allow unauthenticated user to change slug', async () => {
+      // Use serverApp without Authorization header
+      const response = await serverApp
+        .patch(`/api/groups/${authTestGroup.slug}`)
+        .send({ slug: `unauth-attempt-${Date.now()}` });
+
+      expect(response.status).toBe(401);
     }, 15000);
   });
 
