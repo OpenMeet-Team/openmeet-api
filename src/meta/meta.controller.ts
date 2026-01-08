@@ -91,15 +91,18 @@ export class MetaController {
 
   /**
    * Format event date/time for og:description
-   * Returns format like "Sat, Jan 4 at 7:00 PM"
+   * Returns format like "Sat, Jan 4 at 7:00 PM EST"
+   * Uses the event's timezone if provided, otherwise defaults to UTC
    */
-  private formatEventDateTime(startDate: Date): string {
+  private formatEventDateTime(startDate: Date, timeZone?: string): string {
     const dateFormatter = new Intl.DateTimeFormat('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
+      timeZone: timeZone || 'UTC',
+      timeZoneName: 'short',
     });
     return dateFormatter.format(startDate);
   }
@@ -110,9 +113,11 @@ export class MetaController {
   private buildEventDescription(data: any): string {
     const parts: string[] = [];
 
-    // Add formatted date/time if available
+    // Add formatted date/time if available, using event's timezone
     if (data.startDate) {
-      parts.push(this.formatEventDateTime(new Date(data.startDate)));
+      parts.push(
+        this.formatEventDateTime(new Date(data.startDate), data.timeZone),
+      );
     }
 
     // Add location if available
@@ -253,7 +258,7 @@ export class MetaController {
         const startDate = new Date(data.startDate).toISOString();
         additionalMeta += `<meta property="event:start_time" content="${startDate}" />\n`;
 
-        // Format readable date/time for body
+        // Format readable date/time for body using event's timezone
         const dateFormatter = new Intl.DateTimeFormat('en-US', {
           weekday: 'long',
           year: 'numeric',
@@ -261,6 +266,7 @@ export class MetaController {
           day: 'numeric',
           hour: 'numeric',
           minute: '2-digit',
+          timeZone: data.timeZone || 'UTC',
           timeZoneName: 'short',
         });
         const formattedStart = dateFormatter.format(new Date(data.startDate));

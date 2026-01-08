@@ -762,6 +762,70 @@ describe('MetaController', () => {
     });
   });
 
+  describe('Event Timezone Formatting (Issue: UTC instead of event timezone)', () => {
+    it('should display event time in the event timezone, not UTC', () => {
+      // Event at 6:00 PM EST (23:00 UTC) on Jan 8, 2026
+      const mockEvent = {
+        name: 'Evening Meetup',
+        slug: 'evening-meetup',
+        description: 'Join us for an evening gathering',
+        visibility: EventVisibility.Public,
+        startDate: new Date('2026-01-08T23:00:00.000Z'), // 23:00 UTC = 6:00 PM EST
+        timeZone: 'America/New_York',
+        location: 'NYC Office',
+      };
+
+      const html = controller['renderMetaHTML']('event', mockEvent);
+
+      // Should show 6:00 PM (EST time), NOT 11:00 PM (UTC time)
+      expect(html).toMatch(/6:00\s*PM/i);
+      expect(html).not.toMatch(/11:00\s*PM/i);
+      // Should include EST timezone abbreviation
+      expect(html).toMatch(/EST/);
+    });
+
+    it('should use event timezone for Pacific time events', () => {
+      const mockEvent = {
+        name: 'Pacific Event',
+        slug: 'pacific-event',
+        description: 'West coast gathering',
+        visibility: EventVisibility.Public,
+        startDate: new Date('2026-01-08T20:00:00.000Z'), // 20:00 UTC = 12:00 PM PST
+        timeZone: 'America/Los_Angeles',
+      };
+
+      const html = controller['renderMetaHTML']('event', mockEvent);
+
+      // Should show noon Pacific time (12:00 PM), not 3:00 PM EST or 8:00 PM UTC
+      expect(html).toMatch(/12:00\s*PM/i);
+      // Should NOT show 3:00 PM (which would be EST conversion) or 8:00 PM (UTC)
+      expect(html).not.toMatch(/3:00\s*PM/i);
+      expect(html).not.toMatch(/8:00\s*PM/i);
+      // Should include PST timezone indicator
+      expect(html).toMatch(/PST/);
+    });
+
+    it('should handle events without a timezone gracefully (fallback to UTC)', () => {
+      const mockEvent = {
+        name: 'Legacy Event',
+        slug: 'legacy-event',
+        description: 'Old event without timezone',
+        visibility: EventVisibility.Public,
+        startDate: new Date('2026-01-08T14:00:00.000Z'),
+        // No timeZone field - should default to UTC
+      };
+
+      const html = controller['renderMetaHTML']('event', mockEvent);
+
+      // Should still render without error, showing UTC time
+      expect(html).toContain('Legacy Event');
+      // 14:00 UTC = 2:00 PM UTC
+      expect(html).toMatch(/2:00\s*PM/i);
+      // Should include UTC timezone indicator
+      expect(html).toMatch(/UTC/);
+    });
+  });
+
   describe('renderMetaHTML - Event Series Type', () => {
     it('should render event-series meta tags correctly', () => {
       const mockSeries = {
