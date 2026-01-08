@@ -378,6 +378,7 @@ export class AuthService {
     // A 6-digit verification code will be sent to their email
     const user = await this.userService.create({
       ...dto,
+      lastName: dto.lastName ?? null,
       email: dto.email,
       role: role.id,
       status: {

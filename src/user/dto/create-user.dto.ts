@@ -33,9 +33,9 @@ export class CreateUserDto {
   @IsNotEmpty()
   firstName: string | null;
 
-  @ApiProperty({ example: 'Doe', type: String })
-  @IsNotEmpty()
-  lastName: string | null;
+  @ApiPropertyOptional({ example: 'Doe', type: String })
+  @IsOptional()
+  lastName?: string | null;
 
   @ApiPropertyOptional({ type: () => FileDto })
   @IsOptional()
