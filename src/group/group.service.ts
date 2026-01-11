@@ -55,7 +55,7 @@ import { EventRecommendationService } from '../event/services/event-recommendati
 // import { forwardRef } from '@nestjs/common'; // Currently not used
 // ChatRoomService removed - Matrix Application Service handles room operations directly
 
-@Injectable({ scope: Scope.REQUEST, durable: true })
+@Injectable({ scope: Scope.REQUEST })
 export class GroupService {
   private readonly auditLogger = AuditLoggerService.getInstance();
   private readonly logger = new Logger(GroupService.name);
