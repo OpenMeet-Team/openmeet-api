@@ -1,11 +1,20 @@
-export interface BlueskyLocation {
-  type: string;
-  lat?: number;
-  lon?: number;
-  description?: string;
-  uri?: string;
+// ATProto union types require $type discriminator
+// Geo location: community.lexicon.location.geo
+// URI location: community.lexicon.calendar.event#uri
+export interface BlueskyGeoLocation {
+  $type: 'community.lexicon.location.geo';
+  latitude: string; // ATProto expects string, not number
+  longitude: string; // ATProto expects string, not number
   name?: string;
 }
+
+export interface BlueskyUriLocation {
+  $type: 'community.lexicon.calendar.event#uri';
+  uri: string;
+  name?: string;
+}
+
+export type BlueskyLocation = BlueskyGeoLocation | BlueskyUriLocation;
 
 export interface BlueskyEventUri {
   uri: string;
@@ -35,10 +44,9 @@ export interface BlueskyEvent {
     mode?: string;
     status?: string;
     locations?: Array<{
-      type: string;
-      lat?: number;
-      lon?: number;
-      description?: string;
+      $type: string;
+      latitude?: string;
+      longitude?: string;
       uri?: string;
       name?: string;
     }>;
