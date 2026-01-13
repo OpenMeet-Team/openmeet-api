@@ -312,7 +312,9 @@ export class GroupMemberQueryService {
       query.limit(limit);
     }
 
-    return await query.getMany();
+    const members = await query.getMany();
+    // Filter out members with soft-deleted users (user relation returns null)
+    return members.filter((member) => member.user !== null);
   }
 
   async approveMember(groupMemberId: number, tenantId: string): Promise<any> {
@@ -416,7 +418,10 @@ export class GroupMemberQueryService {
         },
       },
     });
-    return groupMembers.map((member) => member.user);
+    // Filter out members with soft-deleted users (user relation returns null)
+    return groupMembers
+      .filter((member) => member.user !== null)
+      .map((member) => member.user);
   }
 
   async getSpecificGroupMembers(
@@ -442,7 +447,10 @@ export class GroupMemberQueryService {
         },
       },
     });
-    return groupMembers.map((member) => member.user);
+    // Filter out members with soft-deleted users (user relation returns null)
+    return groupMembers
+      .filter((member) => member.user !== null)
+      .map((member) => member.user);
   }
 
   async showGroupDetailsMember(
@@ -514,6 +522,7 @@ export class GroupMemberQueryService {
       },
     });
 
-    return groupMembers;
+    // Filter out members with soft-deleted users (user relation returns null)
+    return groupMembers.filter((member) => member.user !== null);
   }
 }

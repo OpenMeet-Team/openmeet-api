@@ -881,7 +881,10 @@ export class EventAttendeeService {
         },
       },
     });
-    return eventAttendees.map((member) => member.user);
+    // Filter out attendees with soft-deleted users (user relation returns null)
+    return eventAttendees
+      .filter((member) => member.user !== null)
+      .map((member) => member.user);
   }
 
   @Trace('event-attendee.getMailServiceEventAttendee')

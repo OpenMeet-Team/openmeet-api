@@ -704,6 +704,77 @@ describe('EventAttendeeService', () => {
     });
   });
 
+  describe('orphaned attendee handling (soft-deleted users)', () => {
+    /**
+     * Bug: When a user is soft-deleted, their eventAttendee records remain but the
+     * user relation returns null. This can cause null reference errors when accessing
+     * user.email, user.firstName, etc.
+     */
+    describe('getMailServiceEventAttendeesByPermission', () => {
+      it('should filter out attendees with null/deleted users', async () => {
+        // Arrange: Simulate a mix of valid and orphaned attendees
+        const mockEventAttendees = [
+          {
+            id: 1,
+            user: {
+              id: 100,
+              firstName: 'Active',
+              lastName: 'User',
+              name: 'Active User',
+              email: 'active@example.com',
+            },
+          },
+          {
+            id: 2,
+            user: null, // Orphaned - user was soft-deleted
+          },
+          {
+            id: 3,
+            user: {
+              id: 102,
+              firstName: 'Another',
+              lastName: 'User',
+              name: 'Another User',
+              email: 'another@example.com',
+            },
+          },
+        ];
+
+        mockRepository.find.mockResolvedValue(mockEventAttendees);
+
+        // Act
+        const result = await service.getMailServiceEventAttendeesByPermission(
+          1, // eventId
+          'seeEvent' as any, // permission (using any to avoid importing the enum)
+        );
+
+        // Assert: Should only return users from attendees with valid user references
+        expect(result).toHaveLength(2);
+        expect(result.every((user: any) => user !== null)).toBe(true);
+        expect(result.map((u: any) => u.email)).toEqual([
+          'active@example.com',
+          'another@example.com',
+        ]);
+      });
+
+      it('should return empty array when all attendees have deleted users', async () => {
+        const mockEventAttendees = [
+          { id: 1, user: null },
+          { id: 2, user: null },
+        ];
+
+        mockRepository.find.mockResolvedValue(mockEventAttendees);
+
+        const result = await service.getMailServiceEventAttendeesByPermission(
+          1,
+          'seeEvent' as any,
+        );
+
+        expect(result).toHaveLength(0);
+      });
+    });
+  });
+
   afterEach(async () => {
     await module.close();
     jest.clearAllMocks();
