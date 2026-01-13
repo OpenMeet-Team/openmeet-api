@@ -376,19 +376,21 @@ export class BlueskyService {
       const locations: BlueskyLocation[] = [];
 
       // Add physical location if exists
+      // ATProto schema: $type discriminator, latitude/longitude as strings, name field
       if (event.location && event.lat && event.lon) {
         locations.push({
-          type: 'community.lexicon.location.geo',
-          lat: event.lat,
-          lon: event.lon,
-          description: event.location,
+          $type: 'community.lexicon.location.geo',
+          latitude: String(event.lat),
+          longitude: String(event.lon),
+          name: event.location,
         });
       }
 
       // Add online location if exists
+      // ATProto schema: $type discriminator for union types
       if (event.locationOnline) {
         locations.push({
-          type: 'community.lexicon.calendar.event#uri',
+          $type: 'community.lexicon.calendar.event#uri',
           uri: event.locationOnline,
           name: 'Online Meeting Link',
         });

@@ -696,5 +696,174 @@ describe('BlueskyService', () => {
         service.createEventRecord(event, did, handle, tenantId),
       ).rejects.toThrow();
     });
+
+    it('should use correct ATProto schema for geo locations ($type, latitude/longitude as strings, name)', async () => {
+      // Arrange
+      const event = {
+        name: 'Test Event with Location',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        location: 'Test Venue, 123 Main St',
+        lat: 40.7128,
+        lon: -74.006,
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Mock getRecord to throw a 404 error to indicate rkey is available
+      mockAgentImplementation.com.atproto.repo.getRecord.mockRejectedValueOnce({
+        status: 404,
+      });
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - verify the location uses correct ATProto schema
+      expect(
+        mockAgentImplementation.com.atproto.repo.putRecord,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          record: expect.objectContaining({
+            locations: expect.arrayContaining([
+              expect.objectContaining({
+                $type: 'community.lexicon.location.geo',
+                latitude: '40.7128',
+                longitude: '-74.006',
+                name: 'Test Venue, 123 Main St',
+              }),
+            ]),
+          }),
+        }),
+      );
+
+      // Verify incorrect fields are NOT used
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const geoLocation = putRecordCall.record.locations.find(
+        (loc: Record<string, unknown>) =>
+          loc.$type === 'community.lexicon.location.geo',
+      );
+      expect(geoLocation).not.toHaveProperty('type');
+      expect(geoLocation).not.toHaveProperty('lat');
+      expect(geoLocation).not.toHaveProperty('lon');
+      expect(geoLocation).not.toHaveProperty('description');
+    });
+
+    it('should use correct ATProto schema for URI locations ($type)', async () => {
+      // Arrange
+      const event = {
+        name: 'Test Online Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.Online,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        locationOnline: 'https://zoom.us/j/123456789',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Mock getRecord to throw a 404 error to indicate rkey is available
+      mockAgentImplementation.com.atproto.repo.getRecord.mockRejectedValueOnce({
+        status: 404,
+      });
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - verify the URI location uses correct ATProto schema
+      expect(
+        mockAgentImplementation.com.atproto.repo.putRecord,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          record: expect.objectContaining({
+            locations: expect.arrayContaining([
+              expect.objectContaining({
+                $type: 'community.lexicon.calendar.event#uri',
+                uri: 'https://zoom.us/j/123456789',
+                name: 'Online Meeting Link',
+              }),
+            ]),
+          }),
+        }),
+      );
+
+      // Verify incorrect field is NOT used
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const uriLocation = putRecordCall.record.locations.find(
+        (loc: Record<string, unknown>) =>
+          loc.$type === 'community.lexicon.calendar.event#uri',
+      );
+      expect(uriLocation).not.toHaveProperty('type');
+    });
+
+    it('should include both geo and URI locations for hybrid events with correct schema', async () => {
+      // Arrange
+      const event = {
+        name: 'Test Hybrid Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.Hybrid,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        location: 'Conference Center',
+        lat: 51.5074,
+        lon: -0.1278,
+        locationOnline: 'https://meet.google.com/abc-defg-hij',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Mock getRecord to throw a 404 error to indicate rkey is available
+      mockAgentImplementation.com.atproto.repo.getRecord.mockRejectedValueOnce({
+        status: 404,
+      });
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - verify both locations use correct ATProto schema
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const locations = putRecordCall.record.locations;
+
+      expect(locations).toHaveLength(2);
+
+      // Check geo location
+      const geoLocation = locations.find(
+        (loc: Record<string, unknown>) =>
+          loc.$type === 'community.lexicon.location.geo',
+      );
+      expect(geoLocation).toEqual({
+        $type: 'community.lexicon.location.geo',
+        latitude: '51.5074',
+        longitude: '-0.1278',
+        name: 'Conference Center',
+      });
+
+      // Check URI location
+      const uriLocation = locations.find(
+        (loc: Record<string, unknown>) =>
+          loc.$type === 'community.lexicon.calendar.event#uri',
+      );
+      expect(uriLocation).toEqual({
+        $type: 'community.lexicon.calendar.event#uri',
+        uri: 'https://meet.google.com/abc-defg-hij',
+        name: 'Online Meeting Link',
+      });
+    });
   });
 });
