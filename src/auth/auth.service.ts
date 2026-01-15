@@ -684,11 +684,58 @@ export class AuthService {
       const userByEmail = await this.userService.findByEmail(userDto.email);
 
       if (userByEmail && userByEmail.id !== currentUser.id) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            email: 'This email is already in use.',
-          },
+        // Check if this is a merge-eligible scenario:
+        // - Current user is Bluesky without email
+        // - Target user is a Quick RSVP account (passwordless email)
+        const isBlueskyUserWithoutEmail =
+          currentUser.provider === AuthProvidersEnum.bluesky &&
+          (!currentUser.email ||
+            currentUser.email === '' ||
+            currentUser.email === 'null');
+
+        const isQuickRsvpAccount =
+          userByEmail.provider === AuthProvidersEnum.email &&
+          !userByEmail.password;
+
+        if (isBlueskyUserWithoutEmail && isQuickRsvpAccount) {
+          // Send verification code to the Quick RSVP account's email
+          const code = await this.emailVerificationCodeService.generateCode(
+            currentUser.id, // Link code to Bluesky user (they initiated merge)
+            userJwtPayload.tenantId,
+            userDto.email.toLowerCase(),
+          );
+
+          // Send the verification code email
+          await this.mailService.sendLoginCode({
+            to: userDto.email,
+            data: {
+              name: userByEmail.firstName || 'there',
+              code,
+            },
+          });
+
+          this.logger.log(
+            `Account merge code sent to ${userDto.email} for Bluesky user ${currentUser.id}`,
+          );
+
+          // Return 409 Conflict with merge info
+          throw new ConflictException({
+            status: HttpStatus.CONFLICT,
+            mergeAvailable: true,
+            message:
+              'This email belongs to an existing account. We sent a verification code to merge your accounts.',
+            // Include code in dev/test environments for easier testing
+            ...(process.env.NODE_ENV !== 'production' && {
+              verificationCode: code,
+            }),
+          });
+        }
+
+        // Not eligible for merge - return standard error
+        throw new ConflictException({
+          status: HttpStatus.CONFLICT,
+          mergeAvailable: false,
+          message: 'This email is already in use by another account.',
         });
       }
 
@@ -1198,7 +1245,7 @@ export class AuthService {
     dto: VerifyEmailCodeDto,
     tenantId: string,
   ): Promise<LoginResponseDto> {
-    const { code } = dto;
+    const { code, context } = dto;
 
     // Use consistent error message to prevent information leakage
     const VERIFICATION_ERROR = {
@@ -1216,7 +1263,12 @@ export class AuthService {
       throw new UnprocessableEntityException(VERIFICATION_ERROR);
     }
 
-    // 2. Get user
+    // 2. Handle account merge context
+    if (context === 'account-merge') {
+      return this.handleAccountMerge(verificationData, dto.email, tenantId);
+    }
+
+    // 3. Get user (regular login flow)
     let user = await this.userService.findById(verificationData.userId);
     if (!user || !user.role) {
       // Log for debugging but show same error to user
@@ -1226,7 +1278,7 @@ export class AuthService {
       throw new UnprocessableEntityException(VERIFICATION_ERROR);
     }
 
-    // 3. If user is inactive, activate them (email verification complete)
+    // 4. If user is inactive, activate them (email verification complete)
     if (user.status?.id === StatusEnum.inactive) {
       await this.userService.update(user.id, {
         status: { id: StatusEnum.active },
@@ -1240,7 +1292,7 @@ export class AuthService {
       }
     }
 
-    // 4. Create session and return tokens (same as regular login)
+    // 5. Create session and return tokens (same as regular login)
     const hash = crypto
       .createHash('sha256')
       .update(randomStringGenerator())
@@ -1272,6 +1324,136 @@ export class AuthService {
       tokenExpires,
       user,
       sessionId: session.secureId, // ← CRITICAL: Required for OIDC cookie (Matrix login)
+    };
+  }
+
+  /**
+   * Handle account merge after email verification.
+   * Merges a Bluesky account (no email) with a Quick RSVP account (has email).
+   *
+   * @param verificationData - Data from the validated verification code
+   * @param email - Email address of the Quick RSVP account
+   * @param tenantId - Tenant identifier
+   * @returns Login response with new session for merged account
+   */
+  private async handleAccountMerge(
+    verificationData: { userId: number; tenantId: string; email: string },
+    email: string,
+    tenantId: string,
+  ): Promise<LoginResponseDto> {
+    const VERIFICATION_ERROR = {
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      errors: {
+        code: 'Invalid or expired verification code',
+      },
+    };
+
+    // 1. Get the Bluesky user (code was linked to them during merge request)
+    const blueskyUser = await this.userService.findById(
+      verificationData.userId,
+      tenantId,
+    );
+
+    if (!blueskyUser) {
+      this.logger.error(
+        `Account merge: Bluesky user not found: ${verificationData.userId}`,
+      );
+      throw new UnprocessableEntityException(VERIFICATION_ERROR);
+    }
+
+    // 2. Verify this is actually a Bluesky user
+    if (blueskyUser.provider !== AuthProvidersEnum.bluesky) {
+      this.logger.error(
+        `Account merge: User ${verificationData.userId} is not a Bluesky user`,
+      );
+      throw new UnprocessableEntityException({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        errors: {
+          code: 'Invalid merge request',
+        },
+      });
+    }
+
+    // 3. Build social profile from Bluesky user for merge
+    const socialProfile: SocialInterface = {
+      id: blueskyUser.socialId!, // Bluesky DID
+      email: email, // The verified email
+      firstName: blueskyUser.firstName ?? undefined,
+      lastName: blueskyUser.lastName ?? undefined,
+    };
+
+    // 4. Execute the merge (Quick RSVP account absorbs Bluesky data)
+    const mergedUser = await this.userService.mergeQuickRsvpAccountByEmail(
+      email,
+      socialProfile,
+      AuthProvidersEnum.bluesky,
+      tenantId,
+    );
+
+    this.logger.log(
+      `Account merge complete: Bluesky user ${blueskyUser.id} merged into Quick RSVP account ${mergedUser.id}`,
+    );
+
+    // 5. Migrate any event attendances from old Bluesky user to merged account
+    // (In case user attended events while logged in as Bluesky before merging)
+    try {
+      await this.eventAttendeeService.migrateUserAttendances(
+        blueskyUser.id,
+        mergedUser.id,
+        tenantId,
+      );
+      this.logger.log(
+        `Migrated event attendances from user ${blueskyUser.id} to ${mergedUser.id}`,
+      );
+    } catch (migrationError) {
+      // Log but don't fail the merge - attendances may not exist
+      this.logger.warn(
+        `Failed to migrate event attendances: ${migrationError.message}`,
+      );
+    }
+
+    // 6. Invalidate old Bluesky user sessions and soft-delete the account
+    await this.sessionService.deleteByUserId({
+      userId: blueskyUser.id,
+    });
+
+    // Soft-delete the old Bluesky account to prevent duplicate socialId issues
+    await this.userService.remove(blueskyUser.id);
+    this.logger.log(`Soft-deleted old Bluesky account ${blueskyUser.id}`);
+
+    // 7. Create new session for the merged account
+    const hash = crypto
+      .createHash('sha256')
+      .update(randomStringGenerator())
+      .digest('hex');
+
+    const secureId = crypto.randomUUID();
+
+    const session = await this.sessionService.create(
+      {
+        user: mergedUser,
+        hash,
+        secureId,
+      },
+      tenantId,
+    );
+
+    // 7. Generate tokens for merged account
+    const { token, refreshToken, tokenExpires } = await this.getTokensData({
+      id: mergedUser.id,
+      role: mergedUser.role,
+      slug: mergedUser.slug,
+      sessionId: session.secureId,
+      hash,
+      tenantId,
+    });
+
+    return {
+      token,
+      refreshToken,
+      tokenExpires,
+      user: mergedUser,
+      sessionId: session.secureId,
     };
   }
 

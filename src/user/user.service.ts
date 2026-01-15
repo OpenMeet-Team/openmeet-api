@@ -1024,6 +1024,47 @@ export class UserService {
     return updatedUser as UserEntity;
   }
 
+  /**
+   * Public method for merging a Quick RSVP account with a social login account.
+   * Used by AuthService when a Bluesky user verifies ownership of an email
+   * that belongs to an existing Quick RSVP account.
+   *
+   * @param quickRsvpEmail - Email of the Quick RSVP account to merge into
+   * @param socialProfile - Profile data from the social login (Bluesky)
+   * @param authProvider - The auth provider (e.g., 'bluesky')
+   * @param tenantId - Tenant identifier
+   * @returns The merged user entity
+   */
+  async mergeQuickRsvpAccountByEmail(
+    quickRsvpEmail: string,
+    socialProfile: SocialInterface,
+    authProvider: string,
+    tenantId: string,
+  ): Promise<UserEntity> {
+    const quickRsvpAccount = await this.findByEmail(quickRsvpEmail, tenantId);
+
+    if (!quickRsvpAccount) {
+      throw new NotFoundException('Quick RSVP account not found');
+    }
+
+    // Verify it's actually a Quick RSVP account (passwordless email)
+    if (
+      quickRsvpAccount.provider !== AuthProvidersEnum.email ||
+      quickRsvpAccount.password
+    ) {
+      throw new UnprocessableEntityException(
+        'Target account is not eligible for merge',
+      );
+    }
+
+    return this.mergeQuickRsvpAccount(
+      quickRsvpAccount,
+      socialProfile,
+      authProvider,
+      tenantId,
+    );
+  }
+
   async update(
     id: User['id'],
     payload: any,

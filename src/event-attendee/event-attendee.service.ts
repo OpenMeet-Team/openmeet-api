@@ -1081,4 +1081,38 @@ export class EventAttendeeService {
       this.request.tenantId,
     );
   }
+
+  /**
+   * Migrate all event attendances from one user to another.
+   * Used during account merge to preserve RSVPs when merging Bluesky account
+   * with Quick RSVP account.
+   *
+   * @param fromUserId - User ID to migrate attendances from (old Bluesky account)
+   * @param toUserId - User ID to migrate attendances to (merged Quick RSVP account)
+   * @param tenantId - Tenant identifier
+   * @returns UpdateResult with affected rows count
+   */
+  async migrateUserAttendances(
+    fromUserId: number,
+    toUserId: number,
+    _tenantId: string,
+  ): Promise<UpdateResult> {
+    await this.getTenantSpecificEventRepository();
+
+    this.logger.log(
+      `Migrating event attendances from user ${fromUserId} to user ${toUserId}`,
+    );
+
+    // Update all event attendances to point to the new user
+    const result = await this.eventAttendeesRepository.update(
+      { user: { id: fromUserId } },
+      { user: { id: toUserId } },
+    );
+
+    this.logger.log(
+      `Migrated ${result.affected || 0} event attendances from user ${fromUserId} to user ${toUserId}`,
+    );
+
+    return result;
+  }
 }

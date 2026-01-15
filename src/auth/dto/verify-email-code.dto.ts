@@ -1,5 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsEmail,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { lowerCaseTransformer } from '../../utils/transformers/lower-case.transformer';
 
@@ -22,4 +28,15 @@ export class VerifyEmailCodeDto {
   @IsEmail()
   @IsNotEmpty()
   email: string;
+
+  @ApiPropertyOptional({
+    example: 'account-merge',
+    enum: ['login', 'account-merge'],
+    description:
+      'Context for verification: "login" for passwordless login, "account-merge" for merging Bluesky account with Quick RSVP account',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['login', 'account-merge'])
+  context?: 'login' | 'account-merge';
 }
