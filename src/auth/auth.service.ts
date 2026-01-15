@@ -731,11 +731,12 @@ export class AuthService {
           });
         }
 
-        // Not eligible for merge - return standard error
-        throw new ConflictException({
-          status: HttpStatus.CONFLICT,
-          mergeAvailable: false,
-          message: 'This email is already in use by another account.',
+        // Not eligible for merge - return original 422 error format
+        throw new UnprocessableEntityException({
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          errors: {
+            email: 'This email is already in use.',
+          },
         });
       }
 
