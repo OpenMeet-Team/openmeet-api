@@ -240,6 +240,7 @@ export class AuthBlueskyService {
         emailConfirmed: profileData.emailConfirmed,
         firstName: profileData.displayName || profileData.handle,
         lastName: '',
+        avatar: profileData.avatar, // Pass avatar URL for user photo
         // Handle is not stored - it's resolved from DID when needed
       },
       tenantId,

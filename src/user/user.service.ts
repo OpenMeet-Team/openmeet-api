@@ -800,6 +800,38 @@ export class UserService {
         profile.email = existingUser.email;
       }
 
+      // Update Bluesky avatar in preferences if it changed
+      const existingUserEntity = existingUser as UserEntity;
+      if (
+        authProvider === 'bluesky' &&
+        profile.avatar &&
+        existingUserEntity.preferences?.bluesky?.avatar !== profile.avatar
+      ) {
+        this.logger.log(
+          'Updating existing user with Bluesky avatar in preferences',
+          {
+            userId: existingUser.id,
+            avatar: profile.avatar,
+          },
+        );
+
+        const updatedUser = await this.update(
+          existingUser.id,
+          {
+            preferences: {
+              ...(existingUserEntity.preferences || {}),
+              bluesky: {
+                ...(existingUserEntity.preferences?.bluesky || {}),
+                avatar: profile.avatar,
+              },
+            },
+          },
+          tenantId,
+        );
+
+        return updatedUser as UserEntity;
+      }
+
       return existingUser as UserEntity;
     }
 
@@ -877,6 +909,7 @@ export class UserService {
       createUserData.preferences = {
         bluesky: {
           did: profile.id,
+          avatar: profile.avatar, // Store Bluesky avatar URL
           // Note: We don't store the handle here - it's resolved from DID when needed
           connected: true,
           autoPost: false,
