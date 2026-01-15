@@ -18,7 +18,7 @@ import { IPaginationOptions } from '../utils/types/pagination-options';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
-import { Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
@@ -45,6 +45,9 @@ export class UserService {
 
   private usersRepository: Repository<UserEntity>;
   private userPermissionRepository: Repository<UserPermissionEntity>;
+  private groupRepository: Repository<GroupEntity>;
+  private eventRepository: Repository<EventEntity>;
+  private dataSource: DataSource;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -68,9 +71,12 @@ export class UserService {
     }
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+    this.dataSource = dataSource;
     this.usersRepository = dataSource.getRepository(UserEntity);
     this.userPermissionRepository =
       dataSource.getRepository(UserPermissionEntity);
+    this.groupRepository = dataSource.getRepository(GroupEntity);
+    this.eventRepository = dataSource.getRepository(EventEntity);
   }
 
   /**
@@ -1098,6 +1104,14 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Hard deletes a user and properly handles owned content:
+   * - Groups with members: Transfer ownership to next admin/organizer
+   * - Groups with no eligible successor: Delete the group entirely
+   * - Events in groups: Keep them, userId becomes NULL (group is context)
+   * - Standalone events (no group): Delete with user
+   * - Memberships/RSVPs: Hard delete via CASCADE
+   */
   async remove(id: User['id']): Promise<void> {
     // Ensure ID is a number (it might come as a string from the controller)
     const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
@@ -1108,7 +1122,45 @@ export class UserService {
     // Set up tenant-specific repository
     await this.getTenantSpecificRepository();
 
-    // Clean up Matrix handle registry before soft deleting user
+    // 1. Handle groups owned by this user
+    const ownedGroups = await this.groupRepository.find({
+      where: { createdBy: { id: numericId } },
+      relations: ['groupMembers', 'groupMembers.user', 'groupMembers.groupRole'],
+    });
+
+    for (const group of ownedGroups) {
+      // Find eligible successor (admin/organizer/owner role, not the deleting user)
+      const successor = group.groupMembers.find(
+        (m) =>
+          m.user.id !== numericId &&
+          ['admin', 'organizer', 'owner'].includes(
+            m.groupRole?.name?.toLowerCase() || '',
+          ),
+      );
+
+      if (successor) {
+        // Transfer ownership
+        group.createdBy = successor.user;
+        await this.groupRepository.save(group);
+        this.logger.log(
+          `Transferred ownership of group ${group.id} to user ${successor.user.id}`,
+        );
+      } else {
+        // No one to take over - delete the group (cascades to events in group)
+        await this.groupRepository.remove(group);
+        this.logger.log(
+          `Deleted group ${group.id} - no eligible successor found`,
+        );
+      }
+    }
+
+    // 2. Delete standalone events (events not in any group)
+    await this.eventRepository.delete({
+      user: { id: numericId },
+      group: IsNull(),
+    });
+
+    // 3. Clean up Matrix handle
     if (tenantId) {
       try {
         await this.globalMatrixValidationService.unregisterMatrixHandle(
@@ -1127,10 +1179,16 @@ export class UserService {
       }
     }
 
-    await this.usersRepository.softDelete(numericId);
-    this.auditLogger.log('user deleted', {
-      id: numericId,
-    });
+    // Clean up from global Matrix handle registry table
+    await this.dataSource.query(
+      'DELETE FROM "matrixHandleRegistry" WHERE "userId" = $1',
+      [numericId],
+    );
+
+    // 4. Hard delete user (CASCADE handles: memberships, permissions, sessions, attendees)
+    await this.usersRepository.delete(numericId);
+
+    this.auditLogger.log('user hard deleted', { id: numericId });
   }
 
   async getMailServiceUserById(id: number): Promise<UserEntity> {

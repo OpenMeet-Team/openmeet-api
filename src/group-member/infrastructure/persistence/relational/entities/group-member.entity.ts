@@ -22,7 +22,9 @@ export class GroupMemberEntity extends EntityRelationalHelper {
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 
-  @ManyToOne(() => UserEntity, (user) => user.groupMembers)
+  @ManyToOne(() => UserEntity, (user) => user.groupMembers, {
+    onDelete: 'CASCADE',
+  })
   user: UserEntity;
 
   @ManyToOne(() => GroupRoleEntity, (groupRole) => groupRole.groupMembers)

@@ -72,9 +72,12 @@ export class EventSeriesEntity
   @Column({ type: 'varchar', length: 255, nullable: true })
   matrixRoomId: string;
 
-  @ManyToOne(() => UserEntity)
+  @ManyToOne(() => UserEntity, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'userId' })
-  user: UserEntity;
+  user: UserEntity | null;
 
   @ManyToOne(() => GroupEntity, { nullable: true })
   @JoinColumn({ name: 'groupId' })

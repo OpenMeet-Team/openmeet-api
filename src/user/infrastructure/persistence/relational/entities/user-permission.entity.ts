@@ -7,7 +7,10 @@ export class UserPermissionEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => UserEntity, (user) => user.userPermissions, { eager: true })
+  @ManyToOne(() => UserEntity, (user) => user.userPermissions, {
+    eager: true,
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
 

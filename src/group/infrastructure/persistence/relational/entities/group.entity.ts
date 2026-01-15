@@ -99,8 +99,11 @@ export class GroupEntity extends EntityRelationalHelper {
 
   groupMember: GroupMemberEntity | null;
 
-  @ManyToOne(() => UserEntity, (group) => group.groups)
-  createdBy: UserEntity;
+  @ManyToOne(() => UserEntity, (group) => group.groups, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  createdBy: UserEntity | null;
 
   @OneToMany(
     () => GroupUserPermissionEntity,

@@ -191,10 +191,35 @@ describe('UserService', () => {
     });
 
     it('should remove a user and clean up Matrix handle', async () => {
-      // Mock the repository methods
-      mockUsersRepository.softDelete = jest
+      // Mock the repository methods for hard delete
+      mockUsersRepository.delete = jest
         .fn()
         .mockResolvedValue({ affected: 1 });
+
+      // Mock group repository (no groups owned)
+      const mockGroupRepository = {
+        find: jest.fn().mockResolvedValue([]),
+      };
+
+      // Mock event repository
+      const mockEventRepository = {
+        delete: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+
+      // Mock data source for Matrix handle cleanup
+      const mockDataSource = {
+        query: jest.fn().mockResolvedValue([]),
+      };
+
+      // Override getTenantSpecificRepository to set up our mocks
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockImplementation(async () => {
+          (userService as any).usersRepository = mockUsersRepository;
+          (userService as any).groupRepository = mockGroupRepository;
+          (userService as any).eventRepository = mockEventRepository;
+          (userService as any).dataSource = mockDataSource;
+        });
 
       // Mock Matrix cleanup
       mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
@@ -207,15 +232,40 @@ describe('UserService', () => {
         mockGlobalMatrixService.unregisterMatrixHandle,
       ).toHaveBeenCalledWith(TESTING_TENANT_ID, mockUser.id);
 
-      // Verify user was soft deleted
-      expect(mockUsersRepository.softDelete).toHaveBeenCalledWith(mockUser.id);
+      // Verify user was hard deleted
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(mockUser.id);
     });
 
     it('should still remove user even if Matrix cleanup fails', async () => {
-      // Mock the repository methods
-      mockUsersRepository.softDelete = jest
+      // Mock the repository methods for hard delete
+      mockUsersRepository.delete = jest
         .fn()
         .mockResolvedValue({ affected: 1 });
+
+      // Mock group repository (no groups owned)
+      const mockGroupRepository = {
+        find: jest.fn().mockResolvedValue([]),
+      };
+
+      // Mock event repository
+      const mockEventRepository = {
+        delete: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+
+      // Mock data source for Matrix handle cleanup
+      const mockDataSource = {
+        query: jest.fn().mockResolvedValue([]),
+      };
+
+      // Override getTenantSpecificRepository to set up our mocks
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockImplementation(async () => {
+          (userService as any).usersRepository = mockUsersRepository;
+          (userService as any).groupRepository = mockGroupRepository;
+          (userService as any).eventRepository = mockEventRepository;
+          (userService as any).dataSource = mockDataSource;
+        });
 
       // Mock Matrix cleanup to fail
       mockGlobalMatrixService.unregisterMatrixHandle.mockRejectedValue(
@@ -225,8 +275,8 @@ describe('UserService', () => {
       // Call remove - should not throw
       await expect(userService.remove(mockUser.id)).resolves.toBeUndefined();
 
-      // Verify user was still soft deleted despite Matrix failure
-      expect(mockUsersRepository.softDelete).toHaveBeenCalledWith(mockUser.id);
+      // Verify user was still hard deleted despite Matrix failure
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(mockUser.id);
     });
   });
 
@@ -1783,6 +1833,246 @@ describe('UserService', () => {
 
       // Assert: Handle is updated in-memory
       expect(result?.preferences?.bluesky?.handle).toBe(handle);
+    });
+  });
+
+  describe('remove - Hard Delete User', () => {
+    let mockGlobalMatrixService: jest.Mocked<GlobalMatrixValidationService>;
+    let mockUsersRepository: any;
+    let mockGroupRepository: any;
+    let mockEventRepository: any;
+    let mockDataSource: any;
+
+    beforeEach(() => {
+      mockGlobalMatrixService = module.get(GlobalMatrixValidationService);
+      mockUsersRepository = module.get(Repository);
+
+      // Create mock repositories for groups and events
+      mockGroupRepository = {
+        find: jest.fn().mockResolvedValue([]),
+        save: jest.fn(),
+        remove: jest.fn(),
+      };
+
+      mockEventRepository = {
+        delete: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+
+      mockDataSource = {
+        query: jest.fn().mockResolvedValue([]),
+      };
+
+      // Set up the user repository delete mock
+      mockUsersRepository.delete = jest.fn().mockResolvedValue({ affected: 1 });
+    });
+
+    const setupMockRepositories = () => {
+      // Directly set the private properties on the service
+      (userService as any).usersRepository = mockUsersRepository;
+      (userService as any).groupRepository = mockGroupRepository;
+      (userService as any).eventRepository = mockEventRepository;
+      (userService as any).dataSource = mockDataSource;
+
+      // Override getTenantSpecificRepository to not overwrite our mocks
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockImplementation(async () => {
+          // Set all our mocks
+          (userService as any).usersRepository = mockUsersRepository;
+          (userService as any).groupRepository = mockGroupRepository;
+          (userService as any).eventRepository = mockEventRepository;
+          (userService as any).dataSource = mockDataSource;
+        });
+    };
+
+    it('should hard delete user and transfer group ownership to eligible member', async () => {
+      const userId = 123;
+      const successorUserId = 456;
+
+      // Mock an owned group with an eligible successor (admin)
+      const mockOwnedGroup = {
+        id: 1,
+        name: 'Test Group',
+        createdBy: { id: userId },
+        groupMembers: [
+          {
+            id: 1,
+            user: { id: userId },
+            groupRole: { name: 'owner' },
+          },
+          {
+            id: 2,
+            user: { id: successorUserId },
+            groupRole: { name: 'admin' },
+          },
+        ],
+      };
+
+      setupMockRepositories();
+
+      mockGroupRepository.find.mockResolvedValue([mockOwnedGroup]);
+      mockGroupRepository.save.mockResolvedValue(mockOwnedGroup);
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      await userService.remove(userId);
+
+      // Verify group ownership was transferred
+      expect(mockGroupRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createdBy: expect.objectContaining({ id: successorUserId }),
+        }),
+      );
+
+      // Verify user was hard deleted (not soft deleted)
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
+    });
+
+    it('should delete group when no eligible successor exists', async () => {
+      const userId = 123;
+
+      // Mock an owned group with no other members
+      const mockOwnedGroup = {
+        id: 1,
+        name: 'Empty Group',
+        createdBy: { id: userId },
+        groupMembers: [
+          {
+            id: 1,
+            user: { id: userId },
+            groupRole: { name: 'owner' },
+          },
+        ],
+      };
+
+      setupMockRepositories();
+
+      mockGroupRepository.find.mockResolvedValue([mockOwnedGroup]);
+      mockGroupRepository.remove.mockResolvedValue(mockOwnedGroup);
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      await userService.remove(userId);
+
+      // Verify group was deleted
+      expect(mockGroupRepository.remove).toHaveBeenCalledWith(mockOwnedGroup);
+
+      // Verify user was hard deleted
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
+    });
+
+    it('should delete standalone events (events not in a group)', async () => {
+      const userId = 123;
+
+      setupMockRepositories();
+
+      mockEventRepository.delete.mockResolvedValue({ affected: 2 });
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      await userService.remove(userId);
+
+      // Verify standalone events were deleted (events with null groupId)
+      expect(mockEventRepository.delete).toHaveBeenCalledWith({
+        user: { id: userId },
+        group: expect.anything(), // IsNull() matcher
+      });
+
+      // Verify user was hard deleted
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
+    });
+
+    it('should clean up Matrix handle registry', async () => {
+      const userId = 123;
+
+      setupMockRepositories();
+
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      await userService.remove(userId);
+
+      // Verify Matrix handle was unregistered
+      expect(
+        mockGlobalMatrixService.unregisterMatrixHandle,
+      ).toHaveBeenCalledWith(TESTING_TENANT_ID, userId);
+
+      // Verify Matrix handle registry entry was deleted
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        'DELETE FROM "matrixHandleRegistry" WHERE "userId" = $1',
+        [userId],
+      );
+    });
+
+    it('should continue deletion even if Matrix cleanup fails', async () => {
+      const userId = 123;
+
+      setupMockRepositories();
+
+      // Matrix cleanup fails
+      mockGlobalMatrixService.unregisterMatrixHandle.mockRejectedValue(
+        new Error('Matrix service unavailable'),
+      );
+
+      // Should not throw
+      await expect(userService.remove(userId)).resolves.toBeUndefined();
+
+      // User should still be deleted
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
+    });
+
+    it('should handle string ID by converting to number', async () => {
+      // Cast to any to test runtime behavior when ID comes as string from controller
+      const userId = '123' as any;
+
+      setupMockRepositories();
+
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      await userService.remove(userId);
+
+      // Should convert string to number
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(123);
+    });
+
+    it('should prefer organizer over regular member for group ownership transfer', async () => {
+      const userId = 123;
+      const organizerUserId = 456;
+      const memberUserId = 789;
+
+      const mockOwnedGroup = {
+        id: 1,
+        name: 'Test Group',
+        createdBy: { id: userId },
+        groupMembers: [
+          {
+            id: 1,
+            user: { id: userId },
+            groupRole: { name: 'owner' },
+          },
+          {
+            id: 2,
+            user: { id: memberUserId },
+            groupRole: { name: 'member' },
+          },
+          {
+            id: 3,
+            user: { id: organizerUserId },
+            groupRole: { name: 'organizer' },
+          },
+        ],
+      };
+
+      setupMockRepositories();
+
+      mockGroupRepository.find.mockResolvedValue([mockOwnedGroup]);
+      mockGroupRepository.save.mockResolvedValue(mockOwnedGroup);
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      await userService.remove(userId);
+
+      // Verify ownership transferred to organizer, not regular member
+      expect(mockGroupRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createdBy: expect.objectContaining({ id: organizerUserId }),
+        }),
+      );
     });
   });
 });
