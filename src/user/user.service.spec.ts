@@ -1565,6 +1565,194 @@ describe('UserService', () => {
     });
   });
 
+  describe('findOrCreateUser - Bluesky Avatar in Preferences', () => {
+    it('should store avatar in preferences.bluesky.avatar when creating new Bluesky user', async () => {
+      const did = 'did:plc:avatar-test-new';
+      const avatarUrl = 'https://cdn.bsky.app/img/avatar/abc123.jpg';
+
+      const blueskyProfile = {
+        id: did,
+        email: 'avatar@example.com',
+        emailConfirmed: true,
+        firstName: 'Avatar',
+        lastName: 'User',
+        avatar: avatarUrl,
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      const newUser = {
+        id: 1001,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: 'avatar@example.com',
+        firstName: 'Avatar',
+        lastName: 'User',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            avatar: avatarUrl,
+            connected: true,
+            autoPost: false,
+          },
+        },
+      };
+
+      const createSpy = jest
+        .spyOn(userService, 'create')
+        .mockResolvedValue(newUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: avatar should be stored in preferences.bluesky.avatar
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preferences: expect.objectContaining({
+            bluesky: expect.objectContaining({
+              avatar: avatarUrl,
+            }),
+          }),
+        }),
+        TESTING_TENANT_ID,
+      );
+    });
+
+    it('should update preferences.bluesky.avatar when existing user has different avatar', async () => {
+      const did = 'did:plc:existing-user';
+      const oldAvatar = 'https://cdn.bsky.app/img/avatar/old.jpg';
+      const newAvatar = 'https://cdn.bsky.app/img/avatar/new.jpg';
+
+      const existingUser = {
+        id: 1003,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: 'existing@example.com',
+        firstName: 'Existing',
+        lastName: 'User',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            avatar: oldAvatar,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email: 'existing@example.com',
+        emailConfirmed: true,
+        firstName: 'Existing',
+        lastName: 'User',
+        avatar: newAvatar,
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUser as any);
+
+      const updatedUser = {
+        ...existingUser,
+        preferences: {
+          bluesky: {
+            ...existingUser.preferences.bluesky,
+            avatar: newAvatar,
+          },
+        },
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: preferences should be updated with new avatar
+      expect(updateSpy).toHaveBeenCalledWith(
+        1003,
+        expect.objectContaining({
+          preferences: expect.objectContaining({
+            bluesky: expect.objectContaining({
+              avatar: newAvatar,
+            }),
+          }),
+        }),
+        TESTING_TENANT_ID,
+      );
+    });
+
+    it('should NOT update when existing user has same avatar', async () => {
+      const did = 'did:plc:same-avatar';
+      const avatarUrl = 'https://cdn.bsky.app/img/avatar/same.jpg';
+
+      const existingUser = {
+        id: 1004,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: 'same@example.com',
+        firstName: 'Same',
+        lastName: 'User',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            avatar: avatarUrl, // Same avatar
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email: 'same@example.com',
+        emailConfirmed: true,
+        firstName: 'Same',
+        lastName: 'User',
+        avatar: avatarUrl, // Same avatar
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUser as any);
+
+      const updateSpy = jest.spyOn(userService, 'update');
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: update should NOT be called (avatar unchanged)
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('showProfile - Bluesky Handle Resolution', () => {
     // Design: Handles are resolved dynamically for display via AtprotoHandleCacheService.
     // DID is the permanent identifier; handles can change on Bluesky at any time.
