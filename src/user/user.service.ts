@@ -1201,16 +1201,19 @@ export class UserService {
             );
           }
         } else {
-          // No one to take over - delete the group
-          // First delete all group members (FK constraint prevents direct group deletion)
+          // No one to take over - delete the group and all its content
+          // First delete all events in this group (FK constraint prevents direct group deletion)
+          await eventRepo.delete({ group: { id: group.id } });
+
+          // Then delete all group members
           const groupMemberRepo =
             transactionalEntityManager.getRepository(GroupMemberEntity);
           await groupMemberRepo.delete({ group: { id: group.id } });
 
-          // Then delete the group (this will cascade to events in the group)
+          // Finally delete the group
           await groupRepo.remove(group);
           this.logger.log(
-            `Deleted group ${group.id} - no eligible successor found`,
+            `Deleted group ${group.id} and its events - no eligible successor found`,
           );
         }
       }
