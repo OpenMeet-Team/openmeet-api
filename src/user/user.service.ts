@@ -1111,6 +1111,8 @@ export class UserService {
    * - Events in groups: Keep them, userId becomes NULL (group is context)
    * - Standalone events (no group): Delete with user
    * - Memberships/RSVPs: Hard delete via CASCADE
+   *
+   * All database operations are wrapped in a transaction to ensure atomicity.
    */
   async remove(id: User['id']): Promise<void> {
     // Ensure ID is a number (it might come as a string from the controller)
@@ -1122,45 +1124,88 @@ export class UserService {
     // Set up tenant-specific repository
     await this.getTenantSpecificRepository();
 
-    // 1. Handle groups owned by this user
-    const ownedGroups = await this.groupRepository.find({
-      where: { createdBy: { id: numericId } },
-      relations: ['groupMembers', 'groupMembers.user', 'groupMembers.groupRole'],
-    });
+    // Wrap all database operations in a transaction
+    await this.dataSource.transaction(async (transactionalEntityManager) => {
+      const groupRepo = transactionalEntityManager.getRepository(GroupEntity);
+      const eventRepo = transactionalEntityManager.getRepository(EventEntity);
+      const userRepo = transactionalEntityManager.getRepository(UserEntity);
 
-    for (const group of ownedGroups) {
-      // Find eligible successor (admin/organizer/owner role, not the deleting user)
-      const successor = group.groupMembers.find(
-        (m) =>
-          m.user.id !== numericId &&
-          ['admin', 'organizer', 'owner'].includes(
-            m.groupRole?.name?.toLowerCase() || '',
-          ),
+      // 1. Handle groups owned by this user
+      const ownedGroups = await groupRepo.find({
+        where: { createdBy: { id: numericId } },
+        relations: [
+          'groupMembers',
+          'groupMembers.user',
+          'groupMembers.groupRole',
+        ],
+      });
+
+      for (const group of ownedGroups) {
+        // Find eligible successor with deterministic selection:
+        // Priority: owner > admin > organizer, then by earliest join date
+        const rolePriority: Record<string, number> = {
+          owner: 1,
+          admin: 2,
+          organizer: 3,
+        };
+
+        const eligibleSuccessors = group.groupMembers
+          .filter(
+            (m) =>
+              m.user.id !== numericId &&
+              ['admin', 'organizer', 'owner'].includes(
+                m.groupRole?.name?.toLowerCase() || '',
+              ),
+          )
+          .sort((a, b) => {
+            // Sort by role priority first
+            const aPriority =
+              rolePriority[a.groupRole?.name?.toLowerCase()] || 99;
+            const bPriority =
+              rolePriority[b.groupRole?.name?.toLowerCase()] || 99;
+            if (aPriority !== bPriority) return aPriority - bPriority;
+
+            // Then by join date (earliest first)
+            const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return aDate - bDate;
+          });
+
+        const successor = eligibleSuccessors[0];
+
+        if (successor) {
+          // Transfer ownership
+          group.createdBy = successor.user;
+          await groupRepo.save(group);
+          this.logger.log(
+            `Transferred ownership of group ${group.id} to user ${successor.user.id} (role: ${successor.groupRole?.name})`,
+          );
+        } else {
+          // No one to take over - delete the group (cascades to events in group)
+          await groupRepo.remove(group);
+          this.logger.log(
+            `Deleted group ${group.id} - no eligible successor found`,
+          );
+        }
+      }
+
+      // 2. Delete standalone events (events not in any group)
+      await eventRepo.delete({
+        user: { id: numericId },
+        group: IsNull(),
+      });
+
+      // 3. Clean up from global Matrix handle registry table
+      await transactionalEntityManager.query(
+        'DELETE FROM "matrixHandleRegistry" WHERE "userId" = $1',
+        [numericId],
       );
 
-      if (successor) {
-        // Transfer ownership
-        group.createdBy = successor.user;
-        await this.groupRepository.save(group);
-        this.logger.log(
-          `Transferred ownership of group ${group.id} to user ${successor.user.id}`,
-        );
-      } else {
-        // No one to take over - delete the group (cascades to events in group)
-        await this.groupRepository.remove(group);
-        this.logger.log(
-          `Deleted group ${group.id} - no eligible successor found`,
-        );
-      }
-    }
-
-    // 2. Delete standalone events (events not in any group)
-    await this.eventRepository.delete({
-      user: { id: numericId },
-      group: IsNull(),
+      // 4. Hard delete user (CASCADE handles: memberships, permissions, sessions, attendees)
+      await userRepo.delete(numericId);
     });
 
-    // 3. Clean up Matrix handle
+    // Matrix handle cleanup outside transaction (external service call)
     if (tenantId) {
       try {
         await this.globalMatrixValidationService.unregisterMatrixHandle(
@@ -1171,22 +1216,13 @@ export class UserService {
           `Matrix handle unregistered for user ${numericId} in tenant ${tenantId}`,
         );
       } catch (error) {
-        // Log error but don't fail user deletion if Matrix cleanup fails
+        // Log error but don't fail - the user is already deleted
         this.logger.warn(
           `Failed to unregister Matrix handle for user ${numericId} in tenant ${tenantId}: ${error.message}`,
           error.stack,
         );
       }
     }
-
-    // Clean up from global Matrix handle registry table
-    await this.dataSource.query(
-      'DELETE FROM "matrixHandleRegistry" WHERE "userId" = $1',
-      [numericId],
-    );
-
-    // 4. Hard delete user (CASCADE handles: memberships, permissions, sessions, attendees)
-    await this.usersRepository.delete(numericId);
 
     this.auditLogger.log('user hard deleted', { id: numericId });
   }

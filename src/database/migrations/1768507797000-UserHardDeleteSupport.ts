@@ -17,23 +17,68 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
   name = 'UserHardDeleteSupport1768507797000';
 
+  /**
+   * Find the actual FK constraint name by querying information_schema.
+   * Returns null if no constraint exists.
+   */
+  private async findForeignKeyName(
+    queryRunner: QueryRunner,
+    schema: string,
+    tableName: string,
+    columnName: string,
+  ): Promise<string | null> {
+    const result = await queryRunner.query(
+      `
+      SELECT tc.constraint_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = $1
+        AND tc.table_name = $2
+        AND kcu.column_name = $3
+      LIMIT 1
+      `,
+      [schema, tableName, columnName],
+    );
+    return result.length > 0 ? result[0].constraint_name : null;
+  }
+
+  /**
+   * Drop a FK constraint if it exists, using the actual name from the database.
+   */
+  private async dropForeignKeyIfExists(
+    queryRunner: QueryRunner,
+    schema: string,
+    tableName: string,
+    columnName: string,
+  ): Promise<void> {
+    const constraintName = await this.findForeignKeyName(
+      queryRunner,
+      schema,
+      tableName,
+      columnName,
+    );
+    if (constraintName) {
+      await queryRunner.query(`
+        ALTER TABLE "${schema}"."${tableName}"
+        DROP CONSTRAINT "${constraintName}"
+      `);
+    }
+  }
+
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
     // 1. Make events.userId nullable and add ON DELETE SET NULL
-    // First drop existing constraint
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."events"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_events_userId"
-    `);
+    await this.dropForeignKeyIfExists(queryRunner, schema, 'events', 'userId');
 
-    // Make column nullable
     await queryRunner.query(`
       ALTER TABLE "${schema}"."events"
       ALTER COLUMN "userId" DROP NOT NULL
     `);
 
-    // Add new constraint with SET NULL
     await queryRunner.query(`
       ALTER TABLE "${schema}"."events"
       ADD CONSTRAINT "FK_${schema}_events_userId"
@@ -41,10 +86,12 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
     `);
 
     // 2. Make eventSeries.userId nullable and change from CASCADE to SET NULL
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."eventSeries"
-      DROP CONSTRAINT IF EXISTS "FK_eventSeries_user"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'eventSeries',
+      'userId',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."eventSeries"
@@ -53,15 +100,17 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."eventSeries"
-      ADD CONSTRAINT "FK_eventSeries_user"
+      ADD CONSTRAINT "FK_${schema}_eventSeries_userId"
       FOREIGN KEY ("userId") REFERENCES "${schema}"."users"("id") ON DELETE SET NULL
     `);
 
     // 3. Update groups.createdById to have ON DELETE SET NULL
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."groups"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_groups_createdById"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'groups',
+      'createdById',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."groups"
@@ -75,10 +124,12 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
     `);
 
     // 4. Update groupMembers.userId to have ON DELETE CASCADE
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."groupMembers"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_groupMembers_userId"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'groupMembers',
+      'userId',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."groupMembers"
@@ -87,10 +138,12 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
     `);
 
     // 5. Update groupUserPermissions.userId to have ON DELETE CASCADE
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."groupUserPermissions"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_groupUserPermissions_userId"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'groupUserPermissions',
+      'userId',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."groupUserPermissions"
@@ -99,10 +152,12 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
     `);
 
     // 6. Update userPermissions.userId to have ON DELETE CASCADE
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."userPermissions"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_userPermissions_userId"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'userPermissions',
+      'userId',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."userPermissions"
@@ -114,13 +169,10 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
-    // Reverse all changes
+    // Reverse all changes - drop the constraints we created and restore defaults
 
     // 1. Restore events.userId constraint (remove SET NULL)
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."events"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_events_userId"
-    `);
+    await this.dropForeignKeyIfExists(queryRunner, schema, 'events', 'userId');
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."events"
@@ -131,22 +183,26 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
     // Note: We don't make column NOT NULL again since there may be NULL values now
 
     // 2. Restore eventSeries.userId constraint (back to CASCADE)
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."eventSeries"
-      DROP CONSTRAINT IF EXISTS "FK_eventSeries_user"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'eventSeries',
+      'userId',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."eventSeries"
-      ADD CONSTRAINT "FK_eventSeries_user"
+      ADD CONSTRAINT "FK_${schema}_eventSeries_userId"
       FOREIGN KEY ("userId") REFERENCES "${schema}"."users"("id") ON DELETE CASCADE
     `);
 
     // 3. Restore groups.createdById constraint (remove SET NULL)
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."groups"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_groups_createdById"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'groups',
+      'createdById',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."groups"
@@ -155,10 +211,12 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
     `);
 
     // 4. Restore groupMembers.userId constraint (remove CASCADE)
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."groupMembers"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_groupMembers_userId"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'groupMembers',
+      'userId',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."groupMembers"
@@ -167,10 +225,12 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
     `);
 
     // 5. Restore groupUserPermissions.userId constraint (remove CASCADE)
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."groupUserPermissions"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_groupUserPermissions_userId"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'groupUserPermissions',
+      'userId',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."groupUserPermissions"
@@ -179,10 +239,12 @@ export class UserHardDeleteSupport1768507797000 implements MigrationInterface {
     `);
 
     // 6. Restore userPermissions.userId constraint (remove CASCADE)
-    await queryRunner.query(`
-      ALTER TABLE "${schema}"."userPermissions"
-      DROP CONSTRAINT IF EXISTS "FK_${schema}_userPermissions_userId"
-    `);
+    await this.dropForeignKeyIfExists(
+      queryRunner,
+      schema,
+      'userPermissions',
+      'userId',
+    );
 
     await queryRunner.query(`
       ALTER TABLE "${schema}"."userPermissions"

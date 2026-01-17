@@ -192,9 +192,7 @@ describe('UserService', () => {
 
     it('should remove a user and clean up Matrix handle', async () => {
       // Mock the repository methods for hard delete
-      mockUsersRepository.delete = jest
-        .fn()
-        .mockResolvedValue({ affected: 1 });
+      mockUsersRepository.delete = jest.fn().mockResolvedValue({ affected: 1 });
 
       // Mock group repository (no groups owned)
       const mockGroupRepository = {
@@ -206,9 +204,23 @@ describe('UserService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 0 }),
       };
 
-      // Mock data source for Matrix handle cleanup
+      // Create mock transactional entity manager
+      const mockTransactionalEntityManager = {
+        getRepository: jest.fn().mockImplementation((entity: any) => {
+          if (entity.name === 'GroupEntity') return mockGroupRepository;
+          if (entity.name === 'EventEntity') return mockEventRepository;
+          if (entity.name === 'UserEntity') return mockUsersRepository;
+          return mockUsersRepository;
+        }),
+        query: jest.fn().mockResolvedValue([]),
+      };
+
+      // Mock data source with transaction support
       const mockDataSource = {
         query: jest.fn().mockResolvedValue([]),
+        transaction: jest.fn().mockImplementation(async (callback: any) => {
+          return callback(mockTransactionalEntityManager);
+        }),
       };
 
       // Override getTenantSpecificRepository to set up our mocks
@@ -238,9 +250,7 @@ describe('UserService', () => {
 
     it('should still remove user even if Matrix cleanup fails', async () => {
       // Mock the repository methods for hard delete
-      mockUsersRepository.delete = jest
-        .fn()
-        .mockResolvedValue({ affected: 1 });
+      mockUsersRepository.delete = jest.fn().mockResolvedValue({ affected: 1 });
 
       // Mock group repository (no groups owned)
       const mockGroupRepository = {
@@ -252,9 +262,23 @@ describe('UserService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 0 }),
       };
 
-      // Mock data source for Matrix handle cleanup
+      // Create mock transactional entity manager
+      const mockTransactionalEntityManager = {
+        getRepository: jest.fn().mockImplementation((entity: any) => {
+          if (entity.name === 'GroupEntity') return mockGroupRepository;
+          if (entity.name === 'EventEntity') return mockEventRepository;
+          if (entity.name === 'UserEntity') return mockUsersRepository;
+          return mockUsersRepository;
+        }),
+        query: jest.fn().mockResolvedValue([]),
+      };
+
+      // Mock data source with transaction support
       const mockDataSource = {
         query: jest.fn().mockResolvedValue([]),
+        transaction: jest.fn().mockImplementation(async (callback: any) => {
+          return callback(mockTransactionalEntityManager);
+        }),
       };
 
       // Override getTenantSpecificRepository to set up our mocks
@@ -1842,6 +1866,7 @@ describe('UserService', () => {
     let mockGroupRepository: any;
     let mockEventRepository: any;
     let mockDataSource: any;
+    let mockTransactionalEntityManager: any;
 
     beforeEach(() => {
       mockGlobalMatrixService = module.get(GlobalMatrixValidationService);
@@ -1858,12 +1883,27 @@ describe('UserService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 0 }),
       };
 
-      mockDataSource = {
+      // Set up the user repository delete mock
+      mockUsersRepository.delete = jest.fn().mockResolvedValue({ affected: 1 });
+
+      // Create mock transactional entity manager that returns our mock repos
+      mockTransactionalEntityManager = {
+        getRepository: jest.fn().mockImplementation((entity: any) => {
+          if (entity.name === 'GroupEntity') return mockGroupRepository;
+          if (entity.name === 'EventEntity') return mockEventRepository;
+          if (entity.name === 'UserEntity') return mockUsersRepository;
+          return mockUsersRepository;
+        }),
         query: jest.fn().mockResolvedValue([]),
       };
 
-      // Set up the user repository delete mock
-      mockUsersRepository.delete = jest.fn().mockResolvedValue({ affected: 1 });
+      mockDataSource = {
+        query: jest.fn().mockResolvedValue([]),
+        // Mock transaction to execute the callback with our mock entity manager
+        transaction: jest.fn().mockImplementation(async (callback: any) => {
+          return callback(mockTransactionalEntityManager);
+        }),
+      };
     });
 
     const setupMockRepositories = () => {
@@ -1993,8 +2033,8 @@ describe('UserService', () => {
         mockGlobalMatrixService.unregisterMatrixHandle,
       ).toHaveBeenCalledWith(TESTING_TENANT_ID, userId);
 
-      // Verify Matrix handle registry entry was deleted
-      expect(mockDataSource.query).toHaveBeenCalledWith(
+      // Verify Matrix handle registry entry was deleted (inside transaction)
+      expect(mockTransactionalEntityManager.query).toHaveBeenCalledWith(
         'DELETE FROM "matrixHandleRegistry" WHERE "userId" = $1',
         [userId],
       );
