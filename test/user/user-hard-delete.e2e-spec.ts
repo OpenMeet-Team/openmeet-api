@@ -149,6 +149,19 @@ describe('User Hard Delete E2E Tests', () => {
       // Verify ownership was transferred to admin user
       expect(groupResponse.body.createdBy.id).toBe(adminUser.id);
 
+      // Verify the successor's role was elevated to owner
+      const membersResponse = await request(app)
+        .get(`/api/groups/${group.slug}/members`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(membersResponse.status).toBe(200);
+      const successorMember = membersResponse.body.find(
+        (m: any) => m.user.id === adminUser.id,
+      );
+      expect(successorMember).toBeDefined();
+      expect(successorMember.groupRole.name.toLowerCase()).toBe('owner');
+
       // Cleanup: delete the group (use system admin)
       await request(app)
         .delete(`/api/groups/${group.slug}`)
@@ -455,6 +468,19 @@ describe('User Hard Delete E2E Tests', () => {
       expect(groupResponse.status).toBe(200);
       expect(groupResponse.body.createdBy.id).toBe(adminUser.id);
 
+      // Verify the successor's role was elevated to owner
+      const membersResponse = await request(app)
+        .get(`/api/groups/${group.slug}/members`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(membersResponse.status).toBe(200);
+      const successorMember = membersResponse.body.find(
+        (m: any) => m.user.id === adminUser.id,
+      );
+      expect(successorMember).toBeDefined();
+      expect(successorMember.groupRole.name.toLowerCase()).toBe('owner');
+
       // Cleanup
       await request(app)
         .delete(`/api/groups/${group.slug}`)
@@ -564,6 +590,19 @@ describe('User Hard Delete E2E Tests', () => {
 
       expect(groupResponse.status).toBe(200);
       expect(groupResponse.body.createdBy.id).toBe(firstAdmin.id);
+
+      // Verify the successor's role was elevated to owner
+      const membersResponse = await request(app)
+        .get(`/api/groups/${group.slug}/members`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(membersResponse.status).toBe(200);
+      const successorMember = membersResponse.body.find(
+        (m: any) => m.user.id === firstAdmin.id,
+      );
+      expect(successorMember).toBeDefined();
+      expect(successorMember.groupRole.name.toLowerCase()).toBe('owner');
 
       // Cleanup
       await request(app)

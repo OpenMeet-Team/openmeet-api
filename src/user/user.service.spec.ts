@@ -1865,6 +1865,8 @@ describe('UserService', () => {
     let mockUsersRepository: any;
     let mockGroupRepository: any;
     let mockEventRepository: any;
+    let mockGroupRoleRepository: any;
+    let mockGroupMemberRepository: any;
     let mockDataSource: any;
     let mockTransactionalEntityManager: any;
 
@@ -1883,6 +1885,17 @@ describe('UserService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 0 }),
       };
 
+      // Create mock repository for group roles
+      mockGroupRoleRepository = {
+        findOne: jest.fn().mockResolvedValue({ id: 1, name: 'owner' }),
+      };
+
+      // Create mock repository for group members
+      mockGroupMemberRepository = {
+        save: jest.fn(),
+        delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+
       // Set up the user repository delete mock
       mockUsersRepository.delete = jest.fn().mockResolvedValue({ affected: 1 });
 
@@ -1892,6 +1905,9 @@ describe('UserService', () => {
           if (entity.name === 'GroupEntity') return mockGroupRepository;
           if (entity.name === 'EventEntity') return mockEventRepository;
           if (entity.name === 'UserEntity') return mockUsersRepository;
+          if (entity.name === 'GroupRoleEntity') return mockGroupRoleRepository;
+          if (entity.name === 'GroupMemberEntity')
+            return mockGroupMemberRepository;
           return mockUsersRepository;
         }),
         query: jest.fn().mockResolvedValue([]),
@@ -2076,6 +2092,12 @@ describe('UserService', () => {
       const moderatorUserId = 456;
       const memberUserId = 789;
 
+      const mockModeratorMember = {
+        id: 3,
+        user: { id: moderatorUserId },
+        groupRole: { name: 'moderator' },
+      };
+
       const mockOwnedGroup = {
         id: 1,
         name: 'Test Group',
@@ -2091,11 +2113,7 @@ describe('UserService', () => {
             user: { id: memberUserId },
             groupRole: { name: 'member' },
           },
-          {
-            id: 3,
-            user: { id: moderatorUserId },
-            groupRole: { name: 'moderator' },
-          },
+          mockModeratorMember,
         ],
       };
 
@@ -2111,6 +2129,13 @@ describe('UserService', () => {
       expect(mockGroupRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({
           createdBy: expect.objectContaining({ id: moderatorUserId }),
+        }),
+      );
+
+      // Verify the successor's role was elevated to owner
+      expect(mockGroupMemberRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          groupRole: expect.objectContaining({ name: 'owner' }),
         }),
       );
     });

@@ -23,6 +23,8 @@ import { UserEntity } from './infrastructure/persistence/relational/entities/use
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
+import { GroupRole } from '../core/constants/constant';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
@@ -1177,9 +1179,27 @@ export class UserService {
           // Transfer ownership
           group.createdBy = successor.user;
           await groupRepo.save(group);
-          this.logger.log(
-            `Transferred ownership of group ${group.id} to user ${successor.user.id} (role: ${successor.groupRole?.name})`,
-          );
+
+          // Also elevate the successor's role to owner so they have full permissions
+          const groupRoleRepo =
+            transactionalEntityManager.getRepository(GroupRoleEntity);
+          const ownerRole = await groupRoleRepo.findOne({
+            where: { name: GroupRole.Owner },
+          });
+
+          if (ownerRole) {
+            const groupMemberRepo =
+              transactionalEntityManager.getRepository(GroupMemberEntity);
+            successor.groupRole = ownerRole;
+            await groupMemberRepo.save(successor);
+            this.logger.log(
+              `Transferred ownership of group ${group.id} to user ${successor.user.id} and elevated role to owner`,
+            );
+          } else {
+            this.logger.warn(
+              `Transferred ownership of group ${group.id} to user ${successor.user.id} but could not find owner role to elevate permissions`,
+            );
+          }
         } else {
           // No one to take over - delete the group
           // First delete all group members (FK constraint prevents direct group deletion)
