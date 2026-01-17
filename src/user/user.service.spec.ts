@@ -2071,9 +2071,9 @@ describe('UserService', () => {
       expect(mockUsersRepository.delete).toHaveBeenCalledWith(123);
     });
 
-    it('should prefer organizer over regular member for group ownership transfer', async () => {
+    it('should prefer moderator over regular member for group ownership transfer', async () => {
       const userId = 123;
-      const organizerUserId = 456;
+      const moderatorUserId = 456;
       const memberUserId = 789;
 
       const mockOwnedGroup = {
@@ -2093,8 +2093,8 @@ describe('UserService', () => {
           },
           {
             id: 3,
-            user: { id: organizerUserId },
-            groupRole: { name: 'organizer' },
+            user: { id: moderatorUserId },
+            groupRole: { name: 'moderator' },
           },
         ],
       };
@@ -2107,10 +2107,10 @@ describe('UserService', () => {
 
       await userService.remove(userId);
 
-      // Verify ownership transferred to organizer, not regular member
+      // Verify ownership transferred to moderator, not regular member
       expect(mockGroupRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({
-          createdBy: expect.objectContaining({ id: organizerUserId }),
+          createdBy: expect.objectContaining({ id: moderatorUserId }),
         }),
       );
     });

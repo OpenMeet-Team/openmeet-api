@@ -1142,18 +1142,18 @@ export class UserService {
 
       for (const group of ownedGroups) {
         // Find eligible successor with deterministic selection:
-        // Priority: owner > admin > organizer, then by earliest join date
+        // Priority: owner > admin > moderator, then by earliest join date
         const rolePriority: Record<string, number> = {
           owner: 1,
           admin: 2,
-          organizer: 3,
+          moderator: 3,
         };
 
         const eligibleSuccessors = group.groupMembers
           .filter(
             (m) =>
               m.user.id !== numericId &&
-              ['admin', 'organizer', 'owner'].includes(
+              ['admin', 'moderator', 'owner'].includes(
                 m.groupRole?.name?.toLowerCase() || '',
               ),
           )
@@ -1181,7 +1181,13 @@ export class UserService {
             `Transferred ownership of group ${group.id} to user ${successor.user.id} (role: ${successor.groupRole?.name})`,
           );
         } else {
-          // No one to take over - delete the group (cascades to events in group)
+          // No one to take over - delete the group
+          // First delete all group members (FK constraint prevents direct group deletion)
+          const groupMemberRepo =
+            transactionalEntityManager.getRepository(GroupMemberEntity);
+          await groupMemberRepo.delete({ group: { id: group.id } });
+
+          // Then delete the group (this will cascade to events in the group)
           await groupRepo.remove(group);
           this.logger.log(
             `Deleted group ${group.id} - no eligible successor found`,

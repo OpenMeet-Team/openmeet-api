@@ -486,6 +486,7 @@ export class GroupService {
       relations: ['createdBy', 'categories'],
       select: {
         createdBy: {
+          id: true,
           name: true,
           slug: true,
           photo: {
