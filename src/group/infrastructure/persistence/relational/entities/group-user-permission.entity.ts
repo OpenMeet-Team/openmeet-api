@@ -8,7 +8,9 @@ export class GroupUserPermissionEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => UserEntity, (user) => user.groupUserPermissions)
+  @ManyToOne(() => UserEntity, (user) => user.groupUserPermissions, {
+    onDelete: 'CASCADE',
+  })
   user: UserEntity;
 
   @ManyToOne(() => GroupEntity, (group) => group.groupUserPermissions)

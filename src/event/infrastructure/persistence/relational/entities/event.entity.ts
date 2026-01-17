@@ -136,9 +136,12 @@ export class EventEntity
   @Column({ type: 'boolean', default: false })
   allowWaitlist: boolean;
 
-  @ManyToOne(() => UserEntity, (user) => user.events)
+  @ManyToOne(() => UserEntity, (user) => user.events, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'userId' })
-  user: UserEntity;
+  user: UserEntity | null;
 
   @ManyToOne(() => GroupEntity, (group) => group.events, { nullable: true })
   @JoinColumn({ name: 'groupId' })

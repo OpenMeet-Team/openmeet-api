@@ -18,11 +18,13 @@ import { IPaginationOptions } from '../utils/types/pagination-options';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
-import { Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
+import { GroupRole } from '../core/constants/constant';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
@@ -45,6 +47,9 @@ export class UserService {
 
   private usersRepository: Repository<UserEntity>;
   private userPermissionRepository: Repository<UserPermissionEntity>;
+  private groupRepository: Repository<GroupEntity>;
+  private eventRepository: Repository<EventEntity>;
+  private dataSource: DataSource;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -68,9 +73,12 @@ export class UserService {
     }
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+    this.dataSource = dataSource;
     this.usersRepository = dataSource.getRepository(UserEntity);
     this.userPermissionRepository =
       dataSource.getRepository(UserPermissionEntity);
+    this.groupRepository = dataSource.getRepository(GroupEntity);
+    this.eventRepository = dataSource.getRepository(EventEntity);
   }
 
   /**
@@ -1131,6 +1139,16 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Hard deletes a user and properly handles owned content:
+   * - Groups with members: Transfer ownership to next admin/organizer
+   * - Groups with no eligible successor: Delete the group entirely
+   * - Events in groups: Keep them, userId becomes NULL (group is context)
+   * - Standalone events (no group): Delete with user
+   * - Memberships/RSVPs: Hard delete via CASCADE
+   *
+   * All database operations are wrapped in a transaction to ensure atomicity.
+   */
   async remove(id: User['id']): Promise<void> {
     // Ensure ID is a number (it might come as a string from the controller)
     const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
@@ -1141,7 +1159,115 @@ export class UserService {
     // Set up tenant-specific repository
     await this.getTenantSpecificRepository();
 
-    // Clean up Matrix handle registry before soft deleting user
+    // Wrap all database operations in a transaction
+    await this.dataSource.transaction(async (transactionalEntityManager) => {
+      const groupRepo = transactionalEntityManager.getRepository(GroupEntity);
+      const eventRepo = transactionalEntityManager.getRepository(EventEntity);
+      const userRepo = transactionalEntityManager.getRepository(UserEntity);
+
+      // 1. Handle groups owned by this user
+      const ownedGroups = await groupRepo.find({
+        where: { createdBy: { id: numericId } },
+        relations: [
+          'groupMembers',
+          'groupMembers.user',
+          'groupMembers.groupRole',
+        ],
+      });
+
+      for (const group of ownedGroups) {
+        // Find eligible successor with deterministic selection:
+        // Priority: owner > admin > moderator, then by earliest join date
+        const rolePriority: Record<string, number> = {
+          owner: 1,
+          admin: 2,
+          moderator: 3,
+        };
+
+        const eligibleSuccessors = group.groupMembers
+          .filter(
+            (m) =>
+              m.user.id !== numericId &&
+              ['admin', 'moderator', 'owner'].includes(
+                m.groupRole?.name?.toLowerCase() || '',
+              ),
+          )
+          .sort((a, b) => {
+            // Sort by role priority first
+            const aPriority =
+              rolePriority[a.groupRole?.name?.toLowerCase()] || 99;
+            const bPriority =
+              rolePriority[b.groupRole?.name?.toLowerCase()] || 99;
+            if (aPriority !== bPriority) return aPriority - bPriority;
+
+            // Then by join date (earliest first)
+            const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return aDate - bDate;
+          });
+
+        const successor = eligibleSuccessors[0];
+
+        if (successor) {
+          // Transfer ownership
+          group.createdBy = successor.user;
+          await groupRepo.save(group);
+
+          // Also elevate the successor's role to owner so they have full permissions
+          const groupRoleRepo =
+            transactionalEntityManager.getRepository(GroupRoleEntity);
+          const ownerRole = await groupRoleRepo.findOne({
+            where: { name: GroupRole.Owner },
+          });
+
+          if (ownerRole) {
+            const groupMemberRepo =
+              transactionalEntityManager.getRepository(GroupMemberEntity);
+            successor.groupRole = ownerRole;
+            await groupMemberRepo.save(successor);
+            this.logger.log(
+              `Transferred ownership of group ${group.id} to user ${successor.user.id} and elevated role to owner`,
+            );
+          } else {
+            this.logger.warn(
+              `Transferred ownership of group ${group.id} to user ${successor.user.id} but could not find owner role to elevate permissions`,
+            );
+          }
+        } else {
+          // No one to take over - delete the group and all its content
+          // First delete all events in this group (FK constraint prevents direct group deletion)
+          await eventRepo.delete({ group: { id: group.id } });
+
+          // Then delete all group members
+          const groupMemberRepo =
+            transactionalEntityManager.getRepository(GroupMemberEntity);
+          await groupMemberRepo.delete({ group: { id: group.id } });
+
+          // Finally delete the group
+          await groupRepo.remove(group);
+          this.logger.log(
+            `Deleted group ${group.id} and its events - no eligible successor found`,
+          );
+        }
+      }
+
+      // 2. Delete standalone events (events not in any group)
+      await eventRepo.delete({
+        user: { id: numericId },
+        group: IsNull(),
+      });
+
+      // 3. Clean up from global Matrix handle registry table
+      await transactionalEntityManager.query(
+        'DELETE FROM "matrixHandleRegistry" WHERE "userId" = $1',
+        [numericId],
+      );
+
+      // 4. Hard delete user (CASCADE handles: memberships, permissions, sessions, attendees)
+      await userRepo.delete(numericId);
+    });
+
+    // Matrix handle cleanup outside transaction (external service call)
     if (tenantId) {
       try {
         await this.globalMatrixValidationService.unregisterMatrixHandle(
@@ -1152,7 +1278,7 @@ export class UserService {
           `Matrix handle unregistered for user ${numericId} in tenant ${tenantId}`,
         );
       } catch (error) {
-        // Log error but don't fail user deletion if Matrix cleanup fails
+        // Log error but don't fail - the user is already deleted
         this.logger.warn(
           `Failed to unregister Matrix handle for user ${numericId} in tenant ${tenantId}: ${error.message}`,
           error.stack,
@@ -1160,10 +1286,7 @@ export class UserService {
       }
     }
 
-    await this.usersRepository.softDelete(numericId);
-    this.auditLogger.log('user deleted', {
-      id: numericId,
-    });
+    this.auditLogger.log('user hard deleted', { id: numericId });
   }
 
   async getMailServiceUserById(id: number): Promise<UserEntity> {

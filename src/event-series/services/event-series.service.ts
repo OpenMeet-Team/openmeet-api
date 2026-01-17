@@ -926,7 +926,7 @@ export class EventSeriesService {
       const series = await this.findBySlug(slug, tenantId);
 
       // Check if user has permission to update the series
-      if (series.user.id !== userId) {
+      if (!series.user || series.user.id !== userId) {
         throw new UnauthorizedException(
           'You do not have permission to update this series',
         );
@@ -998,7 +998,7 @@ export class EventSeriesService {
       const series = await this.findBySlug(slug, tenantId);
 
       // Check if user has permission to delete the series
-      if (series.user.id !== userId) {
+      if (!series.user || series.user.id !== userId) {
         throw new UnauthorizedException(
           'You do not have permission to delete this series',
         );
@@ -1466,7 +1466,12 @@ export class EventSeriesService {
       }
 
       // Check if the user has permission to edit both the event and the series
-      if (event.user.id !== userId || series.user.id !== userId) {
+      if (
+        !event.user ||
+        !series.user ||
+        event.user.id !== userId ||
+        series.user.id !== userId
+      ) {
         throw new BadRequestException(
           'You do not have permission to perform this action',
         );
