@@ -53,6 +53,7 @@ This document serves as the authoritative source of truth for the design and imp
   - [Future: Threshold Signing](#future-threshold-signing)
 - [Community Lexicon Adoption](#community-lexicon-adoption)
 - [Data Flow Patterns](#data-flow-patterns)
+- [OpenMeet Custodial PDS](#openmeet-custodial-pds)
 - [References](#references-1)
 
 ## Introduction and Overview
@@ -76,16 +77,19 @@ The AT Protocol, being decentralized, presents unique challenges and opportuniti
    |-----------|-----------|-----------------|---------------|
    | Bluesky user | User's own data (RSVPs, memberships, posts) | User's PDS | Cache/Index |
    | Bluesky user | Events they create | User's PDS | Cache/Index |
-   | Email/OAuth user | All their data | OpenMeet PostgreSQL | Authoritative |
+   | Email/OAuth user (with custodial PDS) | Public data | OpenMeet PDS | Authoritative + Custodial |
+   | Email/OAuth user (with custodial PDS) | Private data | OpenMeet PostgreSQL | Authoritative |
    | ATProto-enabled Group | Group profile, events, governance | Group's PDS | Cache/Index |
    | Non-ATProto Group | All group data | OpenMeet PostgreSQL | Authoritative |
 
    **Key Principles:**
    - **For Bluesky users**: Write to PDS first, cache locally second
+   - **For custodial users**: OpenMeet writes to PDS on their behalf (see [OpenMeet Custodial PDS](#openmeet-custodial-pds))
    - **On conflict**: PDS wins, update local cache
    - **Firehose subscription**: Keeps cache synchronized with external changes
    - **User data portability**: Users can verify their data exists in their PDS independent of OpenMeet
    - **Clear origin tracking**: `sourceType`, `sourceId`, `sourceCid` fields track data provenance
+   - **Private content**: Stays in PostgreSQL only (AT Protocol repos are public)
 
 2. **Decentralized Identity**
    - Support for multiple PDSes, not just bsky.social
@@ -106,9 +110,9 @@ The AT Protocol, being decentralized, presents unique challenges and opportuniti
 
 5. **Hybrid User Support**
    - Full functionality for non-Bluesky users (email, OAuth)
-   - AT Protocol is an optional enhancement layer, not a requirement
-   - Non-Bluesky users can later connect Bluesky to gain data portability
-   - Migration path: local data → PDS when user connects Bluesky
+   - **All users get AT Protocol identities** via custodial PDS (see [OpenMeet Custodial PDS](#openmeet-custodial-pds))
+   - Users can take ownership of their PDS account (password reset → self-custody)
+   - Migration path: custodial account → self-custody when Tranquil supports social login
 
 ## Architecture Components
 
@@ -441,6 +445,34 @@ Planned additions:
 // To be added to UserEntity
 isShadowAccount: boolean; // Whether this is a provisional shadow account
 ```
+
+### 4. UserAtprotoIdentity Entity (New)
+
+Links users to their AT Protocol identity, supporting both custodial (OpenMeet-created) and self-custody (Bluesky) accounts:
+
+```typescript
+// userAtprotoIdentities table
+interface UserAtprotoIdentity {
+  id: number;
+  userUlid: string;              // FK to users.ulid
+  did: string;                   // AT Protocol DID (e.g., did:plc:xxx)
+  handle: string | null;         // Cached handle (resolved from DID)
+  pdsUrl: string;                // Which PDS hosts this identity
+  pdsCredentials: EncryptedJson; // Encrypted {password} for custodial accounts
+  isCustodial: boolean;          // true = OpenMeet created, false = user brought own
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+**Data Examples:**
+
+| User Type | did | isCustodial | pdsCredentials |
+|-----------|-----|-------------|----------------|
+| Google user | `did:plc:xxx` | `true` | `{encrypted}` |
+| Bluesky user | `did:plc:yyy` | `false` | `null` |
+
+See [OpenMeet Custodial PDS](#openmeet-custodial-pds) for implementation details.
 
 ### 2. Event Entity 
 
@@ -1094,6 +1126,102 @@ Migrate local memberships to PDS:
     ▼
 User's data is now portable
 ```
+
+## OpenMeet Custodial PDS
+
+OpenMeet runs its own PDS to provide AT Protocol identities for users who sign up via Google, GitHub, or email. This makes OpenMeet a fully AT Protocol-native application.
+
+### Decision Summary
+
+| Aspect | Decision |
+|--------|----------|
+| **PDS Software** | Bluesky PDS initially, evaluate Tranquil later |
+| **Handle Domain** | `*.opnmt.me` |
+| **PDS Endpoint** | `pds.openmeet.net` |
+| **Custody Model** | Custodial (OpenMeet holds password) → Self-custody (user takes ownership) |
+
+### Why Run Our Own PDS?
+
+**The Problem:** Half of OpenMeet's users authenticate via Google/GitHub OAuth. These users have no AT Protocol identity, so their events/RSVPs can't publish to the decentralized network.
+
+**The Solution:** Create PDS accounts for non-Bluesky users transparently during login.
+
+**Benefits:**
+- **For users**: Data portability, cross-app visibility, self-sovereign identity
+- **For OpenMeet**: Fully native ATProto application, competitive advantage
+
+**Pattern established by:** Roomy, Tangled, Cosmik Network, Flashes (EuroSky)
+
+### Account Creation Flow
+
+```
+User logs in with Google
+    │
+    ├─► Check: user has atproto identity?
+    │
+    ├─► YES: Continue normally
+    │
+    └─► NO: Create custodial PDS account
+              │
+              ├── Generate handle: {slug}.opnmt.me
+              ├── Generate secure password
+              ├── POST /xrpc/com.atproto.server.createAccount
+              ├── Store in userAtprotoIdentities (encrypted)
+              └── User now has DID, can publish to AT network
+```
+
+### Database Schema
+
+```sql
+CREATE TABLE "userAtprotoIdentities" (
+  "id" SERIAL PRIMARY KEY,
+  "userUlid" CHAR(26) NOT NULL,
+  "did" VARCHAR(255) NOT NULL UNIQUE,
+  "handle" VARCHAR(255) NULL,
+  "pdsUrl" VARCHAR(255) NOT NULL,
+  "pdsCredentials" JSONB NULL,        -- Encrypted {password}
+  "isCustodial" BOOLEAN DEFAULT true,
+  "createdAt" TIMESTAMP DEFAULT NOW(),
+  "updatedAt" TIMESTAMP DEFAULT NOW(),
+
+  CONSTRAINT "FK_userAtprotoIdentities_userUlid"
+    FOREIGN KEY ("userUlid") REFERENCES "users"("ulid") ON DELETE CASCADE,
+  CONSTRAINT "UQ_userAtprotoIdentities_userUlid" UNIQUE ("userUlid")
+);
+
+CREATE INDEX "IDX_userAtprotoIdentities_did" ON "userAtprotoIdentities"("did");
+```
+
+### Key Services
+
+| Service | Purpose |
+|---------|---------|
+| `PdsAccountService` | Create accounts, sessions, check handle availability |
+| `PdsCredentialService` | Encrypt/decrypt PDS passwords (AES-256-GCM) |
+| `UserAtprotoIdentityService` | CRUD for identity records |
+
+### Custody Transition
+
+**Short term (Custodial):**
+- OpenMeet holds the PDS password
+- User can't directly access their PDS
+- Escape hatch: Profile → "Request PDS Access" → Password reset → User takes ownership
+
+**Long term (Self-Custody via Tranquil #5):**
+- When Tranquil supports social login, user links Google/GitHub to PDS directly
+- OpenMeet uses AT Protocol OAuth (like Bluesky users today)
+- `pdsCredentials` cleared, `isCustodial=false`
+- User has full ownership
+
+### Private Content Handling
+
+AT Protocol repos are public. Private content cannot go to PDS.
+
+| Visibility | Storage |
+|------------|---------|
+| Public events | PDS + PostgreSQL |
+| Unlisted/Private events | PostgreSQL only |
+| Private groups | PostgreSQL only |
 
 ## References
 
