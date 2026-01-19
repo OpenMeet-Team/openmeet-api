@@ -172,3 +172,10 @@ MAS_COMPAT_TOKEN_TTL=300
 # enable testing event ingestion
 SERVICE_API_KEYS=1234567890abcdef1234567890abcdef,second-key-abcdef1234567890abcdef1234567890
 SERVICE_API_KEY=1234567890abcdef1234567890abcdef
+
+# PDS Configuration for CI (isolated - uses local PLC, not public plc.directory)
+PDS_URL=http://pds:3000
+PDS_HOSTNAME=pds.test
+PDS_SERVICE_HANDLE_DOMAINS=.pds.test
+PDS_ADMIN_PASSWORD=ci-pds-admin-password
+PDS_JWT_SECRET=ci-pds-jwt-secret-not-for-production
