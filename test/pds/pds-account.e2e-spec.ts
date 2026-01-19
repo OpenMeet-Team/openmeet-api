@@ -1,8 +1,5 @@
 import request from 'supertest';
-import {
-  TESTING_PDS_URL,
-  TESTING_PDS_HANDLE_DOMAIN,
-} from '../utils/constants';
+import { TESTING_PDS_URL, TESTING_PDS_HANDLE_DOMAIN } from '../utils/constants';
 
 jest.setTimeout(60000);
 
