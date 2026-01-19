@@ -29,3 +29,11 @@ export const TESTING_MATRIX_HOMESERVER_URL =
   process.env.MATRIX_HOMESERVER_URL || 'http://localhost:8448';
 export const TESTING_MATRIX_SERVER_NAME =
   process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
+
+// PDS (Personal Data Server) Configuration for E2E Tests
+export const TESTING_PDS_URL = process.env.PDS_URL || 'http://localhost:3000';
+export const TESTING_PDS_HOSTNAME = process.env.PDS_HOSTNAME || 'pds.test';
+export const TESTING_PDS_HANDLE_DOMAIN =
+  process.env.PDS_SERVICE_HANDLE_DOMAINS || '.pds.test';
+export const TESTING_PDS_ADMIN_PASSWORD =
+  process.env.PDS_ADMIN_PASSWORD || 'ci-pds-admin-password';
