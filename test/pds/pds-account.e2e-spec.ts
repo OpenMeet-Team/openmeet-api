@@ -6,6 +6,9 @@ import {
 
 jest.setTimeout(60000);
 
+// Generate a short unique suffix for handles (max handle length is ~253 chars, but keep it short)
+const shortId = () => Math.random().toString(36).substring(2, 8);
+
 describe('PDS Account Creation', () => {
   const pdsUrl = TESTING_PDS_URL;
   const handleDomain = TESTING_PDS_HANDLE_DOMAIN;
@@ -29,8 +32,8 @@ describe('PDS Account Creation', () => {
   });
 
   describe('Account Creation', () => {
-    const testEmail = `pds-test-${Date.now()}@test.invalid`;
-    const testHandle = `testuser${Date.now()}${handleDomain}`;
+    const testEmail = `pds-${shortId()}@test.invalid`;
+    const testHandle = `user${shortId()}${handleDomain}`;
     const testPassword = 'test-password-123';
 
     it('should create an account on the PDS', async () => {
@@ -55,8 +58,8 @@ describe('PDS Account Creation', () => {
 
     it('should fail to create duplicate handle', async () => {
       // First, create the account
-      const uniqueEmail = `pds-dup-${Date.now()}@test.invalid`;
-      const uniqueHandle = `duptest${Date.now()}${handleDomain}`;
+      const uniqueEmail = `pds-dup-${shortId()}@test.invalid`;
+      const uniqueHandle = `dup${shortId()}${handleDomain}`;
 
       await request(pdsUrl)
         .post('/xrpc/com.atproto.server.createAccount')
@@ -73,7 +76,7 @@ describe('PDS Account Creation', () => {
         .post('/xrpc/com.atproto.server.createAccount')
         .set('Content-Type', 'application/json')
         .send({
-          email: `different-${Date.now()}@test.invalid`,
+          email: `diff-${shortId()}@test.invalid`,
           handle: uniqueHandle,
           password: testPassword,
         })
@@ -85,8 +88,8 @@ describe('PDS Account Creation', () => {
 
     it('should resolve handle to DID', async () => {
       // Create account first
-      const resolveEmail = `pds-resolve-${Date.now()}@test.invalid`;
-      const resolveHandle = `resolve${Date.now()}${handleDomain}`;
+      const resolveEmail = `pds-res-${shortId()}@test.invalid`;
+      const resolveHandle = `res${shortId()}${handleDomain}`;
 
       const createResponse = await request(pdsUrl)
         .post('/xrpc/com.atproto.server.createAccount')
@@ -111,8 +114,8 @@ describe('PDS Account Creation', () => {
 
     it('should create session with valid credentials', async () => {
       // Create account first
-      const sessionEmail = `pds-session-${Date.now()}@test.invalid`;
-      const sessionHandle = `session${Date.now()}${handleDomain}`;
+      const sessionEmail = `pds-ses-${shortId()}@test.invalid`;
+      const sessionHandle = `ses${shortId()}${handleDomain}`;
 
       await request(pdsUrl)
         .post('/xrpc/com.atproto.server.createAccount')
