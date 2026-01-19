@@ -49,6 +49,11 @@ services:
     volumes:
       # init scripts for PostGIS
       - ./pg-init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   maildev:
     build:
@@ -177,8 +182,10 @@ services:
     volumes:
       - pds-data:/pds
     depends_on:
-      - plc
-      - maildev
+      plc:
+        condition: service_healthy
+      maildev:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/xrpc/_health"]
       interval: 10s
@@ -203,7 +210,8 @@ services:
       DB_CREDS_JSON: '{"username":"${DATABASE_USERNAME}","password":"${DATABASE_PASSWORD}","host":"postgres","port":"5432","database":"plc"}'
       DB_MIGRATE_CREDS_JSON: '{"username":"${DATABASE_USERNAME}","password":"${DATABASE_PASSWORD}","host":"postgres","port":"5432","database":"plc"}'
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:2582/_health"]
       interval: 10s
