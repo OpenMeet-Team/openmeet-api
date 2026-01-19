@@ -1,5 +1,13 @@
-# to run in development use this command 
-# `` sudo docker-compose -f docker-compose-dev.yml up --build ``
+# Local Development Docker Compose
+#
+# Basic usage (core services only):
+#   docker compose -f docker-compose-dev.yml up
+#
+# With PDS for ATProto testing (adds isolated PDS + PLC):
+#   docker compose -f docker-compose-dev.yml --profile pds up
+#
+# Start PDS after core is already running:
+#   docker compose -f docker-compose-dev.yml --profile pds up -d plc pds
 
 services:
   postgres:
@@ -326,12 +334,84 @@ services:
       - api-network
     restart: unless-stopped
 
+  # =============================================================================
+  # PDS Services (--profile pds)
+  # Isolated PDS + PLC for local ATProto testing - DIDs stay local, not on public plc.directory
+  # =============================================================================
+
+  # Isolated PLC directory - stores DIDs locally instead of public plc.directory
+  plc:
+    profiles: ["pds"]
+    image: itaru2622/bluesky-did-method-plc:latest
+    container_name: openmeet_plc
+    ports:
+      - "2582:2582"
+    environment:
+      PORT: 2582
+      DEBUG_MODE: "1"
+      LOG_ENABLED: "true"
+      LOG_LEVEL: "debug"
+      LOG_DESTINATION: "1"
+      NODE_ENV: development
+      ENABLE_MIGRATIONS: "true"
+      DATABASE_URL: postgres://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@postgres:5432/plc
+      DB_CREDS_JSON: '{"username":"${DATABASE_USERNAME}","password":"${DATABASE_PASSWORD}","host":"postgres","port":"5432","database":"plc"}'
+      DB_MIGRATE_CREDS_JSON: '{"username":"${DATABASE_USERNAME}","password":"${DATABASE_PASSWORD}","host":"postgres","port":"5432","database":"plc"}'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2582/_health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - api-network
+
+  # PDS (Personal Data Server) pointing to isolated PLC
+  pds:
+    profiles: ["pds"]
+    image: ghcr.io/bluesky-social/pds:0.4
+    container_name: openmeet_pds
+    ports:
+      - "3101:3000"
+    environment:
+      PDS_HOSTNAME: pds.test
+      PDS_PORT: 3000
+      PDS_DATA_DIRECTORY: /pds
+      PDS_BLOBSTORE_DISK_LOCATION: /pds/blocks
+      PDS_DID_PLC_URL: http://plc:2582
+      PDS_SERVICE_HANDLE_DOMAINS: .pds.test
+      PDS_JWT_SECRET: local-dev-jwt-secret-not-for-production
+      PDS_ADMIN_PASSWORD: local-dev-admin-password
+      PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      PDS_EMAIL_SMTP_URL: smtp://maildev:1025
+      PDS_EMAIL_FROM_ADDRESS: noreply@pds.test
+      PDS_DEV_MODE: "true"
+      PDS_INVITE_REQUIRED: "false"
+      LOG_ENABLED: "true"
+    volumes:
+      - pds-data:/pds
+    depends_on:
+      plc:
+        condition: service_healthy
+      maildev:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/xrpc/_health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - api-network
+
 volumes:
   dbdata:
   matrix-data:
   matrix-configs:
   mas-data:
     driver: local
+  pds-data:
 
 networks:
   api-network:
