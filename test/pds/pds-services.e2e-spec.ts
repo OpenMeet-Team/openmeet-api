@@ -16,6 +16,11 @@ jest.setTimeout(60000);
 // Generate a short unique suffix for handles
 const shortId = () => Math.random().toString(36).substring(2, 8);
 
+// Check if PDS is available for e2e tests
+// Skip PDS account tests if PDS_URL is not explicitly set via environment
+const isPdsConfigured = !!process.env.PDS_URL;
+const describeIfPds = isPdsConfigured ? describe : describe.skip;
+
 // Generate a valid test encryption key (32 bytes base64 encoded)
 const TEST_CREDENTIAL_KEY = Buffer.from('a'.repeat(32)).toString('base64');
 
@@ -137,9 +142,9 @@ describe('PDS Services E2E', () => {
     });
   });
 
-  describe('PdsAccountService', () => {
-    // Note: These tests require a running PDS instance
-    // Skip if PDS is not available
+  // PDS account tests require a running PDS instance
+  // Skipped in CI when PDS_URL is not set
+  describeIfPds('PdsAccountService', () => {
 
     describe('isHandleAvailable()', () => {
       it('should return true for available handle', async () => {
@@ -233,7 +238,8 @@ describe('PDS Services E2E', () => {
     });
   });
 
-  describe('Integration: Credential encryption with account creation', () => {
+  // Integration tests require a running PDS instance
+  describeIfPds('Integration: Credential encryption with account creation', () => {
     it('should encrypt password for storage and later use for session', async () => {
       // Simulate the full flow: create account, encrypt password, later decrypt and login
       const email = `integ-${shortId()}@test.invalid`;
