@@ -5,6 +5,7 @@ import {
   TESTING_PDS_URL,
   TESTING_PDS_HANDLE_DOMAIN,
   TESTING_PDS_ADMIN_PASSWORD,
+  TESTING_PDS_INVITE_CODE,
 } from '../utils/constants';
 import { PdsCredentialService } from '../../src/pds/pds-credential.service';
 import { PdsAccountService } from '../../src/pds/pds-account.service';
@@ -43,6 +44,7 @@ describe('PDS Services E2E', () => {
             case 'pds.url':
               return TESTING_PDS_URL;
             case 'pds.adminPassword':
+              // Admin password for creating invite codes (if needed)
               return TESTING_PDS_ADMIN_PASSWORD;
             case 'pds.serviceHandleDomains':
               return TESTING_PDS_HANDLE_DOMAIN;
@@ -50,6 +52,9 @@ describe('PDS Services E2E', () => {
               return TEST_CREDENTIAL_KEY;
             case 'pds.credentialKey2':
               return undefined;
+            case 'pds.inviteCode':
+              // Service invite code for account creation (when PDS_INVITE_REQUIRED=true)
+              return TESTING_PDS_INVITE_CODE;
             default:
               return undefined;
           }

@@ -388,7 +388,7 @@ services:
       PDS_EMAIL_SMTP_URL: smtp://maildev:1025
       PDS_EMAIL_FROM_ADDRESS: noreply@pds.test
       PDS_DEV_MODE: "true"
-      PDS_INVITE_REQUIRED: "false"
+      PDS_INVITE_REQUIRED: "true"
       LOG_ENABLED: "true"
     volumes:
       - pds-data:/pds

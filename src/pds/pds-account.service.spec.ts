@@ -83,6 +83,7 @@ describe('PdsAccountService', () => {
         refreshJwt: 'refresh-token-here',
       });
 
+      // Note: createAccount does NOT use admin auth - only invite code in body
       expect(httpService.post).toHaveBeenCalledWith(
         'https://pds-dev.openmeet.net/xrpc/com.atproto.server.createAccount',
         {
@@ -91,9 +92,7 @@ describe('PdsAccountService', () => {
           password: 'secret-password',
         },
         expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: expect.stringMatching(/^Basic /),
-          }),
+          headers: { 'Content-Type': 'application/json' },
         }),
       );
     });

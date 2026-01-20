@@ -44,6 +44,9 @@ export class PdsAccountService {
   /** Base delay in milliseconds for exponential backoff */
   private readonly baseDelay = 1000;
 
+  /** Service invite code for custodial account creation */
+  private readonly inviteCode: string;
+
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService<AllConfigType>,
@@ -51,6 +54,8 @@ export class PdsAccountService {
     this.pdsUrl = this.configService.get('pds.url', { infer: true }) || '';
     this.adminPassword =
       this.configService.get('pds.adminPassword', { infer: true }) || '';
+    this.inviteCode =
+      this.configService.get('pds.inviteCode', { infer: true }) || '';
   }
 
   /**
@@ -68,21 +73,21 @@ export class PdsAccountService {
     const url = `${this.pdsUrl}/xrpc/com.atproto.server.createAccount`;
 
     return this.withRetry(async () => {
+      // Build request body, including invite code if configured
+      const body: Record<string, string> = {
+        email: params.email,
+        handle: params.handle,
+        password: params.password,
+      };
+
+      if (this.inviteCode) {
+        body.inviteCode = this.inviteCode;
+      }
+
       const response = await firstValueFrom(
-        this.httpService.post(
-          url,
-          {
-            email: params.email,
-            handle: params.handle,
-            password: params.password,
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: this.getBasicAuthHeader(),
-            },
-          },
-        ),
+        this.httpService.post(url, body, {
+          headers: this.getCreateAccountHeaders(),
+        }),
       );
 
       return {
@@ -285,6 +290,17 @@ export class PdsAccountService {
       'isAxiosError' in error &&
       (error as AxiosError).isAxiosError === true
     );
+  }
+
+  /**
+   * Get headers for createAccount requests.
+   * Note: Admin auth is NOT used for account creation - only the invite code in the request body.
+   * Admin auth is only for admin-level APIs like createInviteCode.
+   */
+  private getCreateAccountHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+    };
   }
 
   /**

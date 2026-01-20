@@ -45,6 +45,10 @@ class EnvironmentVariablesValidator {
   @IsBase64()
   @IsOptional()
   PDS_CREDENTIAL_KEY_2: string;
+
+  @IsString()
+  @IsOptional()
+  PDS_INVITE_CODE: string;
 }
 
 export default registerAs<PdsConfig>('pds', () => {
@@ -71,5 +75,6 @@ export default registerAs<PdsConfig>('pds', () => {
     adminPassword: process.env.PDS_ADMIN_PASSWORD || '',
     credentialKey1: process.env.PDS_CREDENTIAL_KEY_1 || '',
     credentialKey2: process.env.PDS_CREDENTIAL_KEY_2,
+    inviteCode: process.env.PDS_INVITE_CODE,
   };
 });

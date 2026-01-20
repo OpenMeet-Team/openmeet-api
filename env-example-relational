@@ -182,3 +182,8 @@ PDS_ADMIN_PASSWORD=pds-admin-password
 # KEY_1 is current encryption key, KEY_2 is for rotation (optional)
 PDS_CREDENTIAL_KEY_1=
 PDS_CREDENTIAL_KEY_2=
+# Service invite code for custodial account creation (when PDS_INVITE_REQUIRED=true)
+# Generate with: curl -X POST https://pds.example.com/xrpc/com.atproto.server.createInviteCode \
+#   -H "Authorization: Basic $(echo -n 'admin:PASSWORD' | base64)" \
+#   -H "Content-Type: application/json" -d '{"useCount": 999999}'
+PDS_INVITE_CODE=

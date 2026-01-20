@@ -18,4 +18,7 @@ export interface PdsConfig {
 
   /** Base64-encoded 32-byte key for AES-256-GCM encryption (previous key, for rotation) */
   credentialKey2?: string;
+
+  /** Service invite code for custodial account creation (when PDS_INVITE_REQUIRED=true) */
+  inviteCode?: string;
 }
