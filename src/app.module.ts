@@ -11,6 +11,7 @@ import facebookConfig from './auth-facebook/config/facebook.config';
 import googleConfig from './auth-google/config/google.config';
 import githubConfig from './auth-github/config/github.config';
 import blueskyConfig from './auth-bluesky/config/bluesky.config';
+import pdsConfig from './pds/config/pds.config';
 import path from 'path';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -63,6 +64,8 @@ import { OidcModule } from './oidc/oidc.module';
 import { ActivityFeedModule } from './activity-feed/activity-feed.module';
 import { MetaModule } from './meta/meta.module';
 import { TestHelpersModule } from './test-helpers/test-helpers.module';
+import { PdsModule } from './pds/pds.module';
+import { UserAtprotoIdentityModule } from './user-atproto-identity/user-atproto-identity.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -85,6 +88,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
         googleConfig,
         githubConfig,
         blueskyConfig,
+        pdsConfig,
       ],
       envFilePath: ['.env'],
     }),
@@ -163,6 +167,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     SitemapModule,
     OidcModule,
     MetaModule,
+    PdsModule,
+    UserAtprotoIdentityModule,
     // Conditionally import test helpers only in non-production environments
     ...(process.env.NODE_ENV !== 'production' ? [TestHelpersModule] : []),
   ],

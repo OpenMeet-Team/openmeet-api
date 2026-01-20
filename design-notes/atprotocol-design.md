@@ -1176,10 +1176,10 @@ User logs in with Google
 CREATE TABLE "userAtprotoIdentities" (
   "id" SERIAL PRIMARY KEY,
   "userUlid" CHAR(26) NOT NULL,
-  "did" VARCHAR(255) NOT NULL UNIQUE,
+  "did" VARCHAR(255) NOT NULL UNIQUE,  -- Unique constraint creates index
   "handle" VARCHAR(255) NULL,
   "pdsUrl" VARCHAR(255) NOT NULL,
-  "pdsCredentials" JSONB NULL,        -- Encrypted {password}
+  "pdsCredentials" TEXT NULL,          -- Encrypted JSON from PdsCredentialService
   "isCustodial" BOOLEAN DEFAULT true,
   "createdAt" TIMESTAMP DEFAULT NOW(),
   "updatedAt" TIMESTAMP DEFAULT NOW(),
@@ -1189,7 +1189,12 @@ CREATE TABLE "userAtprotoIdentities" (
   CONSTRAINT "UQ_userAtprotoIdentities_userUlid" UNIQUE ("userUlid")
 );
 
-CREATE INDEX "IDX_userAtprotoIdentities_did" ON "userAtprotoIdentities"("did");
+CREATE INDEX "IDX_userAtprotoIdentities_handle" ON "userAtprotoIdentities"("handle");
+```
+
+The `pdsCredentials` field stores the output of `PdsCredentialService.encrypt()`:
+```json
+{"v":1,"iv":"<base64>","ciphertext":"<base64>","authTag":"<base64>"}
 ```
 
 ### Key Services
@@ -1222,6 +1227,60 @@ AT Protocol repos are public. Private content cannot go to PDS.
 | Public events | PDS + PostgreSQL |
 | Unlisted/Private events | PostgreSQL only |
 | Private groups | PostgreSQL only |
+
+### PDS Configuration
+
+The following environment variables configure the PDS integration:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PDS_URL` | Yes | URL of the PDS instance (e.g., `https://pds.openmeet.net`) |
+| `PDS_SERVICE_HANDLE_DOMAINS` | Yes | Handle domain suffix (e.g., `.opnmt.me`) |
+| `PDS_ADMIN_PASSWORD` | For invite setup | Admin password for PDS admin API calls |
+| `PDS_CREDENTIAL_KEY_1` | Yes | Base64-encoded 32-byte key for AES-256-GCM encryption |
+| `PDS_CREDENTIAL_KEY_2` | No | Previous encryption key for rotation support |
+| `PDS_INVITE_CODE` | Prod only | Service invite code for account creation |
+
+#### Generating Encryption Keys
+
+```bash
+# Generate a 32-byte encryption key
+openssl rand -base64 32
+```
+
+#### Setting Up Invite Codes (Production)
+
+When `PDS_INVITE_REQUIRED=true` on the PDS, you need a service invite code:
+
+```bash
+# 1. Create a high-use invite code (one-time setup)
+curl -X POST https://pds.openmeet.net/xrpc/com.atproto.server.createInviteCode \
+  -H "Authorization: Basic $(echo -n 'admin:YOUR_ADMIN_PASSWORD' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{"useCount": 999999}'
+
+# Response: {"code":"pds-xxx-xxxxx-xxxxx"}
+
+# 2. Store the code in your environment
+export PDS_INVITE_CODE=pds-xxx-xxxxx-xxxxx
+```
+
+**Note:** The admin password (`PDS_ADMIN_PASSWORD`) is only used for admin-level APIs like creating invite codes. Account creation uses only the invite code in the request body, not admin auth.
+
+#### Local Development
+
+For local development with `docker-compose-dev.yml --profile pds`:
+
+```bash
+# PDS runs on port 3101 with invite disabled by default
+PDS_URL=http://localhost:3101
+PDS_SERVICE_HANDLE_DOMAINS=.pds.test
+PDS_ADMIN_PASSWORD=local-dev-admin-password
+
+# To test with invite codes, change docker-compose-dev.yml:
+# PDS_INVITE_REQUIRED: "true"
+# Then create an invite code as shown above
+```
 
 ## References
 

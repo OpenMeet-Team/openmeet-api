@@ -171,3 +171,19 @@ MATRIX_APPSERVICE_ID=openmeet-bot-local
 MATRIX_APPSERVICE_URL=http://api:3000/api/matrix/appservice
 MATRIX_APPSERVICE_TOKEN=local-dev-appservice-token-971a507cac6945e1259b7d7377b7c497
 MATRIX_APPSERVICE_HS_TOKEN=local-dev-hs-token-df51b086825667040f89888d920641c44d
+
+# PDS (Personal Data Server) configuration
+# Used for AT Protocol account provisioning
+PDS_URL=http://pds:3000
+PDS_SERVICE_HANDLE_DOMAINS=.test
+PDS_ADMIN_PASSWORD=pds-admin-password
+# PDS_CREDENTIAL_KEY_1 and PDS_CREDENTIAL_KEY_2 are base64-encoded 32-byte keys for AES-256-GCM encryption
+# Generate with: openssl rand -base64 32
+# KEY_1 is current encryption key, KEY_2 is for rotation (optional)
+PDS_CREDENTIAL_KEY_1=
+PDS_CREDENTIAL_KEY_2=
+# Service invite code for custodial account creation (when PDS_INVITE_REQUIRED=true)
+# Generate with: curl -X POST https://pds.example.com/xrpc/com.atproto.server.createInviteCode \
+#   -H "Authorization: Basic $(echo -n 'admin:PASSWORD' | base64)" \
+#   -H "Content-Type: application/json" -d '{"useCount": 999999}'
+PDS_INVITE_CODE=
