@@ -37,5 +37,4 @@ export const TESTING_PDS_HANDLE_DOMAIN =
   process.env.PDS_SERVICE_HANDLE_DOMAINS || '.pds.test';
 export const TESTING_PDS_ADMIN_PASSWORD =
   process.env.PDS_ADMIN_PASSWORD || 'ci-pds-admin-password';
-export const TESTING_PDS_INVITE_CODE =
-  process.env.PDS_INVITE_CODE || '';
+export const TESTING_PDS_INVITE_CODE = process.env.PDS_INVITE_CODE || '';
