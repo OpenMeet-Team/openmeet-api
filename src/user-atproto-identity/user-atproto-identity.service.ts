@@ -71,13 +71,6 @@ export class UserAtprotoIdentityService {
    *
    * @param tenantId - The tenant ID
    * @param data - The identity data to create
-   * @returns The created identity
-   */
-  /**
-   * Create a new AT Protocol identity for a user.
-   *
-   * @param tenantId - The tenant ID
-   * @param data - The identity data to create
    * @param data.pdsCredentials - Encrypted credentials from PdsCredentialService.encrypt()
    * @returns The created identity
    */
@@ -98,14 +91,6 @@ export class UserAtprotoIdentityService {
     return this.repository.save(entity);
   }
 
-  /**
-   * Update an existing AT Protocol identity.
-   *
-   * @param tenantId - The tenant ID
-   * @param id - The identity ID
-   * @param data - The data to update
-   * @returns The updated identity if found, null otherwise
-   */
   /**
    * Update an existing AT Protocol identity.
    *

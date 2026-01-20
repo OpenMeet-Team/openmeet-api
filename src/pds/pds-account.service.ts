@@ -56,6 +56,12 @@ export class PdsAccountService {
       this.configService.get('pds.adminPassword', { infer: true }) || '';
     this.inviteCode =
       this.configService.get('pds.inviteCode', { infer: true }) || '';
+
+    if (!this.pdsUrl) {
+      this.logger.warn(
+        'PDS_URL is not configured - PDS account operations will fail',
+      );
+    }
   }
 
   /**
@@ -225,16 +231,41 @@ export class PdsAccountService {
     }
 
     // All retries exhausted
+    this.logger.error(
+      `PDS request failed permanently after ${this.maxRetries} attempts`,
+      { error: lastError?.message },
+    );
     throw this.mapToPdsApiError(lastError);
   }
 
   /**
    * Determine if an error should trigger a retry.
+   *
+   * Only retries on:
+   * - Specific network errors (ECONNREFUSED, ECONNRESET, ETIMEDOUT, ENOTFOUND)
+   * - AxiosError with no response (network failure)
+   * - 5xx server errors
+   * - 429 rate limit errors
+   *
+   * Does NOT retry on programming errors (TypeError, ReferenceError, etc.)
    */
   private shouldRetry(error: unknown): boolean {
     if (!this.isAxiosError(error)) {
-      // Network errors, etc. - retry
-      return true;
+      // Only retry on specific network-related errors, not programming errors
+      if (error instanceof Error) {
+        const networkErrorCodes = [
+          'ECONNREFUSED',
+          'ECONNRESET',
+          'ETIMEDOUT',
+          'ENOTFOUND',
+        ];
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code && networkErrorCodes.includes(code)) {
+          return true;
+        }
+      }
+      // Don't retry unknown error types - they're likely programming errors
+      return false;
     }
 
     const status = error.response?.status;
@@ -305,6 +336,9 @@ export class PdsAccountService {
 
   /**
    * Get Basic auth header for admin operations.
+   *
+   * @todo Used for admin-level APIs like createInviteCode. Will be used when
+   *       we implement automated invite code rotation or admin account management.
    */
   private getBasicAuthHeader(): string {
     const credentials = Buffer.from(`admin:${this.adminPassword}`).toString(

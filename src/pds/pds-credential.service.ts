@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PdsCredentialDecryptionError } from './pds.errors';
@@ -30,6 +30,7 @@ interface EncryptedCredential {
  */
 @Injectable()
 export class PdsCredentialService {
+  private readonly logger = new Logger(PdsCredentialService.name);
   private readonly key1: Buffer | null;
   private readonly key2: Buffer | null;
 
@@ -43,6 +44,12 @@ export class PdsCredentialService {
 
     this.key1 = key1Base64 ? Buffer.from(key1Base64, 'base64') : null;
     this.key2 = key2Base64 ? Buffer.from(key2Base64, 'base64') : null;
+
+    if (!this.key1) {
+      this.logger.warn(
+        'PDS_CREDENTIAL_KEY_1 is not configured - credential encryption/decryption will fail',
+      );
+    }
   }
 
   /**

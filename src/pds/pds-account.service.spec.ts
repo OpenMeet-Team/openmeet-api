@@ -411,5 +411,76 @@ describe('PdsAccountService', () => {
       expect(result.did).toBe('did:plc:abc123');
       expect(httpService.post).toHaveBeenCalledTimes(2);
     }, 10000);
+
+    it('should retry on network errors (ECONNREFUSED)', async () => {
+      // Simulate a network error with error code - NOT an AxiosError
+      const networkError = new Error('connect ECONNREFUSED 127.0.0.1:3000');
+      (networkError as NodeJS.ErrnoException).code = 'ECONNREFUSED';
+
+      const successResponse: AxiosResponse = {
+        data: {
+          did: 'did:plc:abc123',
+          handle: 'alice.dev.opnmt.me',
+          accessJwt: 'access-token',
+          refreshJwt: 'refresh-token',
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      // Fail once with network error, then succeed
+      httpService.post
+        .mockReturnValueOnce(throwError(() => networkError))
+        .mockReturnValueOnce(of(successResponse));
+
+      const result = await service.createSession('alice.dev.opnmt.me', 'pass');
+
+      expect(result.did).toBe('did:plc:abc123');
+      expect(httpService.post).toHaveBeenCalledTimes(2);
+    }, 10000);
+
+    it('should NOT retry on non-network errors (e.g., TypeError)', async () => {
+      // Programming errors should NOT be retried
+      const typeError = new TypeError('Cannot read property of undefined');
+
+      httpService.post.mockReturnValue(throwError(() => typeError));
+
+      await expect(
+        service.createSession('alice.dev.opnmt.me', 'pass'),
+      ).rejects.toThrow(PdsApiError);
+
+      // Should only be called once (no retry for programming errors)
+      expect(httpService.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw PdsApiError after all retries exhausted on 5xx', async () => {
+      const serverError: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: { error: 'InternalServerError', message: 'Server is down' },
+          status: 500,
+          statusText: 'Internal Server Error',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 500',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+
+      // Fail all 3 attempts
+      httpService.post.mockReturnValue(throwError(() => serverError));
+
+      // Should throw PdsApiError after exhausting all retries
+      await expect(
+        service.createSession('alice.dev.opnmt.me', 'pass'),
+      ).rejects.toThrow(PdsApiError);
+
+      // Should be called 3 times (max retries)
+      expect(httpService.post).toHaveBeenCalledTimes(3);
+    }, 15000);
   });
 });
