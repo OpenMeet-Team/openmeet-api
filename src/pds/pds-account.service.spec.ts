@@ -263,6 +263,41 @@ describe('PdsAccountService', () => {
 
       expect(result).toBe(false);
     });
+
+    it('should throw on 400 errors that are not handle resolution failures', async () => {
+      // A 400 with a different error type (e.g., InvalidHandle for malformed input)
+      // should be thrown, not treated as "handle available"
+      const invalidFormatError: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: {
+            error: 'InvalidHandle',
+            message: 'Handle format is invalid',
+          },
+          status: 400,
+          statusText: 'Bad Request',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 400',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+
+      httpService.get.mockReturnValue(throwError(() => invalidFormatError));
+
+      await expect(
+        service.isHandleAvailable('invalid..handle'),
+      ).rejects.toThrow(PdsApiError);
+
+      await expect(
+        service.isHandleAvailable('invalid..handle'),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        atError: 'InvalidHandle',
+      });
+    });
   });
 
   describe('retry behavior', () => {

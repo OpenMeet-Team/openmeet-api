@@ -138,6 +138,7 @@ export class PdsAccountService {
    *
    * @param handle - The handle to check
    * @returns true if available (not found), false if taken
+   * @throws PdsApiError if the request fails for reasons other than handle not found
    */
   async isHandleAvailable(handle: string): Promise<boolean> {
     const url = `${this.pdsUrl}/xrpc/com.atproto.identity.resolveHandle`;
@@ -153,13 +154,28 @@ export class PdsAccountService {
       return false;
     } catch (error) {
       if (this.isAxiosError(error)) {
-        // 400 means handle not found - it's available
+        // Only treat as "handle available" if it's a 400 with specific AT Protocol
+        // error indicating the handle could not be resolved
         if (error.response?.status === 400) {
-          return true;
+          const data = error.response?.data as
+            | { error?: string; message?: string }
+            | undefined;
+
+          // AT Protocol returns "InvalidRequest" with message about resolution failure
+          // when a handle doesn't exist. Other 400 errors (like InvalidHandle for
+          // malformed input) should be thrown.
+          if (
+            data?.error === 'InvalidRequest' &&
+            data?.message &&
+            (data.message.toLowerCase().includes('unable to resolve') ||
+              data.message.toLowerCase().includes('could not resolve'))
+          ) {
+            return true;
+          }
         }
       }
 
-      // Re-throw other errors
+      // Re-throw all other errors
       throw this.mapToPdsApiError(error);
     }
   }

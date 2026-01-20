@@ -60,13 +60,11 @@ export class PdsCredentialService {
   /**
    * Encrypt a password with a specific key version.
    *
-   * This method is primarily for testing key rotation scenarios.
-   *
    * @param password - The plaintext password to encrypt
    * @param version - The key version to use (1 or 2)
    * @returns JSON string containing the encrypted credential
    */
-  encryptWithVersion(password: string, version: 1 | 2): string {
+  private encryptWithVersion(password: string, version: 1 | 2): string {
     const key = version === 1 ? this.key1 : this.key2;
 
     if (!key) {

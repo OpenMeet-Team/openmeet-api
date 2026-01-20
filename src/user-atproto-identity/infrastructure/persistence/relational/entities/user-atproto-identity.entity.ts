@@ -44,17 +44,21 @@ export class UserAtprotoIdentityEntity extends EntityRelationalHelper {
    * The user's decentralized identifier (DID).
    * Format: did:plc:xxxx or did:web:xxxx
    * Globally unique across all PDS instances.
+   *
+   * Note: unique: true creates an index automatically, so no explicit @Index() needed.
    */
   @Column({ type: 'varchar', length: 255, unique: true })
-  @Index()
   did: string;
 
   /**
    * The user's AT Protocol handle (e.g., alice.dev.opnmt.me).
    * Can be null during account creation before handle is assigned.
    * Can change over time (handle migration).
+   *
+   * Indexed for efficient lookups by handle.
    */
   @Column({ type: 'varchar', length: 255, nullable: true })
+  @Index()
   handle: string | null;
 
   /**
@@ -67,13 +71,19 @@ export class UserAtprotoIdentityEntity extends EntityRelationalHelper {
 
   /**
    * Encrypted credentials for custodial accounts.
-   * Structure: { password: string }
-   * Null for non-custodial accounts.
    *
-   * SECURITY: Password should be encrypted at application level before storage.
+   * This field stores the output of PdsCredentialService.encrypt(), which is
+   * a JSON string containing: { v: 1|2, iv: string, ciphertext: string, authTag: string }
+   *
+   * The encrypted credential can be decrypted using PdsCredentialService.decrypt()
+   * to retrieve the original password.
+   *
+   * Null for non-custodial accounts (user brings their own DID/PDS).
+   *
+   * SECURITY: Never log or expose this value. Use PdsCredentialService for all access.
    */
-  @Column({ type: 'jsonb', nullable: true })
-  pdsCredentials: { password: string } | null;
+  @Column({ type: 'text', nullable: true })
+  pdsCredentials: string | null;
 
   /**
    * Whether OpenMeet manages this account (custodial) or user brought their own (non-custodial).

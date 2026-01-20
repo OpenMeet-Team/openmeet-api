@@ -96,7 +96,7 @@ describe('PdsCredentialService', () => {
       expect(decrypted).toBe(password);
     });
 
-    it('should decrypt v:2 credential with KEY_2', () => {
+    it('should decrypt v:2 credential with KEY_2', async () => {
       // Configure KEY_2
       mockConfigService.get.mockImplementation((key: string) => {
         switch (key) {
@@ -114,16 +114,29 @@ describe('PdsCredentialService', () => {
         configService as unknown as ConfigService,
       );
 
-      // Encrypt with KEY_2 (v:2) - we need to manually create this
-      // since encrypt() always uses KEY_1
+      // To test KEY_2 decryption, we manually construct a v:2 credential
+      // using the same crypto operations the service would use.
+      // This tests that the service CAN decrypt v:2 credentials (key rotation support).
       const password = 'password-encrypted-with-key2';
-      const encryptedWithKey2 = serviceWithKey2.encryptWithVersion(
-        password,
-        2,
-      );
+      const crypto = await import('crypto');
+      const key2 = Buffer.from(validKey2, 'base64');
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', key2, iv);
+      const encrypted = Buffer.concat([
+        cipher.update(password, 'utf8'),
+        cipher.final(),
+      ]);
+      const authTag = cipher.getAuthTag();
+
+      const v2Credential = JSON.stringify({
+        v: 2,
+        iv: iv.toString('base64'),
+        ciphertext: encrypted.toString('base64'),
+        authTag: authTag.toString('base64'),
+      });
 
       // Decrypt should work with v:2
-      const decrypted = serviceWithKey2.decrypt(encryptedWithKey2);
+      const decrypted = serviceWithKey2.decrypt(v2Credential);
 
       expect(decrypted).toBe(password);
     });

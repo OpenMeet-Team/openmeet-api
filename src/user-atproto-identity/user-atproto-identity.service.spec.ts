@@ -11,13 +11,17 @@ describe('UserAtprotoIdentityService', () => {
   let repository: jest.Mocked<Repository<UserAtprotoIdentityEntity>>;
   let tenantService: jest.Mocked<TenantConnectionService>;
 
+  // Mock encrypted credential JSON string (output of PdsCredentialService.encrypt())
+  const mockEncryptedCredentials =
+    '{"v":1,"iv":"dGVzdGl2MTIzNDU2","ciphertext":"ZW5jcnlwdGVk","authTag":"dGVzdGF1dGh0YWcxMjM0NQ=="}';
+
   const mockIdentity: Partial<UserAtprotoIdentityEntity> = {
     id: 1,
     userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
     did: 'did:plc:abc123xyz',
     handle: 'alice.dev.opnmt.me',
     pdsUrl: 'https://pds-dev.openmeet.net',
-    pdsCredentials: { password: 'encrypted-password-here' },
+    pdsCredentials: mockEncryptedCredentials,
     isCustodial: true,
     createdAt: new Date('2025-01-19T14:00:00Z'),
     updatedAt: new Date('2025-01-19T14:00:00Z'),
@@ -135,7 +139,7 @@ describe('UserAtprotoIdentityService', () => {
         did: 'did:plc:abc123xyz',
         handle: 'alice.dev.opnmt.me',
         pdsUrl: 'https://pds-dev.openmeet.net',
-        pdsCredentials: { password: 'encrypted-password' },
+        pdsCredentials: mockEncryptedCredentials,
         isCustodial: true,
       };
 
@@ -216,8 +220,11 @@ describe('UserAtprotoIdentityService', () => {
     });
 
     it('should update pdsCredentials when provided', async () => {
+      const newEncryptedCredentials =
+        '{"v":1,"iv":"bmV3aXYxMjM0NTY3OA==","ciphertext":"bmV3ZW5jcnlwdGVk","authTag":"bmV3YXV0aHRhZzEyMzQ1"}';
+
       const updateData = {
-        pdsCredentials: { password: 'new-encrypted-password' },
+        pdsCredentials: newEncryptedCredentials,
       };
 
       const updatedIdentity = { ...mockIdentity, ...updateData };
@@ -230,9 +237,7 @@ describe('UserAtprotoIdentityService', () => {
 
       const result = await service.update(TESTING_TENANT_ID, 1, updateData);
 
-      expect(result?.pdsCredentials).toEqual({
-        password: 'new-encrypted-password',
-      });
+      expect(result?.pdsCredentials).toBe(newEncryptedCredentials);
     });
   });
 });

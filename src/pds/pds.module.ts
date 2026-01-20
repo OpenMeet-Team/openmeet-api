@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { PdsCredentialService } from './pds-credential.service';
 import { PdsAccountService } from './pds-account.service';
@@ -11,9 +11,10 @@ import { PdsAccountService } from './pds-account.service';
  * - Credential encryption/decryption (AES-256-GCM)
  * - Handle availability checks
  *
- * This module is global, so services are available throughout the application.
+ * NOTE: This module is NOT global. Modules that need PDS services must
+ * explicitly import PdsModule. This is intentional for security-sensitive
+ * services that handle encryption keys.
  */
-@Global()
 @Module({
   imports: [HttpModule],
   providers: [PdsCredentialService, PdsAccountService],

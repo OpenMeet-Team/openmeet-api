@@ -73,6 +73,14 @@ export class UserAtprotoIdentityService {
    * @param data - The identity data to create
    * @returns The created identity
    */
+  /**
+   * Create a new AT Protocol identity for a user.
+   *
+   * @param tenantId - The tenant ID
+   * @param data - The identity data to create
+   * @param data.pdsCredentials - Encrypted credentials from PdsCredentialService.encrypt()
+   * @returns The created identity
+   */
   async create(
     tenantId: string,
     data: {
@@ -80,7 +88,7 @@ export class UserAtprotoIdentityService {
       did: string;
       handle?: string | null;
       pdsUrl: string;
-      pdsCredentials?: { password: string } | null;
+      pdsCredentials?: string | null;
       isCustodial?: boolean;
     },
   ): Promise<UserAtprotoIdentityEntity> {
@@ -98,13 +106,22 @@ export class UserAtprotoIdentityService {
    * @param data - The data to update
    * @returns The updated identity if found, null otherwise
    */
+  /**
+   * Update an existing AT Protocol identity.
+   *
+   * @param tenantId - The tenant ID
+   * @param id - The identity ID
+   * @param data - The data to update
+   * @param data.pdsCredentials - Encrypted credentials from PdsCredentialService.encrypt()
+   * @returns The updated identity if found, null otherwise
+   */
   async update(
     tenantId: string,
     id: number,
     data: Partial<{
       handle: string | null;
       pdsUrl: string;
-      pdsCredentials: { password: string } | null;
+      pdsCredentials: string | null;
       isCustodial: boolean;
     }>,
   ): Promise<NullableType<UserAtprotoIdentityEntity>> {
