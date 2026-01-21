@@ -25,6 +25,13 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { PdsApiError } from '../pds/pds.errors';
 
+// Mock bcryptjs for password validation tests
+jest.mock('bcryptjs', () => ({
+  compare: jest.fn(),
+  hash: jest.fn(),
+}));
+import * as bcrypt from 'bcryptjs';
+
 describe('AuthService', () => {
   let authService: AuthService;
 
@@ -40,6 +47,7 @@ describe('AuthService', () => {
 
   const mockUserService = {
     findById: jest.fn(),
+    findByEmail: jest.fn(),
     findOrCreateUser: jest.fn(),
     update: jest.fn(),
     resolveBlueskyHandle: jest.fn(),
@@ -1237,6 +1245,254 @@ describe('AuthService', () => {
         expect(result).toHaveProperty('token');
         expect(mockUserAtprotoIdentityService.create).toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('validateLogin - Email Login PDS Account Creation', () => {
+    const mockEmailUser = {
+      id: 50,
+      ulid: '01HXY1234567890EMAILUSER',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+      password: '$2b$10$hashedpassword',
+      provider: AuthProvidersEnum.email,
+      isShadowAccount: false,
+      role: { id: 2, name: 'user' },
+      slug: 'test-email-user',
+      status: { id: 1, name: 'active' }, // StatusEnum.active = 1
+    };
+
+    beforeEach(() => {
+      // Default setup for successful email login
+      mockJwtService.signAsync.mockResolvedValue('mock-jwt-token');
+      mockConfigService.getOrThrow.mockReturnValue('15m');
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'pds.url') return 'https://pds.openmeet.net';
+        if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
+        return undefined;
+      });
+      mockUserService.findById.mockResolvedValue(mockEmailUser);
+    });
+
+    it('should create custodial PDS account when email user logs in without AT identity', async () => {
+      // Arrange
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      mockUserService.findByEmail.mockResolvedValue(mockEmailUser);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+      mockPdsAccountService.createAccount.mockResolvedValue({
+        did: 'did:plc:emaildid123',
+        handle: 'test-email-user.opnmt.me',
+        accessJwt: 'access-jwt',
+        refreshJwt: 'refresh-jwt',
+      });
+      mockPdsCredentialService.encrypt.mockReturnValue('encrypted-password');
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 1,
+        userUlid: mockEmailUser.ulid,
+        did: 'did:plc:emaildid123',
+        handle: 'test-email-user.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+        pdsCredentials: 'encrypted-password',
+        isCustodial: true,
+      });
+
+      // Act
+      const result = await authService.validateLogin(
+        { email: 'test@example.com', password: 'password123' },
+        'test-tenant',
+      );
+
+      // Assert
+      expect(
+        mockUserAtprotoIdentityService.findByUserUlid,
+      ).toHaveBeenCalledWith('test-tenant', mockEmailUser.ulid);
+      expect(mockPdsAccountService.createAccount).toHaveBeenCalled();
+      expect(mockPdsCredentialService.encrypt).toHaveBeenCalled();
+      expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+        'test-tenant',
+        expect.objectContaining({
+          userUlid: mockEmailUser.ulid,
+          did: 'did:plc:emaildid123',
+          handle: 'test-email-user.opnmt.me',
+          isCustodial: true,
+        }),
+      );
+      expect(result).toHaveProperty('token');
+      expect(result).toHaveProperty('user');
+    });
+
+    it('should skip PDS creation if email user already has AT identity', async () => {
+      // Arrange
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      mockUserService.findByEmail.mockResolvedValue(mockEmailUser);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue({
+        id: 1,
+        userUlid: mockEmailUser.ulid,
+        did: 'did:plc:existingemailid',
+        handle: 'existing-email.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+        isCustodial: true,
+      });
+
+      // Act
+      const result = await authService.validateLogin(
+        { email: 'test@example.com', password: 'password123' },
+        'test-tenant',
+      );
+
+      // Assert
+      expect(mockUserAtprotoIdentityService.findByUserUlid).toHaveBeenCalled();
+      expect(mockPdsAccountService.createAccount).not.toHaveBeenCalled();
+      expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+      expect(result).toHaveProperty('token');
+    });
+  });
+
+  describe('verifyEmailCode - Email Verification PDS Account Creation', () => {
+    const mockEmailUser = {
+      id: 51,
+      ulid: '01HXY1234567890VERIFYUSR',
+      email: 'verify@example.com',
+      firstName: 'Verify',
+      lastName: 'User',
+      provider: AuthProvidersEnum.email,
+      isShadowAccount: false,
+      role: { id: 2, name: 'user' },
+      slug: 'verify-user',
+      status: { id: 1, name: 'inactive' }, // StatusEnum.inactive
+    };
+
+    const activatedUser = {
+      ...mockEmailUser,
+      status: { id: 2, name: 'active' },
+    };
+
+    beforeEach(() => {
+      // Default setup for successful email verification
+      mockJwtService.signAsync.mockResolvedValue('mock-jwt-token');
+      mockConfigService.getOrThrow.mockReturnValue('15m');
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'pds.url') return 'https://pds.openmeet.net';
+        if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
+        return undefined;
+      });
+    });
+
+    it('should create custodial PDS account when verifying email code', async () => {
+      // Arrange
+      mockEmailVerificationCodeService.validateCode.mockResolvedValue({
+        userId: mockEmailUser.id,
+        email: 'verify@example.com',
+      });
+      mockUserService.findById.mockResolvedValue(mockEmailUser);
+      mockUserService.update.mockResolvedValue(activatedUser);
+      mockUserService.findByEmail.mockResolvedValue(activatedUser);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+      mockPdsAccountService.createAccount.mockResolvedValue({
+        did: 'did:plc:verifydid123',
+        handle: 'verify-user.opnmt.me',
+        accessJwt: 'access-jwt',
+        refreshJwt: 'refresh-jwt',
+      });
+      mockPdsCredentialService.encrypt.mockReturnValue('encrypted-password');
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 1,
+        userUlid: activatedUser.ulid,
+        did: 'did:plc:verifydid123',
+        handle: 'verify-user.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+        pdsCredentials: 'encrypted-password',
+        isCustodial: true,
+      });
+
+      // Act
+      const result = await authService.verifyEmailCode(
+        { code: '123456', email: 'verify@example.com' },
+        'test-tenant',
+      );
+
+      // Assert
+      expect(
+        mockUserAtprotoIdentityService.findByUserUlid,
+      ).toHaveBeenCalledWith('test-tenant', activatedUser.ulid);
+      expect(mockPdsAccountService.createAccount).toHaveBeenCalled();
+      expect(mockPdsCredentialService.encrypt).toHaveBeenCalled();
+      expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+        'test-tenant',
+        expect.objectContaining({
+          userUlid: activatedUser.ulid,
+          did: 'did:plc:verifydid123',
+          handle: 'verify-user.opnmt.me',
+          isCustodial: true,
+        }),
+      );
+      expect(result).toHaveProperty('token');
+      expect(result).toHaveProperty('user');
+    });
+
+    it('should skip PDS creation if user already has AT identity after email verification', async () => {
+      // Arrange
+      const alreadyActiveUser = {
+        ...mockEmailUser,
+        status: { id: 2, name: 'active' },
+      };
+      mockEmailVerificationCodeService.validateCode.mockResolvedValue({
+        userId: alreadyActiveUser.id,
+        email: 'verify@example.com',
+      });
+      mockUserService.findById.mockResolvedValue(alreadyActiveUser);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue({
+        id: 1,
+        userUlid: alreadyActiveUser.ulid,
+        did: 'did:plc:existingverifydid',
+        handle: 'existing-verify.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+        isCustodial: true,
+      });
+
+      // Act
+      const result = await authService.verifyEmailCode(
+        { code: '123456', email: 'verify@example.com' },
+        'test-tenant',
+      );
+
+      // Assert
+      expect(mockUserAtprotoIdentityService.findByUserUlid).toHaveBeenCalled();
+      expect(mockPdsAccountService.createAccount).not.toHaveBeenCalled();
+      expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+      expect(result).toHaveProperty('token');
+    });
+
+    it('should continue login even if PDS creation fails during email verification', async () => {
+      // Arrange
+      mockEmailVerificationCodeService.validateCode.mockResolvedValue({
+        userId: mockEmailUser.id,
+        email: 'verify@example.com',
+      });
+      mockUserService.findById.mockResolvedValue(mockEmailUser);
+      mockUserService.update.mockResolvedValue(activatedUser);
+      mockUserService.findByEmail.mockResolvedValue(activatedUser);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+      mockPdsAccountService.createAccount.mockRejectedValue(
+        new Error('PDS connection failed'),
+      );
+
+      // Act
+      const result = await authService.verifyEmailCode(
+        { code: '123456', email: 'verify@example.com' },
+        'test-tenant',
+      );
+
+      // Assert - Login should still succeed even if PDS creation failed
+      expect(result).toHaveProperty('token');
+      expect(result).toHaveProperty('user');
+      expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
     });
   });
 });

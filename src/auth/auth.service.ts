@@ -183,6 +183,14 @@ export class AuthService {
       });
     }
 
+    // Auto-create AT Protocol identity for email users who don't have one
+    await this.ensureAtprotoIdentity(
+      user,
+      AuthProvidersEnum.email,
+      null,
+      tenantId,
+    );
+
     const hash = crypto
       .createHash('sha256')
       .update(randomStringGenerator())
@@ -1252,7 +1260,15 @@ export class AuthService {
       }
     }
 
-    // 4. Create session and return tokens (same as regular login)
+    // 4. Auto-create AT Protocol identity for email users who don't have one
+    await this.ensureAtprotoIdentity(
+      user,
+      AuthProvidersEnum.email,
+      null,
+      tenantId,
+    );
+
+    // 5. Create session and return tokens (same as regular login)
     const hash = crypto
       .createHash('sha256')
       .update(randomStringGenerator())
@@ -1368,7 +1384,7 @@ export class AuthService {
   private async ensureAtprotoIdentity(
     user: User,
     authProvider: string,
-    socialData: SocialInterface,
+    socialData: SocialInterface | null,
     tenantId: string,
   ): Promise<void> {
     // Skip if user has no ulid (shouldn't happen, but be defensive)
@@ -1395,17 +1411,18 @@ export class AuthService {
       }
 
       // Different handling based on auth provider
-      if (authProvider === AuthProvidersEnum.bluesky) {
+      if (authProvider === AuthProvidersEnum.bluesky && socialData) {
         // Bluesky users: Link their existing DID (non-custodial)
         await this.linkBlueskyIdentity(user, socialData, tenantId);
       } else if (
         authProvider === AuthProvidersEnum.google ||
-        authProvider === AuthProvidersEnum.github
+        authProvider === AuthProvidersEnum.github ||
+        authProvider === AuthProvidersEnum.email
       ) {
-        // Google/GitHub users: Create custodial PDS account
+        // Google/GitHub/Email users: Create custodial PDS account
         await this.createCustodialPdsAccount(user, tenantId);
       }
-      // Other providers (email, etc.) - skip AT Protocol identity creation for now
+      // Other providers - skip AT Protocol identity creation for now
     } catch (error) {
       // Log error but don't fail login - AT identity is an enhancement, not required
       this.logger.warn(
