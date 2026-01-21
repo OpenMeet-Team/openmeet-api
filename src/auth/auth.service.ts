@@ -49,6 +49,11 @@ import {
   EventAttendeeRole,
 } from '../core/constants/constant';
 import { EventRoleService } from '../event-role/event-role.service';
+import { PdsAccountService } from '../pds/pds-account.service';
+import { PdsCredentialService } from '../pds/pds-credential.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { PdsApiError } from '../pds/pds.errors';
 
 @Injectable()
 export class AuthService {
@@ -67,6 +72,10 @@ export class AuthService {
     private shadowAccountService: ShadowAccountService,
     private emailVerificationCodeService: EmailVerificationCodeService,
     private configService: ConfigService<AllConfigType>,
+    private pdsAccountService: PdsAccountService,
+    private pdsCredentialService: PdsCredentialService,
+    private userAtprotoIdentityService: UserAtprotoIdentityService,
+    private blueskyIdentityService: BlueskyIdentityService,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
@@ -333,6 +342,9 @@ export class AuthService {
         }
       }
     }
+
+    // Auto-create AT Protocol identity for users who don't have one
+    await this.ensureAtprotoIdentity(user, authProvider, socialData, tenantId);
 
     const hash = crypto
       .createHash('sha256')
@@ -1338,5 +1350,289 @@ export class AuthService {
       success: true,
       message: 'We sent a login code to your email.',
     };
+  }
+
+  /**
+   * Ensure user has an AT Protocol identity.
+   *
+   * For Google/GitHub users: Creates a custodial PDS account on our PDS
+   * For Bluesky users: Links their existing DID (non-custodial)
+   *
+   * This method is designed to be non-blocking - PDS failures don't prevent login.
+   *
+   * @param user - The user to create identity for
+   * @param authProvider - The authentication provider used
+   * @param socialData - Social login data (includes DID for Bluesky)
+   * @param tenantId - Tenant identifier
+   */
+  private async ensureAtprotoIdentity(
+    user: User,
+    authProvider: string,
+    socialData: SocialInterface,
+    tenantId: string,
+  ): Promise<void> {
+    // Skip if user has no ulid (shouldn't happen, but be defensive)
+    if (!user.ulid) {
+      this.logger.warn(
+        `User ${user.id} has no ulid - skipping AT Protocol identity creation`,
+      );
+      return;
+    }
+
+    try {
+      // Check if user already has an AT Protocol identity
+      const existingIdentity =
+        await this.userAtprotoIdentityService.findByUserUlid(
+          tenantId,
+          user.ulid,
+        );
+
+      if (existingIdentity) {
+        this.logger.debug(
+          `User ${user.id} already has AT Protocol identity (DID: ${existingIdentity.did})`,
+        );
+        return;
+      }
+
+      // Different handling based on auth provider
+      if (authProvider === AuthProvidersEnum.bluesky) {
+        // Bluesky users: Link their existing DID (non-custodial)
+        await this.linkBlueskyIdentity(user, socialData, tenantId);
+      } else if (
+        authProvider === AuthProvidersEnum.google ||
+        authProvider === AuthProvidersEnum.github
+      ) {
+        // Google/GitHub users: Create custodial PDS account
+        await this.createCustodialPdsAccount(user, tenantId);
+      }
+      // Other providers (email, etc.) - skip AT Protocol identity creation for now
+    } catch (error) {
+      // Log error but don't fail login - AT identity is an enhancement, not required
+      this.logger.warn(
+        `Failed to create AT Protocol identity for user ${user.id}: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Link an existing Bluesky DID to the user (non-custodial).
+   *
+   * Resolves the user's actual PDS URL from their DID document to support
+   * users on any PDS (not just bsky.social).
+   */
+  private async linkBlueskyIdentity(
+    user: User,
+    socialData: SocialInterface,
+    tenantId: string,
+  ): Promise<void> {
+    if (!socialData.id) {
+      this.logger.warn(
+        `Bluesky user ${user.id} has no DID in social data - skipping identity link`,
+      );
+      return;
+    }
+
+    // socialData.id is the DID for Bluesky users
+    const did = socialData.id;
+
+    // Resolve PDS URL and handle from DID document to support users on any PDS
+    let pdsUrl: string | null = null;
+    let handle: string | null = null;
+
+    try {
+      const profile = await this.blueskyIdentityService.resolveProfile(did);
+      pdsUrl = profile.pdsUrl;
+      handle = profile.handle !== did ? profile.handle : null;
+
+      this.logger.debug(
+        `Resolved Bluesky profile for ${did}: handle=${handle}, pdsUrl=${pdsUrl}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not resolve Bluesky profile for ${did}: ${error.message}`,
+      );
+      // Cannot link identity without PDS URL - it's required for valid AT Protocol identity
+      return;
+    }
+
+    await this.userAtprotoIdentityService.create(tenantId, {
+      userUlid: user.ulid,
+      did,
+      handle, // Resolved handle from their PDS
+      pdsUrl, // Resolved from DID document
+      pdsCredentials: null, // Non-custodial - no credentials
+      isCustodial: false,
+    });
+
+    this.logger.log(
+      `Linked Bluesky identity for user ${user.id}: ${did} (non-custodial, handle: ${handle || 'unresolved'})`,
+    );
+  }
+
+  /**
+   * Create a custodial PDS account for Google/GitHub users.
+   *
+   * Includes retry logic to handle race conditions where a handle becomes
+   * unavailable between the availability check and account creation.
+   */
+  private async createCustodialPdsAccount(
+    user: User,
+    tenantId: string,
+  ): Promise<void> {
+    // Get PDS URL from config
+    const pdsUrl = this.configService.get('pds.url', { infer: true });
+
+    if (!pdsUrl) {
+      this.logger.debug(
+        `PDS_URL not configured - skipping custodial account creation for user ${user.id}`,
+      );
+      return;
+    }
+
+    const email = user.email || `${user.ulid}@openmeet.net`;
+    const maxCreateAttempts = 5; // Retry a few times for race conditions
+
+    // Validate user has a slug before proceeding
+    if (!user.slug) {
+      this.logger.warn(
+        `User ${user.id} has no slug - skipping custodial PDS account creation`,
+      );
+      return;
+    }
+
+    for (
+      let createAttempt = 0;
+      createAttempt < maxCreateAttempts;
+      createAttempt++
+    ) {
+      // Generate unique handle (checks availability)
+      const handle = await this.generateUniqueHandle(user.slug);
+
+      // Generate secure random password (new password each attempt for security)
+      const password = crypto.randomBytes(32).toString('hex');
+
+      try {
+        // Create account on PDS
+        const pdsResponse = await this.pdsAccountService.createAccount({
+          email,
+          handle,
+          password,
+        });
+
+        // Encrypt password for storage
+        const encryptedPassword = this.pdsCredentialService.encrypt(password);
+
+        // Store the AT Protocol identity
+        await this.userAtprotoIdentityService.create(tenantId, {
+          userUlid: user.ulid,
+          did: pdsResponse.did,
+          handle: pdsResponse.handle,
+          pdsUrl,
+          pdsCredentials: encryptedPassword,
+          isCustodial: true,
+        });
+
+        this.logger.log(
+          `Created custodial PDS account for user ${user.id}: ${pdsResponse.did} (handle: ${pdsResponse.handle})`,
+        );
+        return; // Success - exit the retry loop
+      } catch (error) {
+        // Check if this is a "handle taken" error (race condition)
+        // Be specific to avoid masking other 400 errors
+        const isHandleTaken =
+          error instanceof PdsApiError &&
+          (error.atError === 'HandleNotAvailable' ||
+            error.atError === 'HandleAlreadyExists' ||
+            (error.message?.toLowerCase().includes('handle') &&
+              (error.message?.toLowerCase().includes('taken') ||
+                error.message?.toLowerCase().includes('available'))));
+
+        if (isHandleTaken && createAttempt < maxCreateAttempts - 1) {
+          this.logger.warn(
+            `Handle ${handle} was taken between check and create (attempt ${createAttempt + 1}/${maxCreateAttempts}), retrying...`,
+          );
+          continue; // Retry with a new handle
+        }
+
+        // Not a handle collision or exhausted retries - re-throw
+        throw error;
+      }
+    }
+
+    // Should not reach here, but just in case
+    throw new Error(
+      `Failed to create PDS account after ${maxCreateAttempts} attempts`,
+    );
+  }
+
+  /**
+   * Generate a unique AT Protocol handle for a user.
+   *
+   * Tries the base slug first, then appends incrementing numbers if taken.
+   * Truncates long slugs to fit PDS handle length limits (18 chars for first segment).
+   *
+   * @param baseSlug - The user's slug to base the handle on
+   * @returns A unique handle
+   * @throws Error if baseSlug is empty/invalid or no available handle found
+   */
+  private async generateUniqueHandle(baseSlug: string): Promise<string> {
+    // Validate slug input
+    if (!baseSlug || typeof baseSlug !== 'string') {
+      throw new Error('Cannot generate handle: slug is required');
+    }
+
+    const trimmedSlug = baseSlug.trim();
+    if (trimmedSlug.length === 0) {
+      throw new Error('Cannot generate handle: slug cannot be empty');
+    }
+
+    const handleDomain =
+      this.configService.get('pds.serviceHandleDomains', { infer: true }) ||
+      '.opnmt.me';
+
+    // PDS limits first segment (before domain) to 18 characters
+    // Reserve 2 chars for collision suffix (supports up to 99 collisions)
+    const maxFirstSegment = 18;
+    const collisionSuffixReserve = 2;
+    const maxSlugLength = maxFirstSegment - collisionSuffixReserve;
+
+    // Truncate slug if too long, ensuring it doesn't end with a hyphen
+    let truncatedSlug =
+      trimmedSlug.length > maxSlugLength
+        ? trimmedSlug.slice(0, maxSlugLength)
+        : trimmedSlug;
+    truncatedSlug = truncatedSlug.replace(/-+$/, ''); // Remove trailing hyphens
+
+    // Final validation after truncation
+    if (truncatedSlug.length === 0) {
+      throw new Error(
+        'Cannot generate handle: slug results in empty string after processing',
+      );
+    }
+
+    let handle = `${truncatedSlug}${handleDomain}`;
+    let attempt = 0;
+    const maxAttempts = 99; // Safety limit - matches 2-char collision suffix reserve
+
+    while (attempt < maxAttempts) {
+      try {
+        const isAvailable =
+          await this.pdsAccountService.isHandleAvailable(handle);
+        if (isAvailable) {
+          return handle;
+        }
+      } catch (error) {
+        // If handle check fails, throw to let outer handler deal with it
+        throw error;
+      }
+
+      attempt++;
+      handle = `${truncatedSlug}${attempt}${handleDomain}`;
+    }
+
+    // If we exhausted attempts, throw
+    throw new Error(
+      `Could not find available handle after ${maxAttempts} attempts`,
+    );
   }
 }
