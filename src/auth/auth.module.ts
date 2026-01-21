@@ -21,6 +21,8 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { TempAuthCodeService } from './services/temp-auth-code.service';
 import { EmailVerificationCodeService } from './services/email-verification-code.service';
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
+import { PdsModule } from '../pds/pds.module';
+import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 @Module({
   imports: [
     forwardRef(() => UserModule),
@@ -38,6 +40,8 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
     forwardRef(() => AuthBlueskyModule),
     forwardRef(() => ShadowAccountModule),
     ElastiCacheModule,
+    PdsModule,
+    UserAtprotoIdentityModule,
   ],
   controllers: [AuthController],
   providers: [

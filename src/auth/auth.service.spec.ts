@@ -19,6 +19,9 @@ import { AuthProvidersEnum } from './auth-providers.enum';
 import { TempAuthCodeService } from './services/temp-auth-code.service';
 import { EmailVerificationCodeService } from './services/email-verification-code.service';
 import { EventRoleService } from '../event-role/event-role.service';
+import { PdsAccountService } from '../pds/pds-account.service';
+import { PdsCredentialService } from '../pds/pds-credential.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -49,6 +52,7 @@ describe('AuthService', () => {
 
   const mockConfigService = {
     getOrThrow: jest.fn(),
+    get: jest.fn(),
   };
 
   const mockGroupService = {
@@ -95,6 +99,22 @@ describe('AuthService', () => {
     findByName: jest.fn(),
   };
 
+  const mockPdsAccountService = {
+    createAccount: jest.fn(),
+    isHandleAvailable: jest.fn(),
+  };
+
+  const mockPdsCredentialService = {
+    encrypt: jest.fn(),
+    decrypt: jest.fn(),
+  };
+
+  const mockUserAtprotoIdentityService = {
+    findByUserUlid: jest.fn(),
+    findByDid: jest.fn(),
+    create: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -121,6 +141,12 @@ describe('AuthService', () => {
         {
           provide: EmailVerificationCodeService,
           useValue: mockEmailVerificationCodeService,
+        },
+        { provide: PdsAccountService, useValue: mockPdsAccountService },
+        { provide: PdsCredentialService, useValue: mockPdsCredentialService },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: mockUserAtprotoIdentityService,
         },
         { provide: REQUEST, useValue: mockRequest },
       ],
@@ -674,6 +700,429 @@ describe('AuthService', () => {
       expect(result).toBeNull();
       // Should not call resolveBlueskyHandle when user is null
       expect(mockUserService.resolveBlueskyHandle).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('validateSocialLogin - PDS Account Auto-Creation', () => {
+    const mockGoogleUser = {
+      id: 42,
+      ulid: '01HXY1234567890ABCDEFGH',
+      email: 'test@gmail.com',
+      firstName: 'Test',
+      lastName: 'User',
+      socialId: 'google-social-id-123',
+      provider: AuthProvidersEnum.google,
+      isShadowAccount: false,
+      role: { id: 2, name: 'user' },
+      slug: 'test-user',
+    };
+
+    const mockGitHubUser = {
+      ...mockGoogleUser,
+      id: 43,
+      email: 'test@github.com',
+      socialId: 'github-social-id-456',
+      provider: AuthProvidersEnum.github,
+      slug: 'github-user',
+    };
+
+    const mockBlueskyUser = {
+      id: 44,
+      ulid: '01HXY1234567890ABCDEFGJ',
+      email: 'test@bsky.app',
+      firstName: 'Bsky',
+      lastName: 'User',
+      socialId: 'did:plc:bsky123',
+      provider: AuthProvidersEnum.bluesky,
+      isShadowAccount: false,
+      role: { id: 2, name: 'user' },
+      slug: 'bsky-user',
+    };
+
+    const mockGoogleSocialData = {
+      id: 'google-social-id-123',
+      email: 'test@gmail.com',
+      firstName: 'Test',
+      lastName: 'User',
+    };
+
+    const mockGitHubSocialData = {
+      id: 'github-social-id-456',
+      email: 'test@github.com',
+      firstName: 'Test',
+      lastName: 'User',
+    };
+
+    const mockBlueskyData = {
+      id: 'did:plc:bsky123',
+      email: 'test@bsky.app',
+      firstName: 'Bsky',
+      lastName: 'User',
+    };
+
+    beforeEach(() => {
+      // Default setup for successful login
+      mockJwtService.signAsync.mockResolvedValue('mock-jwt-token');
+      mockConfigService.getOrThrow.mockReturnValue('15m');
+      // Mock PDS config values
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'pds.url') return 'https://pds.openmeet.net';
+        if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
+        return undefined;
+      });
+      mockUserService.findById.mockResolvedValue(mockGoogleUser);
+    });
+
+    describe('Google OAuth Login - PDS Account Creation', () => {
+      it('should create custodial PDS account when Google user has no AT identity', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        mockPdsAccountService.createAccount.mockResolvedValue({
+          did: 'did:plc:newdid123',
+          handle: 'test-user.opnmt.me',
+          accessJwt: 'access-jwt',
+          refreshJwt: 'refresh-jwt',
+        });
+        mockPdsCredentialService.encrypt.mockReturnValue('encrypted-password');
+        mockUserAtprotoIdentityService.create.mockResolvedValue({
+          id: 1,
+          userUlid: mockGoogleUser.ulid,
+          did: 'did:plc:newdid123',
+          handle: 'test-user.opnmt.me',
+          pdsUrl: 'https://pds.openmeet.net',
+          pdsCredentials: 'encrypted-password',
+          isCustodial: true,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert
+        expect(
+          mockUserAtprotoIdentityService.findByUserUlid,
+        ).toHaveBeenCalledWith('test-tenant', mockGoogleUser.ulid);
+        expect(mockPdsAccountService.createAccount).toHaveBeenCalled();
+        expect(mockPdsCredentialService.encrypt).toHaveBeenCalled();
+        expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+          'test-tenant',
+          expect.objectContaining({
+            userUlid: mockGoogleUser.ulid,
+            did: 'did:plc:newdid123',
+            handle: 'test-user.opnmt.me',
+            isCustodial: true,
+          }),
+        );
+        expect(result).toHaveProperty('token');
+        expect(result).toHaveProperty('user');
+      });
+
+      it('should skip PDS creation if Google user already has AT identity', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue({
+          id: 1,
+          userUlid: mockGoogleUser.ulid,
+          did: 'did:plc:existingdid',
+          handle: 'existing.opnmt.me',
+          pdsUrl: 'https://pds.openmeet.net',
+          isCustodial: true,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert
+        expect(
+          mockUserAtprotoIdentityService.findByUserUlid,
+        ).toHaveBeenCalled();
+        expect(mockPdsAccountService.createAccount).not.toHaveBeenCalled();
+        expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+        expect(result).toHaveProperty('token');
+      });
+    });
+
+    describe('GitHub OAuth Login - PDS Account Creation', () => {
+      it('should create custodial PDS account when GitHub user has no AT identity', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGitHubUser);
+        mockUserService.findById.mockResolvedValue(mockGitHubUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        mockPdsAccountService.createAccount.mockResolvedValue({
+          did: 'did:plc:githubdid',
+          handle: 'github-user.opnmt.me',
+          accessJwt: 'access-jwt',
+          refreshJwt: 'refresh-jwt',
+        });
+        mockPdsCredentialService.encrypt.mockReturnValue('encrypted-password');
+        mockUserAtprotoIdentityService.create.mockResolvedValue({
+          id: 2,
+          userUlid: mockGitHubUser.ulid,
+          did: 'did:plc:githubdid',
+          handle: 'github-user.opnmt.me',
+          pdsUrl: 'https://pds.openmeet.net',
+          pdsCredentials: 'encrypted-password',
+          isCustodial: true,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.github,
+          mockGitHubSocialData,
+          'test-tenant',
+        );
+
+        // Assert
+        expect(mockPdsAccountService.createAccount).toHaveBeenCalled();
+        expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+          'test-tenant',
+          expect.objectContaining({
+            isCustodial: true,
+          }),
+        );
+        expect(result).toHaveProperty('token');
+      });
+    });
+
+    describe('Bluesky OAuth Login - Link Existing DID', () => {
+      it('should link existing DID when Bluesky user logs in without custodial account', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockBlueskyUser);
+        mockUserService.findById.mockResolvedValue(mockBlueskyUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockUserAtprotoIdentityService.create.mockResolvedValue({
+          id: 3,
+          userUlid: mockBlueskyUser.ulid,
+          did: 'did:plc:bsky123',
+          handle: null,
+          pdsUrl: 'https://bsky.social',
+          pdsCredentials: null,
+          isCustodial: false,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.bluesky,
+          mockBlueskyData,
+          'test-tenant',
+        );
+
+        // Assert
+        expect(
+          mockUserAtprotoIdentityService.findByUserUlid,
+        ).toHaveBeenCalled();
+        // Should NOT create a custodial PDS account for Bluesky users
+        expect(mockPdsAccountService.createAccount).not.toHaveBeenCalled();
+        // Should link their existing DID with isCustodial: false
+        expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+          'test-tenant',
+          expect.objectContaining({
+            did: 'did:plc:bsky123',
+            isCustodial: false,
+          }),
+        );
+        expect(result).toHaveProperty('token');
+      });
+
+      it('should skip identity creation if Bluesky user already has AT identity', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockBlueskyUser);
+        mockUserService.findById.mockResolvedValue(mockBlueskyUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue({
+          id: 3,
+          userUlid: mockBlueskyUser.ulid,
+          did: 'did:plc:bsky123',
+          isCustodial: false,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.bluesky,
+          mockBlueskyData,
+          'test-tenant',
+        );
+
+        // Assert
+        expect(mockPdsAccountService.createAccount).not.toHaveBeenCalled();
+        expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+        expect(result).toHaveProperty('token');
+      });
+    });
+
+    describe('Handle Collision Avoidance', () => {
+      it('should append number to handle when initial handle is taken', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        // First handle check returns false (taken), second returns true (available)
+        mockPdsAccountService.isHandleAvailable
+          .mockResolvedValueOnce(false)
+          .mockResolvedValueOnce(true);
+        mockPdsAccountService.createAccount.mockResolvedValue({
+          did: 'did:plc:newdid123',
+          handle: 'test-user1.opnmt.me',
+          accessJwt: 'access-jwt',
+          refreshJwt: 'refresh-jwt',
+        });
+        mockPdsCredentialService.encrypt.mockReturnValue('encrypted-password');
+        mockUserAtprotoIdentityService.create.mockResolvedValue({
+          id: 1,
+          userUlid: mockGoogleUser.ulid,
+          did: 'did:plc:newdid123',
+          handle: 'test-user1.opnmt.me',
+          isCustodial: true,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert
+        expect(mockPdsAccountService.isHandleAvailable).toHaveBeenCalledTimes(
+          2,
+        );
+        expect(result).toHaveProperty('token');
+      });
+    });
+
+    describe('Handle Length Truncation', () => {
+      it('should truncate long slugs to fit PDS handle length limit', async () => {
+        // Arrange - Create user with a long slug
+        const userWithLongSlug = {
+          ...mockGoogleUser,
+          slug: 'very-long-username-that-exceeds-limit', // 38 chars, way over limit
+        };
+        mockUserService.findOrCreateUser.mockResolvedValue(userWithLongSlug);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        // With domain '.opnmt.me' (9 chars) and max 27 chars total, max slug is 16 chars
+        // 'very-long-username-that-exceeds-limit' truncated to 16 chars = 'very-long-userna'
+        // After removing trailing hyphen = 'very-long-userna'
+        mockPdsAccountService.createAccount.mockResolvedValue({
+          did: 'did:plc:truncated123',
+          handle: 'very-long-userna.opnmt.me',
+          accessJwt: 'access-jwt',
+          refreshJwt: 'refresh-jwt',
+        });
+        mockPdsCredentialService.encrypt.mockReturnValue('encrypted-password');
+        mockUserAtprotoIdentityService.create.mockResolvedValue({
+          id: 1,
+          userUlid: userWithLongSlug.ulid,
+          did: 'did:plc:truncated123',
+          handle: 'very-long-userna.opnmt.me',
+          isCustodial: true,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Handle should be truncated
+        expect(mockPdsAccountService.isHandleAvailable).toHaveBeenCalledWith(
+          expect.stringMatching(/^very-long-userna\.opnmt\.me$/),
+        );
+        expect(result).toHaveProperty('token');
+      });
+
+      it('should remove trailing hyphens after truncation', async () => {
+        // Arrange - Create user with slug that ends with hyphen after truncation
+        const userWithHyphenSlug = {
+          ...mockGoogleUser,
+          slug: 'my-super-long---username', // After 16 char truncation: 'my-super-long---'
+        };
+        mockUserService.findOrCreateUser.mockResolvedValue(userWithHyphenSlug);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        mockPdsAccountService.createAccount.mockResolvedValue({
+          did: 'did:plc:nohyphen123',
+          handle: 'my-super-long.opnmt.me', // Trailing hyphens removed
+          accessJwt: 'access-jwt',
+          refreshJwt: 'refresh-jwt',
+        });
+        mockPdsCredentialService.encrypt.mockReturnValue('encrypted-password');
+        mockUserAtprotoIdentityService.create.mockResolvedValue({
+          id: 1,
+          userUlid: userWithHyphenSlug.ulid,
+          did: 'did:plc:nohyphen123',
+          handle: 'my-super-long.opnmt.me',
+          isCustodial: true,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Trailing hyphens should be removed
+        expect(mockPdsAccountService.isHandleAvailable).toHaveBeenCalledWith(
+          expect.stringMatching(/^my-super-long\.opnmt\.me$/),
+        );
+        expect(result).toHaveProperty('token');
+      });
+    });
+
+    describe('PDS Unavailable - Graceful Degradation', () => {
+      it('should succeed login even if PDS is unavailable', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        // PDS account creation fails
+        mockPdsAccountService.createAccount.mockRejectedValue(
+          new Error('PDS connection failed'),
+        );
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Login should still succeed
+        expect(result).toHaveProperty('token');
+        expect(result).toHaveProperty('user');
+        // AT identity should NOT be created since PDS account creation failed
+        expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+      });
+
+      it('should log warning when PDS creation fails but continue with login', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockRejectedValue(
+          new Error('Network error'),
+        );
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Login should still succeed
+        expect(result).toHaveProperty('token');
+        expect(result).toHaveProperty('user');
+      });
     });
   });
 });
