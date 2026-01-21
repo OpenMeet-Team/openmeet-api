@@ -1509,12 +1509,11 @@ export class AuthService {
       this.configService.get('pds.serviceHandleDomains', { infer: true }) ||
       '.opnmt.me';
 
-    // PDS has a max handle length of 27 characters
+    // PDS limits first segment (before domain) to 18 characters
     // Reserve 2 chars for collision suffix (supports up to 99 collisions)
-    const maxHandleLength = 27;
+    const maxFirstSegment = 18;
     const collisionSuffixReserve = 2;
-    const maxSlugLength =
-      maxHandleLength - handleDomain.length - collisionSuffixReserve;
+    const maxSlugLength = maxFirstSegment - collisionSuffixReserve;
 
     // Truncate slug if too long, ensuring it doesn't end with a hyphen
     let truncatedSlug =
