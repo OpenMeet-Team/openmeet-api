@@ -1149,7 +1149,7 @@ describe('AuthService', () => {
     });
 
     describe('Bluesky Profile Resolution - Graceful Degradation', () => {
-      it('should still link identity when profile resolution fails', async () => {
+      it('should skip identity creation when profile resolution fails but login still succeeds', async () => {
         // Arrange
         mockUserService.findOrCreateUser.mockResolvedValue(mockBlueskyUser);
         mockUserService.findById.mockResolvedValue(mockBlueskyUser);
@@ -1158,15 +1158,6 @@ describe('AuthService', () => {
         mockBlueskyIdentityService.resolveProfile.mockRejectedValue(
           new Error('Network timeout'),
         );
-        mockUserAtprotoIdentityService.create.mockResolvedValue({
-          id: 3,
-          userUlid: mockBlueskyUser.ulid,
-          did: 'did:plc:bsky123',
-          handle: null,
-          pdsUrl: null,
-          pdsCredentials: null,
-          isCustodial: false,
-        });
 
         // Act
         const result = await authService.validateSocialLogin(
@@ -1175,16 +1166,10 @@ describe('AuthService', () => {
           'test-tenant',
         );
 
-        // Assert - Login should still succeed with null handle
+        // Assert - Login should still succeed, but identity creation is skipped
+        // (can't create valid AT Protocol identity without PDS URL from profile resolution)
         expect(result).toHaveProperty('token');
-        expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
-          'test-tenant',
-          expect.objectContaining({
-            did: 'did:plc:bsky123',
-            handle: null, // Handle is null when resolution fails
-            isCustodial: false,
-          }),
-        );
+        expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
       });
     });
 
