@@ -218,6 +218,7 @@ export class BlueskyIdentityService {
   async resolveProfile(handleOrDid: string): Promise<{
     did: string;
     handle: string;
+    pdsUrl: string;
     displayName?: string;
     avatar?: string;
     followersCount?: number;
@@ -356,6 +357,7 @@ export class BlueskyIdentityService {
           return {
             did: response.data.did,
             handle: resolvedHandle,
+            pdsUrl: pdsEndpoint,
             displayName: response.data.displayName,
             avatar: response.data.avatar,
             followersCount: response.data.followersCount || 0,

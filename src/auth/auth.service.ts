@@ -1435,33 +1435,31 @@ export class AuthService {
     // socialData.id is the DID for Bluesky users
     const did = socialData.id;
 
-    // Resolve PDS URL from DID document to support users on any PDS
+    // Resolve PDS URL and handle from DID document to support users on any PDS
     let pdsUrl: string | null = null;
     let handle: string | null = null;
 
     try {
       const profile = await this.blueskyIdentityService.resolveProfile(did);
-      // The resolveProfile method extracts PDS URL internally but doesn't return it
-      // We'll use a default for now but the handle is resolved
+      pdsUrl = profile.pdsUrl;
       handle = profile.handle !== did ? profile.handle : null;
 
-      // For now, we store the handle but not the PDS URL since resolveProfile
-      // doesn't expose it. This is acceptable for non-custodial accounts.
       this.logger.debug(
-        `Resolved Bluesky profile for ${did}: handle=${handle}`,
+        `Resolved Bluesky profile for ${did}: handle=${handle}, pdsUrl=${pdsUrl}`,
       );
     } catch (error) {
       this.logger.warn(
         `Could not resolve Bluesky profile for ${did}: ${error.message}`,
       );
-      // Continue without resolved handle - we still have the DID
+      // Cannot link identity without PDS URL - it's required for valid AT Protocol identity
+      return;
     }
 
     await this.userAtprotoIdentityService.create(tenantId, {
       userUlid: user.ulid,
       did,
       handle, // Resolved handle from their PDS
-      pdsUrl, // null for now - can be resolved when needed via DID resolution
+      pdsUrl, // Resolved from DID document
       pdsCredentials: null, // Non-custodial - no credentials
       isCustodial: false,
     });
