@@ -1492,7 +1492,19 @@ export class AuthService {
     const email = user.email || `${user.ulid}@openmeet.net`;
     const maxCreateAttempts = 5; // Retry a few times for race conditions
 
-    for (let createAttempt = 0; createAttempt < maxCreateAttempts; createAttempt++) {
+    // Validate user has a slug before proceeding
+    if (!user.slug) {
+      this.logger.warn(
+        `User ${user.id} has no slug - skipping custodial PDS account creation`,
+      );
+      return;
+    }
+
+    for (
+      let createAttempt = 0;
+      createAttempt < maxCreateAttempts;
+      createAttempt++
+    ) {
       // Generate unique handle (checks availability)
       const handle = await this.generateUniqueHandle(user.slug);
 
@@ -1526,11 +1538,14 @@ export class AuthService {
         return; // Success - exit the retry loop
       } catch (error) {
         // Check if this is a "handle taken" error (race condition)
+        // Be specific to avoid masking other 400 errors
         const isHandleTaken =
           error instanceof PdsApiError &&
           (error.atError === 'HandleNotAvailable' ||
-            error.message?.toLowerCase().includes('handle') ||
-            error.statusCode === 400);
+            error.atError === 'HandleAlreadyExists' ||
+            (error.message?.toLowerCase().includes('handle') &&
+              (error.message?.toLowerCase().includes('taken') ||
+                error.message?.toLowerCase().includes('available'))));
 
         if (isHandleTaken && createAttempt < maxCreateAttempts - 1) {
           this.logger.warn(
@@ -1597,7 +1612,7 @@ export class AuthService {
 
     let handle = `${truncatedSlug}${handleDomain}`;
     let attempt = 0;
-    const maxAttempts = 100; // Safety limit
+    const maxAttempts = 99; // Safety limit - matches 2-char collision suffix reserve
 
     while (attempt < maxAttempts) {
       try {

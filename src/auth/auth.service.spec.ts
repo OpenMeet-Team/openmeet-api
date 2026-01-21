@@ -1102,6 +1102,31 @@ describe('AuthService', () => {
       });
     });
 
+    describe('PDS Not Configured', () => {
+      it('should skip PDS account creation when PDS_URL is not configured', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'pds.url') return undefined; // PDS not configured
+          if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
+          return undefined;
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Login should succeed but no PDS account created
+        expect(result).toHaveProperty('token');
+        expect(mockPdsAccountService.createAccount).not.toHaveBeenCalled();
+        expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+      });
+    });
+
     describe('PDS Unavailable - Graceful Degradation', () => {
       it('should succeed login even if PDS is unavailable', async () => {
         // Arrange
