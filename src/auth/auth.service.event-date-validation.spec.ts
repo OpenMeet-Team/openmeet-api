@@ -21,6 +21,7 @@ import { RoleEnum } from '../role/role.enum';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 
 describe('AuthService - Event Date Validation for RSVP', () => {
   let service: AuthService;
@@ -112,6 +113,10 @@ describe('AuthService - Event Date Validation for RSVP', () => {
         },
         {
           provide: UserAtprotoIdentityService,
+          useValue: {},
+        },
+        {
+          provide: BlueskyIdentityService,
           useValue: {},
         },
         {

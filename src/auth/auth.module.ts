@@ -23,6 +23,7 @@ import { EmailVerificationCodeService } from './services/email-verification-code
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
 import { PdsModule } from '../pds/pds.module';
 import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
+import { BlueskyModule } from '../bluesky/bluesky.module';
 @Module({
   imports: [
     forwardRef(() => UserModule),
@@ -42,6 +43,7 @@ import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto
     ElastiCacheModule,
     PdsModule,
     UserAtprotoIdentityModule,
+    forwardRef(() => BlueskyModule),
   ],
   controllers: [AuthController],
   providers: [

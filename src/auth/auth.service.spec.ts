@@ -22,6 +22,8 @@ import { EventRoleService } from '../event-role/event-role.service';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { PdsApiError } from '../pds/pds.errors';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -115,6 +117,12 @@ describe('AuthService', () => {
     create: jest.fn(),
   };
 
+  const mockBlueskyIdentityService = {
+    resolveProfile: jest.fn(),
+    resolveHandleToDid: jest.fn(),
+    extractHandleFromDid: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -147,6 +155,10 @@ describe('AuthService', () => {
         {
           provide: UserAtprotoIdentityService,
           useValue: mockUserAtprotoIdentityService,
+        },
+        {
+          provide: BlueskyIdentityService,
+          useValue: mockBlueskyIdentityService,
         },
         { provide: REQUEST, useValue: mockRequest },
       ],
@@ -900,12 +912,18 @@ describe('AuthService', () => {
         mockUserService.findOrCreateUser.mockResolvedValue(mockBlueskyUser);
         mockUserService.findById.mockResolvedValue(mockBlueskyUser);
         mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        // Mock profile resolution to return handle
+        mockBlueskyIdentityService.resolveProfile.mockResolvedValue({
+          did: 'did:plc:bsky123',
+          handle: 'bsky-user.bsky.social',
+          displayName: 'Bsky User',
+        });
         mockUserAtprotoIdentityService.create.mockResolvedValue({
           id: 3,
           userUlid: mockBlueskyUser.ulid,
           did: 'did:plc:bsky123',
-          handle: null,
-          pdsUrl: 'https://bsky.social',
+          handle: 'bsky-user.bsky.social',
+          pdsUrl: null,
           pdsCredentials: null,
           isCustodial: false,
         });
@@ -921,13 +939,18 @@ describe('AuthService', () => {
         expect(
           mockUserAtprotoIdentityService.findByUserUlid,
         ).toHaveBeenCalled();
+        // Should resolve the profile to get the handle
+        expect(mockBlueskyIdentityService.resolveProfile).toHaveBeenCalledWith(
+          'did:plc:bsky123',
+        );
         // Should NOT create a custodial PDS account for Bluesky users
         expect(mockPdsAccountService.createAccount).not.toHaveBeenCalled();
-        // Should link their existing DID with isCustodial: false
+        // Should link their existing DID with isCustodial: false and resolved handle
         expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
           'test-tenant',
           expect.objectContaining({
             did: 'did:plc:bsky123',
+            handle: 'bsky-user.bsky.social',
             isCustodial: false,
           }),
         );
@@ -1122,6 +1145,87 @@ describe('AuthService', () => {
         // Assert - Login should still succeed
         expect(result).toHaveProperty('token');
         expect(result).toHaveProperty('user');
+      });
+    });
+
+    describe('Bluesky Profile Resolution - Graceful Degradation', () => {
+      it('should still link identity when profile resolution fails', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockBlueskyUser);
+        mockUserService.findById.mockResolvedValue(mockBlueskyUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        // Mock profile resolution to fail
+        mockBlueskyIdentityService.resolveProfile.mockRejectedValue(
+          new Error('Network timeout'),
+        );
+        mockUserAtprotoIdentityService.create.mockResolvedValue({
+          id: 3,
+          userUlid: mockBlueskyUser.ulid,
+          did: 'did:plc:bsky123',
+          handle: null,
+          pdsUrl: null,
+          pdsCredentials: null,
+          isCustodial: false,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.bluesky,
+          mockBlueskyData,
+          'test-tenant',
+        );
+
+        // Assert - Login should still succeed with null handle
+        expect(result).toHaveProperty('token');
+        expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+          'test-tenant',
+          expect.objectContaining({
+            did: 'did:plc:bsky123',
+            handle: null, // Handle is null when resolution fails
+            isCustodial: false,
+          }),
+        );
+      });
+    });
+
+    describe('Race Condition Retry', () => {
+      it('should retry when handle is taken between check and create', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        // First handle check returns available
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        // First create fails with handle taken error, second succeeds
+        mockPdsAccountService.createAccount
+          .mockRejectedValueOnce(
+            new PdsApiError('Handle not available', 400, 'HandleNotAvailable'),
+          )
+          .mockResolvedValueOnce({
+            did: 'did:plc:newdid123',
+            handle: 'test-user1.opnmt.me',
+            accessJwt: 'access-jwt',
+            refreshJwt: 'refresh-jwt',
+          });
+        mockPdsCredentialService.encrypt.mockReturnValue('encrypted-password');
+        mockUserAtprotoIdentityService.create.mockResolvedValue({
+          id: 1,
+          userUlid: mockGoogleUser.ulid,
+          did: 'did:plc:newdid123',
+          handle: 'test-user1.opnmt.me',
+          isCustodial: true,
+        });
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Should have retried and succeeded
+        expect(mockPdsAccountService.createAccount).toHaveBeenCalledTimes(2);
+        expect(result).toHaveProperty('token');
+        expect(mockUserAtprotoIdentityService.create).toHaveBeenCalled();
       });
     });
   });
