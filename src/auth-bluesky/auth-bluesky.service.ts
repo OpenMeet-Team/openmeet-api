@@ -8,7 +8,9 @@ import { AuthService } from '../auth/auth.service';
 import { OAuthPlatform } from '../auth/types/oauth.types';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { UserService } from '../user/user.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
@@ -22,6 +24,8 @@ export class AuthBlueskyService {
     private authService: AuthService,
     private elasticacheService: ElastiCacheService,
     private blueskyService: BlueskyService,
+    private blueskyIdentityService: BlueskyIdentityService,
+    private userAtprotoIdentityService: UserAtprotoIdentityService,
     private moduleRef: ModuleRef,
   ) {}
 
@@ -247,6 +251,25 @@ export class AuthBlueskyService {
     );
     this.logger.debug('Social login validated:', { loginResponse, tenantId });
 
+    // Ensure AT Protocol identity record exists for Bluesky user
+    // This backfills existing users and creates records for new users
+    if (loginResponse.user?.ulid && profileData.did) {
+      // Try to get the PDS URL from the session, otherwise resolve it
+      // The restoredSession's serviceUrl contains the PDS URL
+      const pdsUrl =
+        (restoredSession as any).pdsUrl ||
+        (restoredSession as any).serviceUrl?.toString() ||
+        (await this.resolvePdsUrlFromDid(profileData.did));
+
+      await this.ensureAtprotoIdentityRecord(
+        tenantId,
+        loginResponse.user.ulid,
+        profileData.did,
+        profileData.handle,
+        pdsUrl,
+      );
+    }
+
     // Only send minimal data in callback URL to avoid 414 Request-URI Too Large errors
     // The frontend will call /auth/me to get full user data with permissions
     const newParams = new URLSearchParams({
@@ -352,5 +375,100 @@ export class AuthBlueskyService {
       await this.elasticacheService.del(`auth:bluesky:platform:${state}`);
     }
     return platform as OAuthPlatform | undefined;
+  }
+
+  /**
+   * Ensure an AT Protocol identity record exists for a Bluesky user.
+   * Creates a non-custodial identity record if one doesn't exist.
+   *
+   * This is called during login to backfill existing Bluesky users
+   * who don't yet have an entry in userAtprotoIdentities.
+   *
+   * @param tenantId - The tenant ID
+   * @param userUlid - The user's ULID
+   * @param did - The user's DID (decentralized identifier)
+   * @param handle - The user's Bluesky handle (can be null)
+   * @param pdsUrl - The URL of the user's PDS
+   */
+  async ensureAtprotoIdentityRecord(
+    tenantId: string,
+    userUlid: string,
+    did: string,
+    handle: string | null,
+    pdsUrl: string,
+  ): Promise<void> {
+    try {
+      // Check if record already exists
+      const existingIdentity =
+        await this.userAtprotoIdentityService.findByUserUlid(
+          tenantId,
+          userUlid,
+        );
+
+      if (existingIdentity) {
+        this.logger.debug('AT Protocol identity record already exists', {
+          userUlid,
+          did,
+        });
+        return;
+      }
+
+      // Create new identity record for Bluesky user (non-custodial)
+      this.logger.debug(
+        'Creating AT Protocol identity record for Bluesky user',
+        {
+          userUlid,
+          did,
+          handle,
+          pdsUrl,
+        },
+      );
+
+      await this.userAtprotoIdentityService.create(tenantId, {
+        userUlid,
+        did,
+        handle,
+        pdsUrl,
+        isCustodial: false,
+        pdsCredentials: null,
+      });
+
+      this.logger.log('Created AT Protocol identity record for Bluesky user', {
+        userUlid,
+        did,
+      });
+    } catch (error) {
+      // Log but don't throw - this is a best-effort operation
+      // The user can still log in even if we fail to create the identity record
+      this.logger.error(
+        'Failed to create AT Protocol identity record for Bluesky user',
+        {
+          userUlid,
+          did,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
+  }
+
+  /**
+   * Resolve the PDS URL for a given DID.
+   * Uses BlueskyIdentityService to resolve the DID document and extract the PDS endpoint.
+   *
+   * @param did - The DID to resolve
+   * @returns The PDS URL, or a fallback URL if resolution fails
+   */
+  async resolvePdsUrlFromDid(did: string): Promise<string> {
+    try {
+      const profile = await this.blueskyIdentityService.resolveProfile(did);
+      return profile.pdsUrl;
+    } catch (error) {
+      this.logger.warn('Failed to resolve PDS URL from DID, using fallback', {
+        did,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Fallback to bsky.social as it's the most common PDS
+      return 'https://bsky.social';
+    }
   }
 }

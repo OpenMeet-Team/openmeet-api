@@ -446,6 +446,12 @@ Planned additions:
 isShadowAccount: boolean; // Whether this is a provisional shadow account
 ```
 
+**Migration Note (Bluesky Users):**
+Existing Bluesky users have their DID stored in both `socialId` and `preferences.bluesky.did`. These users need to be migrated to the `userAtprotoIdentities` table (see Planned item #7: "Bluesky User Migration to userAtprotoIdentities"). After migration:
+- `userAtprotoIdentities` becomes the single source of truth for AT Protocol identity
+- `preferences.bluesky.did` is kept for backward compatibility but considered deprecated
+- `socialId` remains for OAuth provider identification (linking to Bluesky OAuth sessions)
+
 ### 4. UserAtprotoIdentity Entity (New)
 
 Links users to their AT Protocol identity, supporting both custodial (OpenMeet-created) and self-custody (Bluesky) accounts:
@@ -612,7 +618,38 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
    - Firehose subscription for group-related collections
    - UI for enabling AT Protocol on existing groups
 
-7. **Future: Threshold Signing for Groups**
+7. **Bluesky User Migration to userAtprotoIdentities**
+
+   Existing Bluesky users have their AT identity stored in `user.socialId` and `user.preferences.bluesky.did`, but they don't have records in the `userAtprotoIdentities` table. This needs to be addressed for consistency and to enable the unified AT Protocol identity display in the UI.
+
+   **Migration script** (one-time backfill):
+   - Find all users where `provider = 'bluesky'` and `socialId` is set
+   - For each user, resolve their PDS URL from their DID (via `com.atproto.repo.describeRepo`)
+   - Create `userAtprotoIdentities` record:
+     - `did`: from `user.socialId`
+     - `handle`: from `user.preferences.bluesky.handle` (or resolve from DID)
+     - `pdsUrl`: resolved PDS URL
+     - `isCustodial`: `false` (user owns their PDS)
+     - `pdsCredentials`: `null` (we don't have their credentials)
+   - Skip users who already have a record (idempotent)
+
+   **Login-time creation** (for new Bluesky users):
+   - In `auth-bluesky.service.ts`, after successful login/registration
+   - Check if `userAtprotoIdentities` record exists for user
+   - If not, create one with the same logic as migration
+   - This ensures all new Bluesky users get identity records going forward
+
+   **Platform changes**:
+   - Change `AtprotoIdentityCard` visibility from `v-if="!isBlueskyUser"` to `v-if="atprotoIdentity"`
+   - Remove the legacy "Bluesky integration section" toggle (sync will be automatic)
+   - All users with AT identities see the same unified identity card
+
+   **Data consistency**:
+   - After migration, `userAtprotoIdentities` becomes the single source of truth for AT identity
+   - `user.preferences.bluesky.did` can be deprecated (but kept for backward compatibility)
+   - `user.socialId` remains for OAuth provider identification
+
+8. **Future: Threshold Signing for Groups**
    - FROST threshold signature integration for group key management
    - M-of-N leader approval for group operations
    - Signing ceremony coordination service
@@ -1169,6 +1206,35 @@ User logs in with Google
               ├── Store in userAtprotoIdentities (encrypted)
               └── User now has DID, can publish to AT network
 ```
+
+### Bluesky User Identity Records
+
+Bluesky users already have their own AT Protocol identity (their own PDS, DID, and handle). They still need a record in `userAtprotoIdentities` for consistency:
+
+```
+User logs in with Bluesky
+    │
+    ├─► Check: userAtprotoIdentities record exists?
+    │
+    ├─► YES: Update handle/pdsUrl if changed
+    │
+    └─► NO: Create non-custodial identity record
+              │
+              ├── did: from Bluesky OAuth session
+              ├── handle: from Bluesky profile
+              ├── pdsUrl: resolve via com.atproto.repo.describeRepo
+              ├── isCustodial: false (user owns their PDS)
+              ├── pdsCredentials: null (we don't have their password)
+              └── User's existing AT identity is now tracked
+```
+
+**Why track Bluesky users in userAtprotoIdentities?**
+- Unified data model: all users with AT identities in one table
+- Consistent UI: `AtprotoIdentityCard` works for all users
+- Future features: all AT identity operations use one service
+- Deprecates scattered DID storage in `socialId` and `preferences.bluesky.did`
+
+**Migration required:** Existing Bluesky users need backfill (see Planned item #7).
 
 ### Database Schema
 
