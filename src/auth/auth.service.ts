@@ -8,6 +8,7 @@ import {
   Logger,
   Inject,
 } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
 import ms from 'ms';
 import crypto from 'crypto';
 import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
@@ -645,11 +646,15 @@ export class AuthService {
         }
       }
 
-      // Return user with atprotoIdentity
-      return {
-        ...user,
-        atprotoIdentity,
-      };
+      // Return user with atprotoIdentity as a proper class instance
+      // so that @Exclude decorators are applied during serialization.
+      // The groups: ['me'] option is required because some User properties
+      // use @Expose({ groups: ['me'] }) which filters during plainToInstance.
+      return plainToInstance(
+        User,
+        { ...user, atprotoIdentity },
+        { groups: ['me'] },
+      ) as MeResponse;
     } catch (error) {
       this.logger.error('Error in me() method:', {
         userId: userJwtPayload.id,
