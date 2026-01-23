@@ -6,6 +6,8 @@ import { EventQueryService } from '../../event/services/event-query.service';
 import { RecurrencePatternService } from './recurrence-pattern.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
+import { BlueskyService } from '../../bluesky/bluesky.service';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { REQUEST } from '@nestjs/core';
 import { formatInTimeZone } from 'date-fns-tz';
 
@@ -119,6 +121,18 @@ describe('DST Materialization Bug', () => {
           provide: REQUEST,
           useValue: {
             tenantId: mockTenantId,
+          },
+        },
+        {
+          provide: BlueskyService,
+          useValue: {
+            createEventRecord: jest.fn(),
+          },
+        },
+        {
+          provide: BlueskyIdService,
+          useValue: {
+            generateRkey: jest.fn().mockReturnValue('test-rkey'),
           },
         },
       ],
