@@ -19,6 +19,10 @@ export class BackfillBlueskyUserAtprotoIdentities1769176362535
 {
   name = 'BackfillBlueskyUserAtprotoIdentities1769176362535';
 
+  // Disable transaction wrapper - this migration uses best-effort approach
+  // and must continue even if individual user backfills fail
+  transaction = false as const;
+
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
@@ -116,9 +120,11 @@ export class BackfillBlueskyUserAtprotoIdentities1769176362535
               usedFallback = true;
             }
 
-            // Get handle from DID document if not in preferences
-            if (!handle) {
-              handle = getHandle(didDoc);
+            // Always prefer resolved handle from DID document (handles can change)
+            // Fall back to preferences.bluesky.handle only if resolution fails
+            const resolvedHandle = getHandle(didDoc);
+            if (resolvedHandle) {
+              handle = resolvedHandle;
             }
           } else {
             usedFallback = true;
@@ -137,7 +143,7 @@ export class BackfillBlueskyUserAtprotoIdentities1769176362535
             ("userUlid", "did", "handle", "pdsUrl", "pdsCredentials", "isCustodial", "createdAt", "updatedAt")
           VALUES
             ($1, $2, $3, $4, NULL, false, NOW(), NOW())
-          ON CONFLICT ("userUlid") DO NOTHING
+          ON CONFLICT DO NOTHING
           `,
           [user.ulid, user.did, handle || null, pdsUrl],
         );
@@ -172,28 +178,37 @@ export class BackfillBlueskyUserAtprotoIdentities1769176362535
     }
   }
 
-  public down(queryRunner: QueryRunner): Promise<void> {
+  public async down(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
     console.log(
       `\n⚠️  Rolling back Bluesky user identity backfill in ${schema}...`,
     );
 
-    // Remove identity records for non-custodial Bluesky users
-    // Only delete records where isCustodial = false (backfilled records)
-    // Custodial records are created separately and should not be affected
-    return queryRunner
-      .query(
-        `
-      DELETE FROM "${schema}"."userAtprotoIdentities"
-      WHERE "isCustodial" = false
-        AND "pdsCredentials" IS NULL
-    `,
-      )
-      .then((result) => {
-        console.log(
-          `  ✅ Removed ${result?.rowCount || 0} non-custodial identity records`,
-        );
-      });
+    // Only delete identity records that match the migration's criteria:
+    // - Non-custodial (isCustodial = false)
+    // - No credentials (pdsCredentials IS NULL)
+    // - User is a Bluesky provider user with a DID in socialId
+    // This prevents accidentally deleting records created by other flows
+    const result = await queryRunner.query(
+      `
+      DELETE FROM "${schema}"."userAtprotoIdentities" uai
+      WHERE uai."isCustodial" = false
+        AND uai."pdsCredentials" IS NULL
+        AND EXISTS (
+          SELECT 1 FROM "${schema}".users u
+          WHERE u.ulid = uai."userUlid"
+            AND u.provider = 'bluesky'
+            AND u."socialId" IS NOT NULL
+            AND u."socialId" LIKE 'did:%'
+        )
+      `,
+    );
+
+    // TypeORM query() returns [rows, affectedCount] for DELETE
+    const affectedCount = Array.isArray(result) ? result[1] : result?.rowCount || 0;
+    console.log(
+      `  ✅ Removed ${affectedCount} non-custodial Bluesky identity records`,
+    );
   }
 }
