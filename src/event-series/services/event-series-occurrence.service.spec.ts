@@ -718,6 +718,17 @@ describe('EventSeriesOccurrenceService', () => {
         }),
         userId,
       );
+
+      // Verify the returned event contains the Bluesky data (not the stale original)
+      expect(result.sourceType).toBe(EventSourceType.BLUESKY);
+      expect(result.sourceId).toContain('at://');
+      expect(result.sourceData).toEqual(
+        expect.objectContaining({
+          did: testDid,
+          handle: testHandle,
+          rkey: 'test-rkey-123',
+        }),
+      );
     });
 
     it('should NOT publish to Bluesky when template is not a Bluesky event', async () => {
@@ -840,6 +851,92 @@ describe('EventSeriesOccurrenceService', () => {
 
       // Bluesky was attempted
       expect(mockBlueskyService.createEventRecord).toHaveBeenCalled();
+
+      // Event should NOT have Bluesky source info since publish failed
+      expect(result.sourceType).toBeNull();
+      expect(result.sourceId).toBeNull();
+    });
+
+    it('should throw when Bluesky publish succeeds but local DB update fails', async () => {
+      const occurrenceDate = '2025-10-03T15:00:00Z';
+      const date = new Date(occurrenceDate);
+      const seriesSlug = 'test-series';
+      const userId = 1;
+      const testDid = 'did:plc:testuser123';
+      const testHandle = 'testuser.bsky.social';
+
+      // Create a Bluesky-sourced template event
+      const blueskyTemplateEvent = {
+        ...mockTemplateEvent,
+        slug: 'bluesky-template-event',
+        sourceType: EventSourceType.BLUESKY,
+        sourceId: `at://${testDid}/community.lexicon.calendar.event/original-rkey`,
+        sourceData: {
+          did: testDid,
+          handle: testHandle,
+          rkey: 'original-rkey',
+          collection: 'community.lexicon.calendar.event',
+        },
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+      };
+
+      // Setup mocks - series has the template event slug set
+      const blueskyEventSeries = {
+        ...mockEventSeries,
+        templateEventSlug: 'bluesky-template-event',
+      };
+
+      recurrenceService.isDateInRecurrencePattern.mockReturnValue(true);
+      eventSeriesService.findBySlug.mockResolvedValue(blueskyEventSeries);
+      userService.findById.mockResolvedValue(mockUser);
+
+      // Mock template event lookup to return Bluesky event
+      mockEventQueryService.findEventBySlug.mockReset();
+      mockEventQueryService.findEventBySlug.mockImplementation((slug: string) => {
+        if (slug === 'bluesky-template-event') {
+          return Promise.resolve(blueskyTemplateEvent);
+        }
+        return Promise.resolve(mockTemplateEvent);
+      });
+
+      const newOccurrence = {
+        ...blueskyTemplateEvent,
+        id: 2,
+        slug: 'test-event-2',
+        startDate: date,
+        seriesSlug: seriesSlug,
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+        sourceType: null,
+        sourceId: null,
+        sourceData: null,
+      };
+
+      eventManagementService.create.mockResolvedValue(newOccurrence);
+
+      // Mock Bluesky service to SUCCEED
+      mockBlueskyService.createEventRecord.mockReset();
+      mockBlueskyService.createEventRecord.mockResolvedValue({
+        rkey: 'test-rkey-123',
+      });
+
+      // Mock DB update to FAIL - this creates an orphaned Bluesky record
+      eventManagementService.update.mockReset();
+      eventManagementService.update.mockRejectedValue(
+        new Error('Database connection error'),
+      );
+
+      // Execute test - SHOULD throw because this creates data inconsistency
+      await expect(
+        service.materializeOccurrence(seriesSlug, occurrenceDate, userId),
+      ).rejects.toThrow('Database connection error');
+
+      // Verify Bluesky publish was attempted and succeeded
+      expect(mockBlueskyService.createEventRecord).toHaveBeenCalled();
+
+      // Verify update was attempted
+      expect(eventManagementService.update).toHaveBeenCalled();
     });
   });
 

@@ -383,7 +383,7 @@ export class EventSeriesOccurrenceService {
       );
 
       // Create the occurrence
-      const materializedEvent = await this.eventManagementService.create(
+      let materializedEvent = await this.eventManagementService.create(
         createDto,
         userId,
       );
@@ -425,25 +425,43 @@ export class EventSeriesOccurrenceService {
           },
         );
 
+        // Step 1: Create record on Bluesky (graceful failure - API may be unavailable)
+        let rkey: string;
         try {
-          // Create the event record on Bluesky
-          const { rkey } = await this.blueskyService.createEventRecord(
+          const result = await this.blueskyService.createEventRecord(
             materializedEvent,
             did,
             handle,
             tenantId,
           );
-
-          // Build the source ID using the BlueskyIdService
-          const collection = BLUESKY_COLLECTIONS.EVENT;
-          const sourceId = this.blueskyIdService.createUri(
-            did,
-            collection,
-            rkey,
+          rkey = result.rkey;
+        } catch (blueskyApiError) {
+          // Bluesky API failure - log and continue without Bluesky integration
+          // The local event was created successfully
+          this.logger.warn(
+            `[materializeOccurrence] Failed to create event on Bluesky API, continuing without Bluesky integration`,
+            {
+              eventSlug: materializedEvent.slug,
+              seriesSlug: expectedSeriesSlug,
+              tenantId,
+              userId,
+              blueskyDid: did,
+              blueskyHandle: handle,
+              error: blueskyApiError.message,
+              errorType: blueskyApiError.constructor?.name,
+            },
           );
+          return materializedEvent;
+        }
 
-          // Update the event with Bluesky source information
-          await this.eventManagementService.update(
+        // Step 2: Build the source URI (synchronous, should not fail with valid inputs)
+        const collection = BLUESKY_COLLECTIONS.EVENT;
+        const sourceId = this.blueskyIdService.createUri(did, collection, rkey);
+
+        // Step 3: Update local record with Bluesky info
+        // CRITICAL: If this fails after Bluesky success, we have an orphaned record
+        try {
+          materializedEvent = await this.eventManagementService.update(
             materializedEvent.slug,
             {
               sourceType: EventSourceType.BLUESKY,
@@ -467,17 +485,24 @@ export class EventSeriesOccurrenceService {
               rkey,
             },
           );
-        } catch (blueskyError) {
-          // Log the error but don't fail the materialization
-          // The event was created locally, just couldn't be published to Bluesky
-          this.logger.warn(
-            `[materializeOccurrence] Failed to publish materialized event to Bluesky, continuing without Bluesky integration`,
+        } catch (updateError) {
+          // CRITICAL: Bluesky record exists but local DB update failed
+          // This creates an orphaned record on Bluesky that we can't track
+          this.logger.error(
+            `[materializeOccurrence] CRITICAL: Event published to Bluesky but local update failed. Orphaned Bluesky record created.`,
             {
               eventSlug: materializedEvent.slug,
-              error: blueskyError.message,
-              stack: blueskyError.stack,
+              blueskySourceId: sourceId,
+              rkey,
+              did,
+              tenantId,
+              userId,
+              error: updateError.message,
+              stack: updateError.stack,
             },
           );
+          // Re-throw to surface this critical inconsistency
+          throw updateError;
         }
       }
 
