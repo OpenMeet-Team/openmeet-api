@@ -54,6 +54,8 @@ import { PdsCredentialService } from '../pds/pds-credential.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { PdsApiError } from '../pds/pds.errors';
+import { MeResponse } from './dto/me-response.dto';
+import { AtprotoIdentityDto } from '../atproto-identity/dto/atproto-identity.dto';
 
 @Injectable()
 export class AuthService {
@@ -605,18 +607,49 @@ export class AuthService {
     await this.userService.update(user.id, user);
   }
 
-  async me(userJwtPayload: JwtPayloadType): Promise<NullableType<User>> {
+  async me(userJwtPayload: JwtPayloadType): Promise<NullableType<MeResponse>> {
     try {
       const user = await this.userService.findById(userJwtPayload.id);
+
+      if (!user) {
+        return null;
+      }
 
       // Resolve Bluesky handle dynamically if user exists
       // This ensures /auth/me returns current handle, not stale database value
       // See commit c3e042f for design rationale on dynamic handle resolution
-      if (user) {
-        await this.userService.resolveBlueskyHandle(user);
+      await this.userService.resolveBlueskyHandle(user);
+
+      // Get AT Protocol identity if it exists
+      const tenantId = this.request?.tenantId;
+      let atprotoIdentity: AtprotoIdentityDto | null = null;
+
+      if (tenantId && user.ulid) {
+        const identity = await this.userAtprotoIdentityService.findByUserUlid(
+          tenantId,
+          user.ulid,
+        );
+
+        if (identity) {
+          // Map to DTO, explicitly excluding pdsCredentials
+          const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+          atprotoIdentity = {
+            did: identity.did,
+            handle: identity.handle,
+            pdsUrl: identity.pdsUrl,
+            isCustodial: identity.isCustodial,
+            isOurPds: identity.pdsUrl === ourPdsUrl,
+            createdAt: identity.createdAt,
+            updatedAt: identity.updatedAt,
+          };
+        }
       }
 
-      return user;
+      // Return user with atprotoIdentity
+      return {
+        ...user,
+        atprotoIdentity,
+      };
     } catch (error) {
       this.logger.error('Error in me() method:', {
         userId: userJwtPayload.id,

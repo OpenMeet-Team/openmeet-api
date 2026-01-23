@@ -689,6 +689,7 @@ describe('AuthService', () => {
 
       mockUserService.findById.mockResolvedValue(mockUser);
       mockUserService.resolveBlueskyHandle.mockResolvedValue(undefined);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
 
       // Act
       const result = await authService.me(jwtPayload);
@@ -697,7 +698,11 @@ describe('AuthService', () => {
       expect(mockUserService.resolveBlueskyHandle).toHaveBeenCalledWith(
         mockUser,
       );
-      expect(result).toEqual(mockUser);
+      // Result now includes atprotoIdentity field
+      expect(result).toEqual({
+        ...mockUser,
+        atprotoIdentity: null,
+      });
     });
 
     it('should return null when user not found', async () => {
@@ -720,6 +725,112 @@ describe('AuthService', () => {
       expect(result).toBeNull();
       // Should not call resolveBlueskyHandle when user is null
       expect(mockUserService.resolveBlueskyHandle).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('me - AT Protocol Identity', () => {
+    const mockUser = {
+      id: 1,
+      ulid: '01234567890123456789012345',
+      slug: 'test-user',
+      role: { id: 1 },
+    };
+    const jwtPayload = {
+      id: 1,
+      sessionId: 'test-session',
+      role: { id: 1 },
+      slug: 'test-user',
+      tenantId: 'test-tenant',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    };
+
+    it('should include atprotoIdentity when user has one', async () => {
+      // Arrange
+      const mockAtprotoIdentity = {
+        id: 1,
+        userUlid: '01234567890123456789012345',
+        did: 'did:plc:abc123',
+        handle: 'test-user.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+        isCustodial: true,
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+        updatedAt: new Date('2025-01-01T00:00:00Z'),
+      };
+
+      mockUserService.findById.mockResolvedValue(mockUser);
+      mockUserService.resolveBlueskyHandle.mockResolvedValue(undefined);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        mockAtprotoIdentity,
+      );
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'pds.url') return 'https://pds.openmeet.net';
+        return null;
+      });
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(
+        mockUserAtprotoIdentityService.findByUserUlid,
+      ).toHaveBeenCalledWith('test-tenant', mockUser.ulid);
+      expect(result).toHaveProperty('atprotoIdentity');
+      expect(result?.atprotoIdentity).toEqual({
+        did: 'did:plc:abc123',
+        handle: 'test-user.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+        isCustodial: true,
+        isOurPds: true,
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+        updatedAt: new Date('2025-01-01T00:00:00Z'),
+      });
+    });
+
+    it('should set atprotoIdentity to null when user has none', async () => {
+      // Arrange
+      mockUserService.findById.mockResolvedValue(mockUser);
+      mockUserService.resolveBlueskyHandle.mockResolvedValue(undefined);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(result).toHaveProperty('atprotoIdentity');
+      expect(result?.atprotoIdentity).toBeNull();
+    });
+
+    it('should NEVER include pdsCredentials in atprotoIdentity', async () => {
+      // Arrange
+      const mockAtprotoIdentity = {
+        id: 1,
+        userUlid: '01234567890123456789012345',
+        did: 'did:plc:abc123',
+        handle: 'test-user.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+        pdsCredentials: 'super-secret-encrypted-credentials',
+        isCustodial: true,
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+        updatedAt: new Date('2025-01-01T00:00:00Z'),
+      };
+
+      mockUserService.findById.mockResolvedValue(mockUser);
+      mockUserService.resolveBlueskyHandle.mockResolvedValue(undefined);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        mockAtprotoIdentity,
+      );
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'pds.url') return 'https://pds.openmeet.net';
+        return null;
+      });
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(result?.atprotoIdentity).not.toHaveProperty('pdsCredentials');
+      expect(JSON.stringify(result)).not.toContain('super-secret');
     });
   });
 

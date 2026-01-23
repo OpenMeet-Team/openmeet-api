@@ -66,6 +66,7 @@ import { MetaModule } from './meta/meta.module';
 import { TestHelpersModule } from './test-helpers/test-helpers.module';
 import { PdsModule } from './pds/pds.module';
 import { UserAtprotoIdentityModule } from './user-atproto-identity/user-atproto-identity.module';
+import { AtprotoIdentityModule } from './atproto-identity/atproto-identity.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -169,6 +170,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     MetaModule,
     PdsModule,
     UserAtprotoIdentityModule,
+    AtprotoIdentityModule,
     // Conditionally import test helpers only in non-production environments
     ...(process.env.NODE_ENV !== 'production' ? [TestHelpersModule] : []),
   ],
