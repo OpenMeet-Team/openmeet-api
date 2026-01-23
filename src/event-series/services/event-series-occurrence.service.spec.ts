@@ -12,6 +12,10 @@ import { UserService } from '../../user/user.service';
 import { REQUEST } from '@nestjs/core';
 import { Connection } from 'typeorm';
 import { TenantConnectionService } from '../../tenant/tenant.service';
+import { BlueskyService } from '../../bluesky/bluesky.service';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { EventSourceType } from '../../core/constants/source-type.constant';
+import { EventStatus, EventVisibility } from '../../core/constants/constant';
 
 // Define mockUser here
 const mockUser = {
@@ -155,6 +159,18 @@ const mockTenantConnectionService = {
   }),
 };
 
+// Create mock for BlueskyService
+const mockBlueskyService = {
+  createEventRecord: jest.fn().mockResolvedValue({ rkey: 'test-rkey-123' }),
+};
+
+// Create mock for BlueskyIdService
+const mockBlueskyIdService = {
+  createUri: jest.fn().mockImplementation((did, collection, rkey) => {
+    return `at://${did}/${collection}/${rkey}`;
+  }),
+};
+
 describe('EventSeriesOccurrenceService', () => {
   let service: EventSeriesOccurrenceService;
   let module: TestingModule;
@@ -223,6 +239,14 @@ describe('EventSeriesOccurrenceService', () => {
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
+        },
+        {
+          provide: BlueskyService,
+          useValue: mockBlueskyService,
+        },
+        {
+          provide: BlueskyIdService,
+          useValue: mockBlueskyIdService,
         },
       ],
     }).compile();
@@ -581,6 +605,241 @@ describe('EventSeriesOccurrenceService', () => {
       );
 
       expect(result.timeZone).toBe(expectedTimeZone);
+    });
+
+    it('should publish materialized occurrence to Bluesky when template is a Bluesky event', async () => {
+      const occurrenceDate = '2025-10-03T15:00:00Z';
+      const date = new Date(occurrenceDate);
+      const seriesSlug = 'test-series';
+      const userId = 1;
+      const testDid = 'did:plc:testuser123';
+      const testHandle = 'testuser.bsky.social';
+
+      // Create a Bluesky-sourced template event
+      const blueskyTemplateEvent = {
+        ...mockTemplateEvent,
+        slug: 'bluesky-template-event',
+        sourceType: EventSourceType.BLUESKY,
+        sourceId: `at://${testDid}/community.lexicon.calendar.event/original-rkey`,
+        sourceData: {
+          did: testDid,
+          handle: testHandle,
+          rkey: 'original-rkey',
+          collection: 'community.lexicon.calendar.event',
+        },
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+      };
+
+      // Setup mocks - series has the template event slug set
+      const blueskyEventSeries = {
+        ...mockEventSeries,
+        templateEventSlug: 'bluesky-template-event',
+      };
+
+      recurrenceService.isDateInRecurrencePattern.mockReturnValue(true);
+      eventSeriesService.findBySlug.mockResolvedValue(blueskyEventSeries);
+      userService.findById.mockResolvedValue(mockUser);
+
+      // Mock template event lookup to return Bluesky event
+      // First reset the mock completely, then set up the new implementation
+      mockEventQueryService.findEventBySlug.mockReset();
+      mockEventQueryService.findEventBySlug.mockImplementation((slug: string) => {
+        if (slug === 'bluesky-template-event') {
+          return Promise.resolve(blueskyTemplateEvent);
+        }
+        return Promise.resolve(mockTemplateEvent);
+      });
+
+      // Mock the created occurrence - this should have status/visibility from template
+      const newOccurrence = {
+        ...blueskyTemplateEvent,
+        id: 2,
+        slug: 'test-event-2',
+        startDate: date,
+        seriesSlug: seriesSlug,
+        // The created event inherits status/visibility from template
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+        // Initially no sourceType/sourceId (will be set after Bluesky publish)
+        sourceType: null,
+        sourceId: null,
+        sourceData: null,
+      };
+
+      // The final occurrence after Bluesky updates
+      const finalOccurrence = {
+        ...newOccurrence,
+        sourceType: EventSourceType.BLUESKY,
+        sourceId: `at://${testDid}/community.lexicon.calendar.event/test-rkey-123`,
+        sourceData: {
+          did: testDid,
+          handle: testHandle,
+          rkey: 'test-rkey-123',
+          collection: 'community.lexicon.calendar.event',
+        },
+      };
+
+      eventManagementService.create.mockResolvedValue(newOccurrence);
+      eventManagementService.update.mockResolvedValue(finalOccurrence);
+
+      // Reset mocks for this test
+      mockBlueskyService.createEventRecord.mockClear();
+      mockBlueskyIdService.createUri.mockClear();
+
+      // Execute test
+      const result = await service.materializeOccurrence(
+        seriesSlug,
+        occurrenceDate,
+        userId,
+      );
+
+      // Verify template was fetched
+      expect(eventQueryService.findEventBySlug).toHaveBeenCalledWith(
+        'bluesky-template-event',
+      );
+
+      // Verify BlueskyService.createEventRecord was called
+      expect(mockBlueskyService.createEventRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: 'test-event-2',
+        }),
+        testDid,
+        testHandle,
+        'test-tenant-id',
+      );
+
+      // Verify the event was updated with Bluesky source info
+      expect(eventManagementService.update).toHaveBeenCalledWith(
+        'test-event-2',
+        expect.objectContaining({
+          sourceType: EventSourceType.BLUESKY,
+          sourceId: expect.stringContaining('at://'),
+        }),
+        userId,
+      );
+    });
+
+    it('should NOT publish to Bluesky when template is not a Bluesky event', async () => {
+      const occurrenceDate = '2025-10-03T15:00:00Z';
+      const date = new Date(occurrenceDate);
+      const seriesSlug = 'test-series';
+      const userId = 1;
+
+      // Create a non-Bluesky template event (web source)
+      const webTemplateEvent = {
+        ...mockTemplateEvent,
+        sourceType: null,
+        sourceId: null,
+        sourceData: null,
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+      };
+
+      // Setup mocks
+      recurrenceService.isDateInRecurrencePattern.mockReturnValue(true);
+      eventSeriesService.findBySlug.mockResolvedValue(mockEventSeries);
+      userService.findById.mockResolvedValue(mockUser);
+      eventQueryService.findEventBySlug.mockResolvedValueOnce(webTemplateEvent);
+
+      const newOccurrence = {
+        ...webTemplateEvent,
+        id: 2,
+        slug: 'test-event-2',
+        startDate: date,
+        seriesSlug: seriesSlug,
+      };
+
+      eventManagementService.create.mockResolvedValue(newOccurrence);
+
+      // Reset mocks for this test
+      mockBlueskyService.createEventRecord.mockClear();
+
+      // Execute test
+      await service.materializeOccurrence(seriesSlug, occurrenceDate, userId);
+
+      // Verify BlueskyService.createEventRecord was NOT called
+      expect(mockBlueskyService.createEventRecord).not.toHaveBeenCalled();
+    });
+
+    it('should gracefully handle Bluesky publishing failures', async () => {
+      const occurrenceDate = '2025-10-03T15:00:00Z';
+      const date = new Date(occurrenceDate);
+      const seriesSlug = 'test-series';
+      const userId = 1;
+      const testDid = 'did:plc:testuser123';
+      const testHandle = 'testuser.bsky.social';
+
+      // Create a Bluesky-sourced template event
+      const blueskyTemplateEvent = {
+        ...mockTemplateEvent,
+        slug: 'bluesky-template-event',
+        sourceType: EventSourceType.BLUESKY,
+        sourceId: `at://${testDid}/community.lexicon.calendar.event/original-rkey`,
+        sourceData: {
+          did: testDid,
+          handle: testHandle,
+          rkey: 'original-rkey',
+          collection: 'community.lexicon.calendar.event',
+        },
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+      };
+
+      // Setup mocks - series has the template event slug set
+      const blueskyEventSeries = {
+        ...mockEventSeries,
+        templateEventSlug: 'bluesky-template-event',
+      };
+
+      recurrenceService.isDateInRecurrencePattern.mockReturnValue(true);
+      eventSeriesService.findBySlug.mockResolvedValue(blueskyEventSeries);
+      userService.findById.mockResolvedValue(mockUser);
+
+      // Mock template event lookup to return Bluesky event - reset first, then set up new implementation
+      mockEventQueryService.findEventBySlug.mockReset();
+      mockEventQueryService.findEventBySlug.mockImplementation((slug: string) => {
+        if (slug === 'bluesky-template-event') {
+          return Promise.resolve(blueskyTemplateEvent);
+        }
+        return Promise.resolve(mockTemplateEvent);
+      });
+
+      const newOccurrence = {
+        ...blueskyTemplateEvent,
+        id: 2,
+        slug: 'test-event-2',
+        startDate: date,
+        seriesSlug: seriesSlug,
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+        // Without Bluesky info since publish failed
+        sourceType: null,
+        sourceId: null,
+        sourceData: null,
+      };
+
+      eventManagementService.create.mockResolvedValue(newOccurrence);
+
+      // Mock Bluesky service to fail
+      mockBlueskyService.createEventRecord.mockReset();
+      mockBlueskyService.createEventRecord.mockRejectedValue(
+        new Error('Bluesky API error'),
+      );
+
+      // Execute test - should NOT throw, event should still be created
+      const result = await service.materializeOccurrence(
+        seriesSlug,
+        occurrenceDate,
+        userId,
+      );
+
+      // Event should still be returned (local creation succeeded)
+      expect(result).toBeDefined();
+      expect(result.slug).toBe('test-event-2');
+
+      // Bluesky was attempted
+      expect(mockBlueskyService.createEventRecord).toHaveBeenCalled();
     });
   });
 

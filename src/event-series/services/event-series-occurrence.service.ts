@@ -22,6 +22,11 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { CreateEventDto } from '../../event/dto/create-event.dto';
 import { OccurrenceResult } from '../interfaces/occurrence-result.interface';
+import { BlueskyService } from '../../bluesky/bluesky.service';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { EventSourceType } from '../../core/constants/source-type.constant';
+import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
+import { EventStatus, EventVisibility } from '../../core/constants/constant';
 
 /**
  * Service for managing event series occurrences
@@ -46,6 +51,10 @@ export class EventSeriesOccurrenceService {
     @Inject(REQUEST) private readonly request: any,
     private readonly userService: UserService,
     private readonly tenantConnectionService: TenantConnectionService,
+    @Inject(forwardRef(() => BlueskyService))
+    private readonly blueskyService: BlueskyService,
+    @Inject(forwardRef(() => BlueskyIdService))
+    private readonly blueskyIdService: BlueskyIdService,
   ) {}
 
   /**
@@ -392,6 +401,84 @@ export class EventSeriesOccurrenceService {
         this.logger.debug(
           `SeriesSlug correctly preserved on materialized event ${materializedEvent.slug}: ${materializedEvent.seriesSlug}`,
         );
+      }
+
+      // Publish to Bluesky if the template event was a Bluesky event and the new event is published/public
+      if (
+        updatedTemplateEvent.sourceType === EventSourceType.BLUESKY &&
+        updatedTemplateEvent.sourceData?.did &&
+        updatedTemplateEvent.sourceData?.handle &&
+        materializedEvent.status === EventStatus.Published &&
+        materializedEvent.visibility === EventVisibility.Public
+      ) {
+        const did = updatedTemplateEvent.sourceData.did as string;
+        const handle = updatedTemplateEvent.sourceData.handle as string;
+        const tenantId = this.request?.tenantId;
+
+        this.logger.debug(
+          `[materializeOccurrence] Publishing materialized event to Bluesky`,
+          {
+            eventSlug: materializedEvent.slug,
+            did,
+            handle,
+            tenantId,
+          },
+        );
+
+        try {
+          // Create the event record on Bluesky
+          const { rkey } = await this.blueskyService.createEventRecord(
+            materializedEvent,
+            did,
+            handle,
+            tenantId,
+          );
+
+          // Build the source ID using the BlueskyIdService
+          const collection = BLUESKY_COLLECTIONS.EVENT;
+          const sourceId = this.blueskyIdService.createUri(
+            did,
+            collection,
+            rkey,
+          );
+
+          // Update the event with Bluesky source information
+          await this.eventManagementService.update(
+            materializedEvent.slug,
+            {
+              sourceType: EventSourceType.BLUESKY,
+              sourceId,
+              sourceData: {
+                rkey,
+                handle,
+                did,
+                collection,
+              },
+              lastSyncedAt: new Date(),
+            },
+            userId,
+          );
+
+          this.logger.log(
+            `[materializeOccurrence] Successfully published materialized event to Bluesky`,
+            {
+              eventSlug: materializedEvent.slug,
+              sourceId,
+              rkey,
+            },
+          );
+        } catch (blueskyError) {
+          // Log the error but don't fail the materialization
+          // The event was created locally, just couldn't be published to Bluesky
+          this.logger.warn(
+            `[materializeOccurrence] Failed to publish materialized event to Bluesky, continuing without Bluesky integration`,
+            {
+              eventSlug: materializedEvent.slug,
+              error: blueskyError.message,
+              stack: blueskyError.stack,
+            },
+          );
+        }
       }
 
       return materializedEvent;
