@@ -8,6 +8,7 @@ import {
   Logger,
   Inject,
 } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
 import ms from 'ms';
 import crypto from 'crypto';
 import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
@@ -54,6 +55,8 @@ import { PdsCredentialService } from '../pds/pds-credential.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { PdsApiError } from '../pds/pds.errors';
+import { MeResponse } from './dto/me-response.dto';
+import { AtprotoIdentityDto } from '../atproto-identity/dto/atproto-identity.dto';
 
 @Injectable()
 export class AuthService {
@@ -605,18 +608,53 @@ export class AuthService {
     await this.userService.update(user.id, user);
   }
 
-  async me(userJwtPayload: JwtPayloadType): Promise<NullableType<User>> {
+  async me(userJwtPayload: JwtPayloadType): Promise<NullableType<MeResponse>> {
     try {
       const user = await this.userService.findById(userJwtPayload.id);
+
+      if (!user) {
+        return null;
+      }
 
       // Resolve Bluesky handle dynamically if user exists
       // This ensures /auth/me returns current handle, not stale database value
       // See commit c3e042f for design rationale on dynamic handle resolution
-      if (user) {
-        await this.userService.resolveBlueskyHandle(user);
+      await this.userService.resolveBlueskyHandle(user);
+
+      // Get AT Protocol identity if it exists
+      const tenantId = this.request?.tenantId;
+      let atprotoIdentity: AtprotoIdentityDto | null = null;
+
+      if (tenantId && user.ulid) {
+        const identity = await this.userAtprotoIdentityService.findByUserUlid(
+          tenantId,
+          user.ulid,
+        );
+
+        if (identity) {
+          // Map to DTO, explicitly excluding pdsCredentials
+          const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+          atprotoIdentity = {
+            did: identity.did,
+            handle: identity.handle,
+            pdsUrl: identity.pdsUrl,
+            isCustodial: identity.isCustodial,
+            isOurPds: identity.pdsUrl === ourPdsUrl,
+            createdAt: identity.createdAt,
+            updatedAt: identity.updatedAt,
+          };
+        }
       }
 
-      return user;
+      // Return user with atprotoIdentity as a proper class instance
+      // so that @Exclude decorators are applied during serialization.
+      // The groups: ['me'] option is required because some User properties
+      // use @Expose({ groups: ['me'] }) which filters during plainToInstance.
+      return plainToInstance(
+        User,
+        { ...user, atprotoIdentity },
+        { groups: ['me'] },
+      ) as MeResponse;
     } catch (error) {
       this.logger.error('Error in me() method:', {
         userId: userJwtPayload.id,

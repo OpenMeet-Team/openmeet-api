@@ -7,6 +7,8 @@ import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { UserService } from '../user/user.service';
 import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { BadRequestException } from '@nestjs/common';
 
 describe('AuthBlueskyService - Error Handling', () => {
@@ -55,6 +57,14 @@ describe('AuthBlueskyService - Error Handling', () => {
         },
         {
           provide: BlueskyService,
+          useValue: {},
+        },
+        {
+          provide: BlueskyIdentityService,
+          useValue: {},
+        },
+        {
+          provide: UserAtprotoIdentityService,
           useValue: {},
         },
         {
@@ -314,6 +324,14 @@ describe('AuthBlueskyService - handleAuthCallback avatar pass-through', () => {
           useValue: {},
         },
         {
+          provide: BlueskyIdentityService,
+          useValue: {},
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: {},
+        },
+        {
           provide: UserService,
           useValue: mockUserService,
         },
@@ -443,6 +461,14 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
           useValue: {},
         },
         {
+          provide: BlueskyIdentityService,
+          useValue: {},
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: {},
+        },
+        {
           provide: UserService,
           useValue: {},
         },
@@ -562,6 +588,279 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
       expect(result).toMatch(
         /^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/,
       );
+    });
+  });
+});
+
+describe('AuthBlueskyService - AT Protocol Identity Creation', () => {
+  let service: AuthBlueskyService;
+  let mockUserAtprotoIdentityService: {
+    findByUserUlid: jest.Mock;
+    findByDid: jest.Mock;
+    create: jest.Mock;
+  };
+  let mockBlueskyIdentityService: {
+    resolveProfile: jest.Mock;
+  };
+  let mockUserService: {
+    findBySocialIdAndProvider: jest.Mock;
+    findById: jest.Mock;
+    update: jest.Mock;
+  };
+  let mockAuthService: { validateSocialLogin: jest.Mock };
+  let mockTenantConnectionService: { getTenantConfig: jest.Mock };
+  let mockElastiCacheService: {
+    set: jest.Mock;
+    get: jest.Mock;
+    del: jest.Mock;
+  };
+  let mockConfigService: { get: jest.Mock };
+
+  beforeEach(async () => {
+    mockUserAtprotoIdentityService = {
+      findByUserUlid: jest.fn(),
+      findByDid: jest.fn(),
+      create: jest.fn(),
+    };
+
+    mockBlueskyIdentityService = {
+      resolveProfile: jest.fn(),
+    };
+
+    mockAuthService = {
+      validateSocialLogin: jest.fn().mockResolvedValue({
+        token: 'test-token',
+        refreshToken: 'test-refresh',
+        tokenExpires: 123456789,
+        sessionId: 'test-session',
+        user: {
+          id: 1,
+          ulid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+          email: 'test@example.com',
+        },
+      }),
+    };
+
+    mockUserService = {
+      findBySocialIdAndProvider: jest.fn(),
+      findById: jest.fn(),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+
+    mockTenantConnectionService = {
+      getTenantConfig: jest.fn().mockReturnValue({
+        frontendDomain: 'https://platform.openmeet.net',
+      }),
+    };
+
+    mockElastiCacheService = {
+      set: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(undefined),
+      del: jest.fn().mockResolvedValue(undefined),
+    };
+
+    mockConfigService = {
+      get: jest.fn((key: string, defaultValue?: string) => {
+        if (key === 'MOBILE_CUSTOM_URL_SCHEME') {
+          return defaultValue || 'net.openmeet.platform';
+        }
+        return defaultValue;
+      }),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthBlueskyService,
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+        {
+          provide: AuthService,
+          useValue: mockAuthService,
+        },
+        {
+          provide: ElastiCacheService,
+          useValue: mockElastiCacheService,
+        },
+        {
+          provide: BlueskyService,
+          useValue: {},
+        },
+        {
+          provide: UserService,
+          useValue: mockUserService,
+        },
+        {
+          provide: EventSeriesOccurrenceService,
+          useValue: {},
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: mockUserAtprotoIdentityService,
+        },
+        {
+          provide: BlueskyIdentityService,
+          useValue: mockBlueskyIdentityService,
+        },
+      ],
+    }).compile();
+
+    service = module.get<AuthBlueskyService>(AuthBlueskyService);
+  });
+
+  describe('ensureAtprotoIdentityRecord', () => {
+    it('should create AT Protocol identity record for new Bluesky user', async () => {
+      // Arrange: User has no existing identity record
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 1,
+        userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        did: 'did:plc:test123',
+        handle: 'test.bsky.social',
+        pdsUrl: 'https://bsky.social',
+        isCustodial: false,
+        pdsCredentials: null,
+      });
+
+      // Act
+      await service.ensureAtprotoIdentityRecord(
+        'tenant-123',
+        '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        'did:plc:test123',
+        'test.bsky.social',
+        'https://bsky.social',
+      );
+
+      // Assert
+      expect(
+        mockUserAtprotoIdentityService.findByUserUlid,
+      ).toHaveBeenCalledWith('tenant-123', '01hqvxz6j8k9m0n1p2q3r4s5t6');
+      expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+        'tenant-123',
+        {
+          userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+          did: 'did:plc:test123',
+          handle: 'test.bsky.social',
+          pdsUrl: 'https://bsky.social',
+          isCustodial: false,
+          pdsCredentials: null,
+        },
+      );
+    });
+
+    it('should skip creation when identity record already exists', async () => {
+      // Arrange: User already has an identity record
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue({
+        id: 1,
+        userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        did: 'did:plc:test123',
+        handle: 'test.bsky.social',
+        pdsUrl: 'https://bsky.social',
+        isCustodial: false,
+      });
+
+      // Act
+      await service.ensureAtprotoIdentityRecord(
+        'tenant-123',
+        '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        'did:plc:test123',
+        'test.bsky.social',
+        'https://bsky.social',
+      );
+
+      // Assert: Should not create a new record
+      expect(mockUserAtprotoIdentityService.findByUserUlid).toHaveBeenCalled();
+      expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+    });
+
+    it('should handle null handle gracefully', async () => {
+      // Arrange
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 1,
+        userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        did: 'did:plc:test123',
+        handle: null,
+        pdsUrl: 'https://bsky.social',
+        isCustodial: false,
+        pdsCredentials: null,
+      });
+
+      // Act
+      await service.ensureAtprotoIdentityRecord(
+        'tenant-123',
+        '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        'did:plc:test123',
+        null, // Handle can be null
+        'https://bsky.social',
+      );
+
+      // Assert
+      expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+        'tenant-123',
+        expect.objectContaining({
+          handle: null,
+        }),
+      );
+    });
+
+    it('should log but not throw on creation errors', async () => {
+      // Arrange: Simulate a database error
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.create.mockRejectedValue(
+        new Error('Database connection error'),
+      );
+
+      // Act & Assert: Should not throw, just log the error
+      await expect(
+        service.ensureAtprotoIdentityRecord(
+          'tenant-123',
+          '01hqvxz6j8k9m0n1p2q3r4s5t6',
+          'did:plc:test123',
+          'test.bsky.social',
+          'https://bsky.social',
+        ),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('resolvePdsUrlFromDid', () => {
+    it('should resolve PDS URL from DID using BlueskyIdentityService', async () => {
+      // Arrange
+      mockBlueskyIdentityService.resolveProfile.mockResolvedValue({
+        did: 'did:plc:test123',
+        handle: 'test.bsky.social',
+        pdsUrl: 'https://morel.us-east.host.bsky.network',
+        displayName: 'Test User',
+        source: 'atprotocol-public',
+      });
+
+      // Act
+      const pdsUrl = await service.resolvePdsUrlFromDid('did:plc:test123');
+
+      // Assert
+      expect(pdsUrl).toBe('https://morel.us-east.host.bsky.network');
+      expect(mockBlueskyIdentityService.resolveProfile).toHaveBeenCalledWith(
+        'did:plc:test123',
+      );
+    });
+
+    it('should return fallback URL when resolution fails', async () => {
+      // Arrange
+      mockBlueskyIdentityService.resolveProfile.mockRejectedValue(
+        new Error('Resolution failed'),
+      );
+
+      // Act
+      const pdsUrl = await service.resolvePdsUrlFromDid('did:plc:test123');
+
+      // Assert: Should return a reasonable fallback
+      expect(pdsUrl).toBe('https://bsky.social');
     });
   });
 });

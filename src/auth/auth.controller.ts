@@ -32,6 +32,7 @@ import { LoginResponseDto } from './dto/login-response.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { User } from '../user/domain/user';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
+import { MeResponseDto, MeResponse } from './dto/me-response.dto';
 import { ShadowAccountService } from '../shadow-account/shadow-account.service';
 import { ClaimShadowAccountDto } from './dto/claim-shadow-account.dto';
 import { Roles } from './decorators/roles.decorator';
@@ -146,10 +147,11 @@ export class AuthController {
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
   @ApiOkResponse({
-    type: User,
+    type: MeResponseDto,
+    description: 'User profile with AT Protocol identity',
   })
   @HttpCode(HttpStatus.OK)
-  public me(@Request() request): Promise<NullableType<User>> {
+  public me(@Request() request): Promise<NullableType<MeResponse>> {
     return this.service.me(request.user);
   }
 

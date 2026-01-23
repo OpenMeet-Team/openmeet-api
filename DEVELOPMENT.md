@@ -11,18 +11,22 @@ cp env-example-relational .env
 # 2. Install dependencies locally (required for tests and IDE support)
 npm install
 
-# 3. Start all services (migrations and seeds run automatically)
+# 3. Start all services (add --profile pds for AT Protocol PDS testing)
 docker compose -f docker-compose-dev.yml up -d
+# Or with PDS: docker compose -f docker-compose-dev.yml --profile pds up -d
 
-# 4. Verify API is running (wait ~2 min for migrations to complete)
+# 4. Run migrations (first time only, or after pulling new migrations)
+docker compose -f docker-compose-dev.yml run --rm migrate
+
+# 5. Verify API is running
 curl http://localhost:3000/health/liveness
 # Expected: {"status":"ok","info":{"api":{"status":"up"}}}
 
-# 5. Run tests to verify setup
+# 6. Run tests to verify setup
 npm run test                                  # Unit tests (~30s)
 npm run test:e2e -- --testPathPattern="auth"  # Auth e2e tests (~1m)
 npm run test:e2e                              # all e2e tests (~12m)
- ```
+```
 
 Now you can run commands against the api, see the [api docs](http://localhost:3000/docs)
 

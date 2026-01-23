@@ -3,6 +3,9 @@
 # Basic usage (core services only):
 #   docker compose -f docker-compose-dev.yml up
 #
+# Run migrations (first time or after pulling new migrations):
+#   docker compose -f docker-compose-dev.yml run --rm migrate
+#
 # With PDS for ATProto testing (adds isolated PDS + PLC):
 #   docker compose -f docker-compose-dev.yml --profile pds up
 #
@@ -68,9 +71,11 @@ services:
     networks:
       - api-network
 
-  # Database migrations and seeds - runs before api starts
-  # Safe to run every time: migrations track state, seeds check before insert
+  # Database migrations and seeds - run manually when needed
+  # Usage: docker compose -f docker-compose-dev.yml run --rm migrate
+  # Run after: initial setup, pulling code with new migrations, or schema changes
   migrate:
+    profiles: ["migrate"]
     image: node:24-alpine
     container_name: openmeet_migrate
     working_dir: /app
@@ -219,8 +224,8 @@ services:
     networks:
       - api-network
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_started
     restart: unless-stopped

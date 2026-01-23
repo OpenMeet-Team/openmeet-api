@@ -65,9 +65,7 @@ describe('PDS Services E2E', () => {
           }
         },
         getOrThrow: (key: string) => {
-          const value = module
-            .get<ConfigService>(ConfigService)
-            .get(key);
+          const value = module.get<ConfigService>(ConfigService).get(key);
           if (value === undefined) {
             throw new Error(`Config ${key} not found`);
           }
@@ -145,12 +143,12 @@ describe('PDS Services E2E', () => {
   // PDS account tests require a running PDS instance
   // Skipped in CI when PDS_URL is not set
   describeIfPds('PdsAccountService', () => {
-
     describe('isHandleAvailable()', () => {
       it('should return true for available handle', async () => {
         const uniqueHandle = `avail${shortId()}${TESTING_PDS_HANDLE_DOMAIN}`;
 
-        const isAvailable = await accountService.isHandleAvailable(uniqueHandle);
+        const isAvailable =
+          await accountService.isHandleAvailable(uniqueHandle);
 
         expect(isAvailable).toBe(true);
       });
@@ -239,35 +237,42 @@ describe('PDS Services E2E', () => {
   });
 
   // Integration tests require a running PDS instance
-  describeIfPds('Integration: Credential encryption with account creation', () => {
-    it('should encrypt password for storage and later use for session', async () => {
-      // Simulate the full flow: create account, encrypt password, later decrypt and login
-      const email = `integ-${shortId()}@test.invalid`;
-      const handle = `integ${shortId()}${TESTING_PDS_HANDLE_DOMAIN}`;
-      const password = 'integration-test-password-123';
+  describeIfPds(
+    'Integration: Credential encryption with account creation',
+    () => {
+      it('should encrypt password for storage and later use for session', async () => {
+        // Simulate the full flow: create account, encrypt password, later decrypt and login
+        const email = `integ-${shortId()}@test.invalid`;
+        const handle = `integ${shortId()}${TESTING_PDS_HANDLE_DOMAIN}`;
+        const password = 'integration-test-password-123';
 
-      // 1. Create account on PDS
-      const account = await accountService.createAccount({
-        email,
-        handle,
-        password,
+        // 1. Create account on PDS
+        const account = await accountService.createAccount({
+          email,
+          handle,
+          password,
+        });
+        expect(account.did).toBeDefined();
+
+        // 2. Encrypt password for storage (as would be done in UserAtprotoIdentityService)
+        const encryptedCredentials = credentialService.encrypt(password);
+
+        // Verify it's valid JSON with expected structure
+        const parsed = JSON.parse(encryptedCredentials);
+        expect(parsed.v).toBe(1);
+
+        // 3. Later, decrypt and use for session creation
+        const decryptedPassword =
+          credentialService.decrypt(encryptedCredentials);
+        expect(decryptedPassword).toBe(password);
+
+        // 4. Use decrypted password to create session
+        const session = await accountService.createSession(
+          handle,
+          decryptedPassword,
+        );
+        expect(session.did).toBe(account.did);
       });
-      expect(account.did).toBeDefined();
-
-      // 2. Encrypt password for storage (as would be done in UserAtprotoIdentityService)
-      const encryptedCredentials = credentialService.encrypt(password);
-
-      // Verify it's valid JSON with expected structure
-      const parsed = JSON.parse(encryptedCredentials);
-      expect(parsed.v).toBe(1);
-
-      // 3. Later, decrypt and use for session creation
-      const decryptedPassword = credentialService.decrypt(encryptedCredentials);
-      expect(decryptedPassword).toBe(password);
-
-      // 4. Use decrypted password to create session
-      const session = await accountService.createSession(handle, decryptedPassword);
-      expect(session.did).toBe(account.did);
-    });
-  });
+    },
+  );
 });

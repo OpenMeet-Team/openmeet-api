@@ -45,7 +45,9 @@ describe('PDS Account Creation', () => {
           email: testEmail,
           handle: testHandle,
           password: testPassword,
-          ...(TESTING_PDS_INVITE_CODE && { inviteCode: TESTING_PDS_INVITE_CODE }),
+          ...(TESTING_PDS_INVITE_CODE && {
+            inviteCode: TESTING_PDS_INVITE_CODE,
+          }),
         })
         .expect(200);
 
@@ -70,7 +72,9 @@ describe('PDS Account Creation', () => {
           email: uniqueEmail,
           handle: uniqueHandle,
           password: testPassword,
-          ...(TESTING_PDS_INVITE_CODE && { inviteCode: TESTING_PDS_INVITE_CODE }),
+          ...(TESTING_PDS_INVITE_CODE && {
+            inviteCode: TESTING_PDS_INVITE_CODE,
+          }),
         })
         .expect(200);
 
@@ -82,7 +86,9 @@ describe('PDS Account Creation', () => {
           email: `diff-${shortId()}@test.invalid`,
           handle: uniqueHandle,
           password: testPassword,
-          ...(TESTING_PDS_INVITE_CODE && { inviteCode: TESTING_PDS_INVITE_CODE }),
+          ...(TESTING_PDS_INVITE_CODE && {
+            inviteCode: TESTING_PDS_INVITE_CODE,
+          }),
         })
         .expect(400);
 
@@ -102,7 +108,9 @@ describe('PDS Account Creation', () => {
           email: resolveEmail,
           handle: resolveHandle,
           password: testPassword,
-          ...(TESTING_PDS_INVITE_CODE && { inviteCode: TESTING_PDS_INVITE_CODE }),
+          ...(TESTING_PDS_INVITE_CODE && {
+            inviteCode: TESTING_PDS_INVITE_CODE,
+          }),
         })
         .expect(200);
 
@@ -129,7 +137,9 @@ describe('PDS Account Creation', () => {
           email: sessionEmail,
           handle: sessionHandle,
           password: testPassword,
-          ...(TESTING_PDS_INVITE_CODE && { inviteCode: TESTING_PDS_INVITE_CODE }),
+          ...(TESTING_PDS_INVITE_CODE && {
+            inviteCode: TESTING_PDS_INVITE_CODE,
+          }),
         })
         .expect(200);
 
