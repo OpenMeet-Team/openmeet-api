@@ -114,10 +114,19 @@ See **[DEVELOPMENT.md](./DEVELOPMENT.md)** for complete local development instru
 
 ### Database Migrations
 
-```bash
-# Run migrations for all tenants
-npm run migration:run:tenants
+Migrations are **not** run automatically on `docker compose up`. Run them manually:
 
+```bash
+# With Docker Compose (recommended)
+docker compose -f docker-compose-dev.yml run --rm migrate
+
+# Or directly with npm (if running outside Docker)
+npm run migration:run:tenants
+```
+
+Run migrations after: initial setup, pulling code with new migrations, or schema changes.
+
+```bash
 # Reset database (dev only!)
 npm run migration:reset
 ```
