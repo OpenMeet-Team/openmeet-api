@@ -388,6 +388,27 @@ export class EventSeriesOccurrenceService {
         userId,
       );
 
+      // Debug logging to trace data loss issue in Bluesky sync
+      this.logger.debug(
+        '[materializeOccurrence] Event returned from create():',
+        {
+          slug: materializedEvent.slug,
+          hasName: materializedEvent.name !== undefined,
+          name: materializedEvent.name,
+          hasDescription: materializedEvent.description !== undefined,
+          description: materializedEvent.description?.substring(0, 50),
+          hasStartDate: materializedEvent.startDate !== undefined,
+          startDate: materializedEvent.startDate,
+          startDateType: typeof materializedEvent.startDate,
+          hasCreatedAt: materializedEvent.createdAt !== undefined,
+          createdAt: materializedEvent.createdAt,
+          createdAtType: typeof materializedEvent.createdAt,
+          status: materializedEvent.status,
+          visibility: materializedEvent.visibility,
+          sourceType: materializedEvent.sourceType,
+        },
+      );
+
       // Verify that the seriesSlug was preserved - but do not attempt to restore it
       if (!materializedEvent.seriesSlug) {
         this.logger.error(
@@ -460,6 +481,8 @@ export class EventSeriesOccurrenceService {
 
         // Step 3: Update local record with Bluesky info
         // CRITICAL: If this fails after Bluesky success, we have an orphaned record
+        // NOTE: We must preserve status/visibility because EventManagementService.update()
+        // overwrites all fields in the DTO, even if undefined
         try {
           materializedEvent = await this.eventManagementService.update(
             materializedEvent.slug,
@@ -473,6 +496,9 @@ export class EventSeriesOccurrenceService {
                 collection,
               },
               lastSyncedAt: new Date(),
+              // Preserve status/visibility - update() overwrites with undefined otherwise
+              status: materializedEvent.status,
+              visibility: materializedEvent.visibility,
             },
             userId,
           );

@@ -460,7 +460,25 @@ export class BlueskyService {
         );
       }
 
-      // Create record data
+      // Create record data - log all field values first for debugging
+      this.logger.debug('[createEventRecord] Building recordData from event:', {
+        eventSlug: event.slug,
+        hasName: event.name !== undefined,
+        name: event.name,
+        hasDescription: event.description !== undefined,
+        description: event.description?.substring(0, 50),
+        hasStartDate: event.startDate !== undefined,
+        startDate: event.startDate,
+        startDateType: typeof event.startDate,
+        hasEndDate: event.endDate !== undefined,
+        endDate: event.endDate,
+        hasCreatedAt: event.createdAt !== undefined,
+        createdAt: event.createdAt,
+        createdAtType: typeof event.createdAt,
+        type: event.type,
+        status: event.status,
+      });
+
       const recordData: any = {
         $type: 'community.lexicon.calendar.event',
         name: event.name,
@@ -473,6 +491,14 @@ export class BlueskyService {
         locations,
         uris,
       };
+
+      this.logger.debug('[createEventRecord] Built recordData:', {
+        eventSlug: event.slug,
+        recordDataKeys: Object.keys(recordData),
+        hasName: recordData.name !== undefined,
+        hasStartsAt: recordData.startsAt !== undefined,
+        hasDescription: recordData.description !== undefined,
+      });
 
       // Add openmeet-specific metadata in record
       if (event.series) {
