@@ -460,14 +460,22 @@ export class BlueskyService {
         );
       }
 
-      // Create record data
       const recordData: any = {
         $type: 'community.lexicon.calendar.event',
         name: event.name,
         description: event.description,
-        createdAt: event.createdAt,
-        startsAt: event.startDate,
-        endsAt: event.endDate,
+        createdAt:
+          event.createdAt instanceof Date
+            ? event.createdAt.toISOString()
+            : event.createdAt,
+        startsAt:
+          event.startDate instanceof Date
+            ? event.startDate.toISOString()
+            : event.startDate,
+        endsAt:
+          event.endDate instanceof Date
+            ? event.endDate.toISOString()
+            : event.endDate,
         mode: modeMap[event.type] || modeMap['in-person'],
         status: statusMap[event.status] || statusMap['published'],
         locations,
