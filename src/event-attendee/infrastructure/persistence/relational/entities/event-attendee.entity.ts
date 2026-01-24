@@ -67,4 +67,27 @@ export class EventAttendeesEntity implements SourceFields {
 
   @Column({ type: 'timestamp', nullable: true })
   lastSyncedAt: Date | null;
+
+  /**
+   * AT Protocol URI where this RSVP is published (on attendee's PDS).
+   * Format: at://did:plc:xxx/community.lexicon.calendar.rsvp/rkey
+   * NULL means not yet published.
+   * Note: Distinct from sourceId which tracks IMPORTED records from external sources.
+   */
+  @Column({ type: 'text', nullable: true })
+  atprotoUri: string | null;
+
+  /**
+   * AT Protocol record key for this RSVP.
+   * Used for updates/deletes on the PDS. TIDs are ~13 chars.
+   */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  atprotoRkey: string | null;
+
+  /**
+   * When this RSVP was last synced to the user's PDS.
+   * Compare with updatedAt to detect changes needing re-sync.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  atprotoSyncedAt: Date | null;
 }
