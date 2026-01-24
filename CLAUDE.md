@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with the OpenMeet API.
 
 ## Project Overview
 
-OpenMeet API is a NestJS-based multi-tenant backend for event management and community building. It integrates with Bluesky/AT Protocol for decentralized identity, supports multiple OAuth providers, and provides real-time event streaming via RabbitMQ.
+OpenMeet API is a NestJS-based multi-tenant backend for event management and community building. It integrates with the AT Protocol for decentralized identity, supports multiple OAuth providers, and provides real-time event streaming via RabbitMQ.
 
 ## Tech Stack
 
@@ -12,8 +12,28 @@ OpenMeet API is a NestJS-based multi-tenant backend for event management and com
 - **Database**: PostgreSQL with TypeORM (multi-tenant via schemas)
 - **Cache**: Redis/ElastiCache for sessions and caching
 - **Queue**: RabbitMQ for async event processing
-- **Auth**: JWT + multiple OAuth providers (Bluesky, Google, GitHub)
-- **AT Protocol**: @atproto/* packages for Bluesky integration
+- **Auth**: JWT + multiple OAuth providers (AT Protocol/Bluesky, Google, GitHub)
+- **AT Protocol**: @atproto/* packages for decentralized identity
+
+## Terminology: AT Protocol Transition
+
+**Long-term goal:** Transition from "Bluesky/bsky" terminology to "AT Protocol/atproto" terminology throughout the codebase.
+
+**Why:** AT Protocol is the underlying decentralized protocol; Bluesky is just one application built on it. OpenMeet integrates with the protocol itself, not specifically with Bluesky the app. Using protocol-level terminology:
+- Better reflects what we're actually integrating with
+- Avoids confusion as other apps join the AT Protocol network
+- Aligns with the @atproto/* packages we use
+
+**When making changes:**
+- **New code**: Use "atproto" or "AT Protocol" terminology (e.g., `atproto-auth`, `AtprotoService`)
+- **Refactoring**: Take opportunities to rename `bluesky`/`bsky` → `atproto` when touching related code
+- **Commits**: Use "atproto" in commit messages for new AT Protocol work
+- **Don't**: Do wholesale renames just for terminology—combine with functional changes
+
+**Current state** (to be migrated over time):
+- `src/auth-bluesky/` → eventually `src/auth-atproto/`
+- `src/bluesky/` → eventually `src/atproto/`
+- `BLUESKY_KEY_*` env vars → eventually `ATPROTO_KEY_*`
 
 ## Development Commands
 
@@ -159,7 +179,7 @@ Environment files:
 Key variables:
 - `DATABASE_*` - PostgreSQL connection
 - `REDIS_*` - ElastiCache connection
-- `BLUESKY_KEY_*` - Bluesky OAuth keys (base64 encoded)
+- `BLUESKY_KEY_*` - AT Protocol OAuth keys (base64 encoded, to be renamed ATPROTO_KEY_*)
 - `BACKEND_DOMAIN` - Public API URL
 
 ## Common Issues
@@ -167,8 +187,8 @@ Key variables:
 ### "Tenant ID is required"
 Background jobs or setTimeout callbacks losing tenant context. Ensure tenantId is passed explicitly.
 
-### Bluesky OAuth Failures
-Check BLUESKY_KEY_* environment variables. Keys must be base64-encoded PKCS#8 private keys.
+### AT Protocol OAuth Failures (currently named "Bluesky")
+Check BLUESKY_KEY_* environment variables (to be renamed ATPROTO_KEY_*). Keys must be base64-encoded PKCS#8 private keys.
 
 ### Migration Errors
 Run both base and tenant migrations:
