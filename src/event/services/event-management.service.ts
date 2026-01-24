@@ -442,19 +442,6 @@ export class EventManagementService {
       relations: ['user'],
     });
 
-    // Debug logging to trace data loss in Bluesky materialization
-    this.logger.debug('[CREATE] Final event before return:', {
-      slug: event?.slug || createdEvent.slug,
-      usedFindOne: !!event,
-      hasName: (event || createdEvent).name !== undefined,
-      name: (event || createdEvent).name,
-      hasDescription: (event || createdEvent).description !== undefined,
-      hasStartDate: (event || createdEvent).startDate !== undefined,
-      startDate: (event || createdEvent).startDate,
-      hasCreatedAt: (event || createdEvent).createdAt !== undefined,
-      createdAt: (event || createdEvent).createdAt,
-    });
-
     // Verify seriesSlug one final time after retrieving the complete event
     if (
       originalSeriesSlug &&

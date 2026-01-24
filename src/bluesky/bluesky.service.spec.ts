@@ -865,5 +865,89 @@ describe('BlueskyService', () => {
         name: 'Online Meeting Link',
       });
     });
+
+    it('should serialize Date objects to ISO strings for startsAt, endsAt, and createdAt', async () => {
+      // Arrange - use Date objects (as would come from materializeOccurrence)
+      const startDate = new Date('2023-12-01T12:00:00.000Z');
+      const endDate = new Date('2023-12-01T14:00:00.000Z');
+      const createdAt = new Date('2023-11-01T00:00:00.000Z');
+
+      const event = {
+        name: 'Test Event with Date Objects',
+        description: 'Test Description',
+        startDate,
+        endDate,
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt,
+        slug: 'test-event-dates',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Mock getRecord to throw a 404 error to indicate rkey is available
+      mockAgentImplementation.com.atproto.repo.getRecord.mockRejectedValueOnce({
+        status: 404,
+      });
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - verify dates are ISO strings, not Date objects
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const record = putRecordCall.record;
+
+      // Dates should be ISO strings, not Date objects
+      expect(typeof record.startsAt).toBe('string');
+      expect(typeof record.endsAt).toBe('string');
+      expect(typeof record.createdAt).toBe('string');
+
+      // Verify the actual ISO string values
+      expect(record.startsAt).toBe('2023-12-01T12:00:00.000Z');
+      expect(record.endsAt).toBe('2023-12-01T14:00:00.000Z');
+      expect(record.createdAt).toBe('2023-11-01T00:00:00.000Z');
+    });
+
+    it('should handle dates that are already ISO strings', async () => {
+      // Arrange - use string dates (as might come from some code paths)
+      const event = {
+        name: 'Test Event with String Dates',
+        description: 'Test Description',
+        startDate: '2023-12-01T12:00:00.000Z',
+        endDate: '2023-12-01T14:00:00.000Z',
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: '2023-11-01T00:00:00.000Z',
+        slug: 'test-event-string-dates',
+      } as unknown as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Mock getRecord to throw a 404 error to indicate rkey is available
+      mockAgentImplementation.com.atproto.repo.getRecord.mockRejectedValueOnce({
+        status: 404,
+      });
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - verify dates remain as strings
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const record = putRecordCall.record;
+
+      expect(typeof record.startsAt).toBe('string');
+      expect(typeof record.endsAt).toBe('string');
+      expect(typeof record.createdAt).toBe('string');
+
+      expect(record.startsAt).toBe('2023-12-01T12:00:00.000Z');
+      expect(record.endsAt).toBe('2023-12-01T14:00:00.000Z');
+      expect(record.createdAt).toBe('2023-11-01T00:00:00.000Z');
+    });
   });
 });

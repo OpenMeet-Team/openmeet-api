@@ -22,11 +22,7 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { CreateEventDto } from '../../event/dto/create-event.dto';
 import { OccurrenceResult } from '../interfaces/occurrence-result.interface';
-import { BlueskyService } from '../../bluesky/bluesky.service';
-import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { EventSourceType } from '../../core/constants/source-type.constant';
-import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
-import { EventStatus, EventVisibility } from '../../core/constants/constant';
 
 /**
  * Service for managing event series occurrences
@@ -51,10 +47,6 @@ export class EventSeriesOccurrenceService {
     @Inject(REQUEST) private readonly request: any,
     private readonly userService: UserService,
     private readonly tenantConnectionService: TenantConnectionService,
-    @Inject(forwardRef(() => BlueskyService))
-    private readonly blueskyService: BlueskyService,
-    @Inject(forwardRef(() => BlueskyIdService))
-    private readonly blueskyIdService: BlueskyIdService,
   ) {}
 
   /**
@@ -378,35 +370,29 @@ export class EventSeriesOccurrenceService {
         timeZone: series.timeZone || 'UTC',
       };
 
+      // Copy Bluesky source info from template if it's a Bluesky event
+      // This lets create() handle the Bluesky sync with full event data
+      if (
+        updatedTemplateEvent.sourceType === EventSourceType.BLUESKY &&
+        updatedTemplateEvent.sourceData?.did &&
+        updatedTemplateEvent.sourceData?.handle
+      ) {
+        createDto.sourceType = 'bluesky';
+        createDto.sourceId = updatedTemplateEvent.sourceData.did as string;
+        createDto.sourceData = {
+          did: updatedTemplateEvent.sourceData.did as string,
+          handle: updatedTemplateEvent.sourceData.handle as string,
+        };
+      }
+
       this.logger.debug(
         `Creating materialized occurrence with seriesSlug: ${createDto.seriesSlug}`,
       );
 
       // Create the occurrence
-      let materializedEvent = await this.eventManagementService.create(
+      const materializedEvent = await this.eventManagementService.create(
         createDto,
         userId,
-      );
-
-      // Debug logging to trace data loss issue in Bluesky sync
-      this.logger.debug(
-        '[materializeOccurrence] Event returned from create():',
-        {
-          slug: materializedEvent.slug,
-          hasName: materializedEvent.name !== undefined,
-          name: materializedEvent.name,
-          hasDescription: materializedEvent.description !== undefined,
-          description: materializedEvent.description?.substring(0, 50),
-          hasStartDate: materializedEvent.startDate !== undefined,
-          startDate: materializedEvent.startDate,
-          startDateType: typeof materializedEvent.startDate,
-          hasCreatedAt: materializedEvent.createdAt !== undefined,
-          createdAt: materializedEvent.createdAt,
-          createdAtType: typeof materializedEvent.createdAt,
-          status: materializedEvent.status,
-          visibility: materializedEvent.visibility,
-          sourceType: materializedEvent.sourceType,
-        },
       );
 
       // Verify that the seriesSlug was preserved - but do not attempt to restore it
@@ -424,113 +410,8 @@ export class EventSeriesOccurrenceService {
         );
       }
 
-      // Publish to Bluesky if the template event was a Bluesky event and the new event is published/public
-      if (
-        updatedTemplateEvent.sourceType === EventSourceType.BLUESKY &&
-        updatedTemplateEvent.sourceData?.did &&
-        updatedTemplateEvent.sourceData?.handle &&
-        materializedEvent.status === EventStatus.Published &&
-        materializedEvent.visibility === EventVisibility.Public
-      ) {
-        const did = updatedTemplateEvent.sourceData.did as string;
-        const handle = updatedTemplateEvent.sourceData.handle as string;
-        const tenantId = this.request?.tenantId;
-
-        this.logger.debug(
-          `[materializeOccurrence] Publishing materialized event to Bluesky`,
-          {
-            eventSlug: materializedEvent.slug,
-            did,
-            handle,
-            tenantId,
-          },
-        );
-
-        // Step 1: Create record on Bluesky (graceful failure - API may be unavailable)
-        let rkey: string;
-        try {
-          const result = await this.blueskyService.createEventRecord(
-            materializedEvent,
-            did,
-            handle,
-            tenantId,
-          );
-          rkey = result.rkey;
-        } catch (blueskyApiError) {
-          // Bluesky API failure - log and continue without Bluesky integration
-          // The local event was created successfully
-          this.logger.warn(
-            `[materializeOccurrence] Failed to create event on Bluesky API, continuing without Bluesky integration`,
-            {
-              eventSlug: materializedEvent.slug,
-              seriesSlug: expectedSeriesSlug,
-              tenantId,
-              userId,
-              blueskyDid: did,
-              blueskyHandle: handle,
-              error: blueskyApiError.message,
-              errorType: blueskyApiError.constructor?.name,
-            },
-          );
-          return materializedEvent;
-        }
-
-        // Step 2: Build the source URI (synchronous, should not fail with valid inputs)
-        const collection = BLUESKY_COLLECTIONS.EVENT;
-        const sourceId = this.blueskyIdService.createUri(did, collection, rkey);
-
-        // Step 3: Update local record with Bluesky info
-        // CRITICAL: If this fails after Bluesky success, we have an orphaned record
-        // NOTE: We must preserve status/visibility because EventManagementService.update()
-        // overwrites all fields in the DTO, even if undefined
-        try {
-          materializedEvent = await this.eventManagementService.update(
-            materializedEvent.slug,
-            {
-              sourceType: EventSourceType.BLUESKY,
-              sourceId,
-              sourceData: {
-                rkey,
-                handle,
-                did,
-                collection,
-              },
-              lastSyncedAt: new Date(),
-              // Preserve status/visibility - update() overwrites with undefined otherwise
-              status: materializedEvent.status,
-              visibility: materializedEvent.visibility,
-            },
-            userId,
-          );
-
-          this.logger.log(
-            `[materializeOccurrence] Successfully published materialized event to Bluesky`,
-            {
-              eventSlug: materializedEvent.slug,
-              sourceId,
-              rkey,
-            },
-          );
-        } catch (updateError) {
-          // CRITICAL: Bluesky record exists but local DB update failed
-          // This creates an orphaned record on Bluesky that we can't track
-          this.logger.error(
-            `[materializeOccurrence] CRITICAL: Event published to Bluesky but local update failed. Orphaned Bluesky record created.`,
-            {
-              eventSlug: materializedEvent.slug,
-              blueskySourceId: sourceId,
-              rkey,
-              did,
-              tenantId,
-              userId,
-              error: updateError.message,
-              stack: updateError.stack,
-            },
-          );
-          // Re-throw to surface this critical inconsistency
-          throw updateError;
-        }
-      }
+      // Bluesky sync is now handled by create() when sourceType/sourceId/sourceData
+      // are included in the createDto (see above). No separate sync step needed.
 
       return materializedEvent;
     } catch (error) {
