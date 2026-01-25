@@ -28,3 +28,22 @@ export class PdsCredentialDecryptionError extends Error {
     this.name = 'PdsCredentialDecryptionError';
   }
 }
+
+/**
+ * Error thrown when PDS session operations fail.
+ *
+ * This can occur when:
+ * - The PDS is unavailable
+ * - Credentials are invalid or expired
+ * - Session restoration fails
+ */
+export class PdsSessionError extends Error {
+  constructor(
+    message: string,
+    public readonly cause?: string,
+    public readonly isRecoverable: boolean = true,
+  ) {
+    super(message);
+    this.name = 'PdsSessionError';
+  }
+}
