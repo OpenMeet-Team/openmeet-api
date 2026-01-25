@@ -512,7 +512,9 @@ describe('AtprotoIdentityController', () => {
       jest
         .spyOn(recoveryService, 'initiateTakeOwnership')
         .mockRejectedValue(
-          new BadRequestException('User already owns their AT Protocol identity'),
+          new BadRequestException(
+            'User already owns their AT Protocol identity',
+          ),
         );
 
       // Act & Assert
@@ -523,20 +525,29 @@ describe('AtprotoIdentityController', () => {
   });
 
   describe('completeTakeOwnership', () => {
-    it('should complete take ownership and return success', async () => {
+    const mockCompleteRequest = {
+      ...mockRequest,
+      body: { password: 'user-chosen-password-123' },
+    };
+
+    it('should complete take ownership with valid password and return success', async () => {
       // Arrange
       jest
         .spyOn(recoveryService, 'completeTakeOwnership')
         .mockResolvedValue(undefined);
 
       // Act
-      const result = await controller.completeTakeOwnership(mockRequest);
+      const result = await controller.completeTakeOwnership(
+        mockCompleteRequest,
+        { password: 'user-chosen-password-123' },
+      );
 
       // Assert
       expect(userService.findById).toHaveBeenCalledWith(1, 'test-tenant');
       expect(recoveryService.completeTakeOwnership).toHaveBeenCalledWith(
         'test-tenant',
         '01234567890123456789012345',
+        'user-chosen-password-123',
       );
       expect(result).toEqual({ success: true });
     });
@@ -547,7 +558,9 @@ describe('AtprotoIdentityController', () => {
 
       // Act & Assert
       await expect(
-        controller.completeTakeOwnership(mockRequest),
+        controller.completeTakeOwnership(mockCompleteRequest, {
+          password: 'some-password',
+        }),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -561,7 +574,9 @@ describe('AtprotoIdentityController', () => {
 
       // Act & Assert
       await expect(
-        controller.completeTakeOwnership(mockRequest),
+        controller.completeTakeOwnership(mockCompleteRequest, {
+          password: 'some-password',
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -570,12 +585,34 @@ describe('AtprotoIdentityController', () => {
       jest
         .spyOn(recoveryService, 'completeTakeOwnership')
         .mockRejectedValue(
-          new BadRequestException('User already owns their AT Protocol identity'),
+          new BadRequestException(
+            'User already owns their AT Protocol identity',
+          ),
         );
 
       // Act & Assert
       await expect(
-        controller.completeTakeOwnership(mockRequest),
+        controller.completeTakeOwnership(mockCompleteRequest, {
+          password: 'some-password',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when password verification fails', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockRejectedValue(
+          new BadRequestException(
+            'Invalid password - could not authenticate to PDS',
+          ),
+        );
+
+      // Act & Assert
+      await expect(
+        controller.completeTakeOwnership(mockCompleteRequest, {
+          password: 'wrong-password',
+        }),
       ).rejects.toThrow(BadRequestException);
     });
   });

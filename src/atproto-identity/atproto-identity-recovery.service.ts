@@ -164,14 +164,37 @@ export class AtprotoIdentityRecoveryService {
     const pdsUrl = this.configService.get('pds.url', { infer: true });
 
     // Create identity record
-    const identity = await this.userAtprotoIdentityService.create(tenantId, {
-      userUlid,
-      did: pdsAccount.did,
-      handle: pdsAccount.handle,
-      pdsUrl: pdsUrl || '',
-      pdsCredentials: encryptedPassword,
-      isCustodial: true,
-    });
+    // Note: There's a potential race condition between checking if identity exists
+    // and creating one. The database has a unique constraint on userUlid, so if
+    // two concurrent requests both pass the check, one will fail with a duplicate
+    // key error. We catch this and convert it to a BadRequestException.
+    let identity: UserAtprotoIdentityEntity;
+    try {
+      identity = await this.userAtprotoIdentityService.create(tenantId, {
+        userUlid,
+        did: pdsAccount.did,
+        handle: pdsAccount.handle,
+        pdsUrl: pdsUrl || '',
+        pdsCredentials: encryptedPassword,
+        isCustodial: true,
+      });
+    } catch (error) {
+      // Check for PostgreSQL unique constraint violation (code 23505)
+      // or if error message indicates a duplicate key
+      if (
+        (error instanceof Error &&
+          error.message.includes(
+            'duplicate key value violates unique constraint',
+          )) ||
+        (error as any)?.code === '23505'
+      ) {
+        this.logger.warn(
+          `Race condition detected: identity already created for user ${userUlid}`,
+        );
+        throw new BadRequestException('User already has AT Protocol identity');
+      }
+      throw error;
+    }
 
     this.logger.log(
       `Recovered PDS account as custodial for user ${userUlid}: ${pdsAccount.did}`,

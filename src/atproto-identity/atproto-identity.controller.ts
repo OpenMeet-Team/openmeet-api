@@ -129,7 +129,9 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Get('recovery-status')
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Check if user can recover an existing PDS account' })
+  @ApiOperation({
+    summary: 'Check if user can recover an existing PDS account',
+  })
   @ApiOkResponse({
     description: 'Recovery status with existing account info if available',
   })
@@ -160,7 +162,9 @@ export class AtprotoIdentityController {
     description: 'AT Protocol identity recovered and linked',
   })
   @HttpCode(HttpStatus.CREATED)
-  async recoverAsCustodial(@Request() request: any): Promise<AtprotoIdentityDto> {
+  async recoverAsCustodial(
+    @Request() request: any,
+  ): Promise<AtprotoIdentityDto> {
     const tenantId = request.tenantId;
     const userId = request.user.id;
 
@@ -214,7 +218,9 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('take-ownership/complete')
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Complete take ownership - clears custodial credentials' })
+  @ApiOperation({
+    summary: 'Complete take ownership - clears custodial credentials',
+  })
   @ApiOkResponse({
     description: 'Ownership transfer completed',
   })

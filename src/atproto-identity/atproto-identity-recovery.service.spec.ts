@@ -52,6 +52,7 @@ describe('AtprotoIdentityRecoveryService', () => {
       searchAccountsByEmail: jest.fn(),
       adminUpdateAccountPassword: jest.fn(),
       requestPasswordReset: jest.fn(),
+      createSession: jest.fn(),
     };
 
     const mockPdsCredentialService = {
@@ -328,6 +329,55 @@ describe('AtprotoIdentityRecoveryService', () => {
         service.recoverAsCustodial('test-tenant', mockUser.ulid),
       ).rejects.toThrow('PDS admin API not available');
     });
+
+    it('should handle race condition when concurrent requests create duplicate identity', async () => {
+      // Arrange - Simulate race condition:
+      // findByUserUlid returns null (check passes), but create() fails due to
+      // another concurrent request having already inserted a record
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockResolvedValue(mockPdsAccount);
+      pdsAccountService.adminUpdateAccountPassword.mockResolvedValue(undefined);
+      pdsCredentialService.encrypt.mockReturnValue('encrypted-new-password');
+
+      // Simulate PostgreSQL unique constraint violation error
+      const duplicateKeyError = new Error(
+        'duplicate key value violates unique constraint "UQ_tenant_userAtprotoIdentities_userUlid"',
+      );
+      (duplicateKeyError as any).code = '23505'; // PostgreSQL unique violation code
+      userAtprotoIdentityService.create.mockRejectedValue(duplicateKeyError);
+
+      // Also mock that when we re-fetch, we find the identity created by the concurrent request
+      userAtprotoIdentityService.findByUserUlid
+        .mockResolvedValueOnce(null) // First call (check) returns null
+        .mockResolvedValueOnce(mockIdentityEntity as UserAtprotoIdentityEntity); // Second call (after error) returns the identity
+
+      // Act & Assert - Should throw BadRequestException indicating identity already exists
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow('User already has AT Protocol identity');
+    });
+
+    it('should re-throw non-duplicate-key errors from create', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockResolvedValue(mockPdsAccount);
+      pdsAccountService.adminUpdateAccountPassword.mockResolvedValue(undefined);
+      pdsCredentialService.encrypt.mockReturnValue('encrypted-new-password');
+
+      // Simulate a different database error (not a duplicate key)
+      const dbError = new Error('Connection lost');
+      userAtprotoIdentityService.create.mockRejectedValue(dbError);
+
+      // Act & Assert - Should re-throw the original error
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow('Connection lost');
+    });
   });
 
   describe('initiateTakeOwnership', () => {
@@ -392,11 +442,20 @@ describe('AtprotoIdentityRecoveryService', () => {
   });
 
   describe('completeTakeOwnership', () => {
-    it('should clear credentials and set non-custodial', async () => {
+    const mockNewPassword = 'user-chosen-password-123';
+    const mockSessionResponse = {
+      did: mockIdentityEntity.did,
+      handle: mockIdentityEntity.handle,
+      accessJwt: 'access-token',
+      refreshJwt: 'refresh-token',
+    };
+
+    it('should verify password by creating session, then clear credentials and set non-custodial', async () => {
       // Arrange
       userAtprotoIdentityService.findByUserUlid.mockResolvedValue(
         mockIdentityEntity as UserAtprotoIdentityEntity,
       );
+      pdsAccountService.createSession.mockResolvedValue(mockSessionResponse);
       userAtprotoIdentityService.update.mockResolvedValue({
         ...mockIdentityEntity,
         pdsCredentials: null,
@@ -404,9 +463,17 @@ describe('AtprotoIdentityRecoveryService', () => {
       } as UserAtprotoIdentityEntity);
 
       // Act
-      await service.completeTakeOwnership('test-tenant', mockUser.ulid);
+      await service.completeTakeOwnership(
+        'test-tenant',
+        mockUser.ulid,
+        mockNewPassword,
+      );
 
-      // Assert
+      // Assert - verify password by creating session first
+      expect(pdsAccountService.createSession).toHaveBeenCalledWith(
+        mockIdentityEntity.did,
+        mockNewPassword,
+      );
       expect(userAtprotoIdentityService.update).toHaveBeenCalledWith(
         'test-tenant',
         mockIdentityEntity.id,
@@ -417,13 +484,46 @@ describe('AtprotoIdentityRecoveryService', () => {
       );
     });
 
+    it('should throw BadRequestException when password verification fails', async () => {
+      // Arrange
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        mockIdentityEntity as UserAtprotoIdentityEntity,
+      );
+      pdsAccountService.createSession.mockRejectedValue(
+        new Error('AuthenticationRequired'),
+      );
+
+      // Act & Assert
+      await expect(
+        service.completeTakeOwnership(
+          'test-tenant',
+          mockUser.ulid,
+          'wrong-password',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.completeTakeOwnership(
+          'test-tenant',
+          mockUser.ulid,
+          'wrong-password',
+        ),
+      ).rejects.toThrow('Invalid password');
+
+      // Credentials should NOT be cleared
+      expect(userAtprotoIdentityService.update).not.toHaveBeenCalled();
+    });
+
     it('should throw BadRequestException when no identity exists', async () => {
       // Arrange
       userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
 
       // Act & Assert
       await expect(
-        service.completeTakeOwnership('test-tenant', mockUser.ulid),
+        service.completeTakeOwnership(
+          'test-tenant',
+          mockUser.ulid,
+          mockNewPassword,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -439,7 +539,11 @@ describe('AtprotoIdentityRecoveryService', () => {
 
       // Act & Assert
       await expect(
-        service.completeTakeOwnership('test-tenant', mockUser.ulid),
+        service.completeTakeOwnership(
+          'test-tenant',
+          mockUser.ulid,
+          mockNewPassword,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
   });
