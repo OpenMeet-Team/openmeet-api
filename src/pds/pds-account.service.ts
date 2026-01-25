@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import { PdsApiError } from './pds.errors';
+import { isServiceNotConfiguredError } from './pds-error-detection';
 import { AllConfigType } from '../config/config.type';
 
 /**
@@ -305,14 +306,12 @@ export class PdsAccountService {
       return accounts && accounts.length > 0 ? accounts[0] : null;
     } catch (error) {
       // If searchAccounts isn't available, fall back to iteration
-      if (this.isAxiosError(error)) {
-        const data = error.response?.data as { message?: string } | undefined;
-        if (data?.message?.includes('No service configured')) {
-          this.logger.debug(
-            'searchAccounts not available, falling back to iteration',
-          );
-          return this.findAccountByEmailViaIteration(email);
-        }
+      // Uses robust detection for various "not configured/implemented" error formats
+      if (isServiceNotConfiguredError(error)) {
+        this.logger.debug(
+          'searchAccounts not available, falling back to iteration',
+        );
+        return this.findAccountByEmailViaIteration(email);
       }
       throw this.mapToPdsApiError(error);
     }

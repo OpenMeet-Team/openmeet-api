@@ -589,6 +589,157 @@ describe('PdsAccountService', () => {
         service.searchAccountsByEmail('test@example.com'),
       ).rejects.toThrow(PdsApiError);
     });
+
+    describe('fallback to iteration when searchAccounts not available', () => {
+      const makeServiceNotConfiguredError = (
+        message: string,
+        status = 400,
+      ): AxiosError => ({
+        isAxiosError: true,
+        response: {
+          data: { message },
+          status,
+          statusText: status === 501 ? 'Not Implemented' : 'Bad Request',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: `Request failed with status code ${status}`,
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      });
+
+      it('should fall back when message contains "No service configured"', async () => {
+        // First call to searchAccounts fails
+        httpService.get.mockReturnValueOnce(
+          throwError(() =>
+            makeServiceNotConfiguredError(
+              'No service configured for com.atproto.admin.searchAccounts',
+            ),
+          ),
+        );
+
+        // Fallback: listRepos returns empty (no accounts)
+        httpService.get.mockReturnValueOnce(
+          of({
+            data: { repos: [] },
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+          }),
+        );
+
+        const result = await service.searchAccountsByEmail('test@example.com');
+
+        expect(result).toBeNull();
+        expect(httpService.get).toHaveBeenCalledTimes(2);
+      });
+
+      it('should fall back when message contains "service not configured" (case variation)', async () => {
+        httpService.get.mockReturnValueOnce(
+          throwError(() =>
+            makeServiceNotConfiguredError('Service Not Configured'),
+          ),
+        );
+
+        httpService.get.mockReturnValueOnce(
+          of({
+            data: { repos: [] },
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+          }),
+        );
+
+        const result = await service.searchAccountsByEmail('test@example.com');
+
+        expect(result).toBeNull();
+        expect(httpService.get).toHaveBeenCalledTimes(2);
+      });
+
+      it('should fall back when message contains "not implemented"', async () => {
+        httpService.get.mockReturnValueOnce(
+          throwError(() => makeServiceNotConfiguredError('Method not implemented')),
+        );
+
+        httpService.get.mockReturnValueOnce(
+          of({
+            data: { repos: [] },
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+          }),
+        );
+
+        const result = await service.searchAccountsByEmail('test@example.com');
+
+        expect(result).toBeNull();
+        expect(httpService.get).toHaveBeenCalledTimes(2);
+      });
+
+      it('should fall back when message contains "not available"', async () => {
+        httpService.get.mockReturnValueOnce(
+          throwError(() => makeServiceNotConfiguredError('Endpoint not available')),
+        );
+
+        httpService.get.mockReturnValueOnce(
+          of({
+            data: { repos: [] },
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+          }),
+        );
+
+        const result = await service.searchAccountsByEmail('test@example.com');
+
+        expect(result).toBeNull();
+        expect(httpService.get).toHaveBeenCalledTimes(2);
+      });
+
+      it('should fall back when HTTP status is 501 (Not Implemented)', async () => {
+        httpService.get.mockReturnValueOnce(
+          throwError(() =>
+            makeServiceNotConfiguredError('Some error message', 501),
+          ),
+        );
+
+        httpService.get.mockReturnValueOnce(
+          of({
+            data: { repos: [] },
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+          }),
+        );
+
+        const result = await service.searchAccountsByEmail('test@example.com');
+
+        expect(result).toBeNull();
+        expect(httpService.get).toHaveBeenCalledTimes(2);
+      });
+
+      it('should NOT fall back for unrelated errors', async () => {
+        httpService.get.mockReturnValue(
+          throwError(() =>
+            makeServiceNotConfiguredError('Internal server error', 500),
+          ),
+        );
+
+        // Should throw, not fall back
+        await expect(
+          service.searchAccountsByEmail('test@example.com'),
+        ).rejects.toThrow(PdsApiError);
+
+        // Should only call searchAccounts, not listRepos
+        expect(httpService.get).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   describe('adminUpdateAccountPassword()', () => {

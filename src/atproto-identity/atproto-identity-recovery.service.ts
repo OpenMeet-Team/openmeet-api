@@ -13,6 +13,7 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
+import { isServiceNotConfiguredError } from '../pds/pds-error-detection';
 import { UserService } from '../user/user.service';
 import { AllConfigType } from '../config/config.type';
 
@@ -85,13 +86,12 @@ export class AtprotoIdentityRecoveryService {
       };
     } catch (error) {
       // Handle case where admin API isn't configured on the PDS
-      // "No service configured for com.atproto.admin.searchAccounts"
-      if (
-        error instanceof Error &&
-        error.message.includes('No service configured')
-      ) {
+      // Uses robust detection for various "not configured/implemented" error formats
+      if (isServiceNotConfiguredError(error)) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         this.logger.warn(
-          `PDS admin API not available, cannot check for existing accounts: ${error.message}`,
+          `PDS admin API not available, cannot check for existing accounts: ${errorMessage}`,
         );
         return { hasExistingAccount: false };
       }
@@ -134,10 +134,8 @@ export class AtprotoIdentityRecoveryService {
       );
     } catch (error) {
       // Handle case where admin API isn't configured on the PDS
-      if (
-        error instanceof Error &&
-        error.message.includes('No service configured')
-      ) {
+      // Uses robust detection for various "not configured/implemented" error formats
+      if (isServiceNotConfiguredError(error)) {
         throw new BadRequestException(
           'PDS admin API not available. Recovery requires PDS admin access to be configured.',
         );

@@ -223,6 +223,42 @@ describe('AtprotoIdentityRecoveryService', () => {
       expect(result).toEqual({ hasExistingAccount: false });
     });
 
+    it('should return false when error contains "not implemented"', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockRejectedValue(
+        new Error('Method not implemented'),
+      );
+
+      // Act
+      const result = await service.checkRecoveryStatus(
+        'test-tenant',
+        mockUser.ulid,
+      );
+
+      // Assert
+      expect(result).toEqual({ hasExistingAccount: false });
+    });
+
+    it('should return false when error contains "not available"', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockRejectedValue(
+        new Error('Endpoint not available'),
+      );
+
+      // Act
+      const result = await service.checkRecoveryStatus(
+        'test-tenant',
+        mockUser.ulid,
+      );
+
+      // Assert
+      expect(result).toEqual({ hasExistingAccount: false });
+    });
+
     it('should re-throw non "No service configured" errors', async () => {
       // Arrange
       userService.findByUlid.mockResolvedValue(mockUser as any);
@@ -319,6 +355,40 @@ describe('AtprotoIdentityRecoveryService', () => {
       userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
       pdsAccountService.searchAccountsByEmail.mockRejectedValue(
         new Error('No service configured for com.atproto.admin.searchAccounts'),
+      );
+
+      // Act & Assert
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow('PDS admin API not available');
+    });
+
+    it('should throw BadRequestException when error contains "not implemented"', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockRejectedValue(
+        new Error('Method not implemented'),
+      );
+
+      // Act & Assert
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow('PDS admin API not available');
+    });
+
+    it('should throw BadRequestException when error contains "not available"', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockRejectedValue(
+        new Error('Endpoint not available'),
       );
 
       // Act & Assert
@@ -442,20 +512,11 @@ describe('AtprotoIdentityRecoveryService', () => {
   });
 
   describe('completeTakeOwnership', () => {
-    const mockNewPassword = 'user-chosen-password-123';
-    const mockSessionResponse = {
-      did: mockIdentityEntity.did,
-      handle: mockIdentityEntity.handle,
-      accessJwt: 'access-token',
-      refreshJwt: 'refresh-token',
-    };
-
-    it('should verify password by creating session, then clear credentials and set non-custodial', async () => {
+    it('should clear credentials and set non-custodial', async () => {
       // Arrange
       userAtprotoIdentityService.findByUserUlid.mockResolvedValue(
         mockIdentityEntity as UserAtprotoIdentityEntity,
       );
-      pdsAccountService.createSession.mockResolvedValue(mockSessionResponse);
       userAtprotoIdentityService.update.mockResolvedValue({
         ...mockIdentityEntity,
         pdsCredentials: null,
@@ -463,17 +524,9 @@ describe('AtprotoIdentityRecoveryService', () => {
       } as UserAtprotoIdentityEntity);
 
       // Act
-      await service.completeTakeOwnership(
-        'test-tenant',
-        mockUser.ulid,
-        mockNewPassword,
-      );
+      await service.completeTakeOwnership('test-tenant', mockUser.ulid);
 
-      // Assert - verify password by creating session first
-      expect(pdsAccountService.createSession).toHaveBeenCalledWith(
-        mockIdentityEntity.did,
-        mockNewPassword,
-      );
+      // Assert - credentials cleared and marked as non-custodial
       expect(userAtprotoIdentityService.update).toHaveBeenCalledWith(
         'test-tenant',
         mockIdentityEntity.id,
@@ -484,46 +537,13 @@ describe('AtprotoIdentityRecoveryService', () => {
       );
     });
 
-    it('should throw BadRequestException when password verification fails', async () => {
-      // Arrange
-      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(
-        mockIdentityEntity as UserAtprotoIdentityEntity,
-      );
-      pdsAccountService.createSession.mockRejectedValue(
-        new Error('AuthenticationRequired'),
-      );
-
-      // Act & Assert
-      await expect(
-        service.completeTakeOwnership(
-          'test-tenant',
-          mockUser.ulid,
-          'wrong-password',
-        ),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.completeTakeOwnership(
-          'test-tenant',
-          mockUser.ulid,
-          'wrong-password',
-        ),
-      ).rejects.toThrow('Invalid password');
-
-      // Credentials should NOT be cleared
-      expect(userAtprotoIdentityService.update).not.toHaveBeenCalled();
-    });
-
     it('should throw BadRequestException when no identity exists', async () => {
       // Arrange
       userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
 
       // Act & Assert
       await expect(
-        service.completeTakeOwnership(
-          'test-tenant',
-          mockUser.ulid,
-          mockNewPassword,
-        ),
+        service.completeTakeOwnership('test-tenant', mockUser.ulid),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -539,11 +559,7 @@ describe('AtprotoIdentityRecoveryService', () => {
 
       // Act & Assert
       await expect(
-        service.completeTakeOwnership(
-          'test-tenant',
-          mockUser.ulid,
-          mockNewPassword,
-        ),
+        service.completeTakeOwnership('test-tenant', mockUser.ulid),
       ).rejects.toThrow(BadRequestException);
     });
   });
