@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { of, throwError } from 'rxjs';
 import { AxiosResponse, AxiosError, AxiosHeaders } from 'axios';
-import { PdsAccountService } from './pds-account.service';
+import { PdsAccountService, AccountView } from './pds-account.service';
 import { PdsApiError } from './pds.errors';
 
 describe('PdsAccountService', () => {
@@ -481,6 +481,426 @@ describe('PdsAccountService', () => {
 
       // Should be called 3 times (max retries)
       expect(httpService.post).toHaveBeenCalledTimes(3);
+    }, 15000);
+  });
+
+  describe('searchAccountsByEmail()', () => {
+    // Helper to create a successful AxiosResponse
+    const makeResponse = <T>(data: T): AxiosResponse<T> => ({
+      data,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: { headers: new AxiosHeaders() },
+    });
+
+    it('should find account when email matches', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:abc123',
+        handle: 'alice.dev.opnmt.me',
+        email: 'alice@example.com',
+        indexedAt: '2025-01-01T00:00:00Z',
+      };
+
+      // listRepos returns one repo
+      httpService.get.mockReturnValueOnce(
+        of(makeResponse({ repos: [{ did: 'did:plc:abc123' }] })),
+      );
+
+      // getAccountInfo returns the matching account
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
+
+      const result = await service.searchAccountsByEmail('alice@example.com');
+
+      expect(result).toEqual(mockAccount);
+      // First call: listRepos, second call: getAccountInfo
+      expect(httpService.get).toHaveBeenCalledTimes(2);
+      expect(httpService.get).toHaveBeenNthCalledWith(
+        1,
+        'https://pds-dev.openmeet.net/xrpc/com.atproto.sync.listRepos',
+        expect.objectContaining({
+          params: { limit: 100, cursor: undefined },
+        }),
+      );
+      expect(httpService.get).toHaveBeenNthCalledWith(
+        2,
+        'https://pds-dev.openmeet.net/xrpc/com.atproto.admin.getAccountInfo',
+        expect.objectContaining({
+          params: { did: 'did:plc:abc123' },
+        }),
+      );
+    });
+
+    it('should return null when no account matches email', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:abc123',
+        handle: 'alice.dev.opnmt.me',
+        email: 'alice@example.com',
+        indexedAt: '2025-01-01T00:00:00Z',
+      };
+
+      // listRepos returns one repo
+      httpService.get.mockReturnValueOnce(
+        of(makeResponse({ repos: [{ did: 'did:plc:abc123' }] })),
+      );
+
+      // getAccountInfo returns account with different email
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
+
+      const result = await service.searchAccountsByEmail(
+        'notfound@example.com',
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when no accounts exist', async () => {
+      // listRepos returns empty
+      httpService.get.mockReturnValueOnce(of(makeResponse({ repos: [] })));
+
+      const result = await service.searchAccountsByEmail('test@example.com');
+
+      expect(result).toBeNull();
+      // Only listRepos called, no getAccountInfo
+      expect(httpService.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle pagination with cursor', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:target',
+        handle: 'target.dev.opnmt.me',
+        email: 'target@example.com',
+      };
+
+      // Implementation collects ALL DIDs first via listRepos pagination,
+      // then iterates through each DID calling getAccountInfo.
+
+      // First listRepos call returns 2 accounts with cursor
+      httpService.get.mockReturnValueOnce(
+        of(
+          makeResponse({
+            repos: [{ did: 'did:plc:first' }, { did: 'did:plc:second' }],
+            cursor: 'next-page-cursor',
+          }),
+        ),
+      );
+
+      // Second listRepos call returns target account (no cursor = last page)
+      httpService.get.mockReturnValueOnce(
+        of(makeResponse({ repos: [{ did: 'did:plc:target' }] })),
+      );
+
+      // Now getAccountInfo calls for each DID (in order: first, second, target)
+      httpService.get.mockReturnValueOnce(
+        of(
+          makeResponse({
+            did: 'did:plc:first',
+            handle: 'first.dev.opnmt.me',
+            email: 'first@example.com',
+          }),
+        ),
+      );
+
+      httpService.get.mockReturnValueOnce(
+        of(
+          makeResponse({
+            did: 'did:plc:second',
+            handle: 'second.dev.opnmt.me',
+            email: 'second@example.com',
+          }),
+        ),
+      );
+
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
+
+      const result = await service.searchAccountsByEmail('target@example.com');
+
+      expect(result).toEqual(mockAccount);
+      expect(httpService.get).toHaveBeenCalledTimes(5);
+
+      // Verify pagination: first two calls are listRepos
+      expect(httpService.get).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('listRepos'),
+        expect.objectContaining({
+          params: { limit: 100, cursor: undefined },
+        }),
+      );
+      expect(httpService.get).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('listRepos'),
+        expect.objectContaining({
+          params: { limit: 100, cursor: 'next-page-cursor' },
+        }),
+      );
+    });
+
+    it('should continue iteration when individual getAccountInfo call fails', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:second',
+        handle: 'second.dev.opnmt.me',
+        email: 'target@example.com',
+      };
+
+      // listRepos returns two accounts
+      httpService.get.mockReturnValueOnce(
+        of(
+          makeResponse({
+            repos: [{ did: 'did:plc:first' }, { did: 'did:plc:second' }],
+          }),
+        ),
+      );
+
+      // getAccountInfo for first account FAILS
+      const errorResponse: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: { error: 'InternalServerError', message: 'Database timeout' },
+          status: 500,
+          statusText: 'Internal Server Error',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 500',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+      httpService.get.mockReturnValueOnce(throwError(() => errorResponse));
+
+      // getAccountInfo for second account succeeds and matches
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
+
+      const result = await service.searchAccountsByEmail('target@example.com');
+
+      // Should find the second account despite first failing
+      expect(result).toEqual(mockAccount);
+      expect(httpService.get).toHaveBeenCalledTimes(3);
+    });
+
+    it('should be case-insensitive for email matching', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:abc123',
+        handle: 'alice.dev.opnmt.me',
+        email: 'Alice@Example.COM',
+      };
+
+      httpService.get.mockReturnValueOnce(
+        of(makeResponse({ repos: [{ did: 'did:plc:abc123' }] })),
+      );
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
+
+      // Search with different case
+      const result = await service.searchAccountsByEmail('alice@example.com');
+
+      expect(result).toEqual(mockAccount);
+    });
+
+    it('should use Basic Auth header for admin API calls', async () => {
+      httpService.get.mockReturnValueOnce(of(makeResponse({ repos: [] })));
+
+      await service.searchAccountsByEmail('test@example.com');
+
+      // Verify Basic Auth header is used
+      const expectedAuthHeader = `Basic ${Buffer.from('admin:admin-secret').toString('base64')}`;
+      expect(httpService.get).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: expectedAuthHeader,
+          }),
+        }),
+      );
+    });
+
+    it('should throw PdsApiError when listRepos fails', async () => {
+      const errorResponse: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: {
+            error: 'AuthenticationRequired',
+            message: 'Admin authentication required',
+          },
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 401',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+
+      httpService.get.mockReturnValue(throwError(() => errorResponse));
+
+      await expect(
+        service.searchAccountsByEmail('test@example.com'),
+      ).rejects.toThrow(PdsApiError);
+    });
+  });
+
+  describe('adminUpdateAccountPassword()', () => {
+    it('should update password successfully', async () => {
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await expect(
+        service.adminUpdateAccountPassword('did:plc:abc123', 'new-password'),
+      ).resolves.toBeUndefined();
+
+      expect(httpService.post).toHaveBeenCalledWith(
+        'https://pds-dev.openmeet.net/xrpc/com.atproto.admin.updateAccountPassword',
+        {
+          did: 'did:plc:abc123',
+          password: 'new-password',
+        },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: expect.stringMatching(/^Basic /),
+            'Content-Type': 'application/json',
+          }),
+        }),
+      );
+    });
+
+    it('should use Basic Auth header', async () => {
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await service.adminUpdateAccountPassword(
+        'did:plc:abc123',
+        'new-password',
+      );
+
+      // Verify Basic Auth header is used
+      const expectedAuthHeader = `Basic ${Buffer.from('admin:admin-secret').toString('base64')}`;
+      expect(httpService.post).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: expectedAuthHeader,
+          }),
+        }),
+      );
+    });
+
+    it('should throw PdsApiError on failure', async () => {
+      const errorResponse: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: {
+            error: 'InvalidRequest',
+            message: 'Account not found',
+          },
+          status: 400,
+          statusText: 'Bad Request',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 400',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+
+      httpService.post.mockReturnValue(throwError(() => errorResponse));
+
+      await expect(
+        service.adminUpdateAccountPassword('did:plc:invalid', 'new-password'),
+      ).rejects.toThrow(PdsApiError);
+    });
+  });
+
+  describe('requestPasswordReset()', () => {
+    it('should send password reset email successfully', async () => {
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await expect(
+        service.requestPasswordReset('alice@example.com'),
+      ).resolves.toBeUndefined();
+
+      expect(httpService.post).toHaveBeenCalledWith(
+        'https://pds-dev.openmeet.net/xrpc/com.atproto.server.requestPasswordReset',
+        {
+          email: 'alice@example.com',
+        },
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      );
+    });
+
+    it('should NOT use Basic Auth header (public endpoint)', async () => {
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await service.requestPasswordReset('alice@example.com');
+
+      // Verify NO Authorization header is used
+      const callArgs = httpService.post.mock.calls[0];
+      const headers = callArgs[2]?.headers;
+      expect(headers).not.toHaveProperty('Authorization');
+    });
+
+    it('should not throw even if email does not exist (security)', async () => {
+      // PDS typically returns success even for non-existent emails to prevent enumeration
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await expect(
+        service.requestPasswordReset('nonexistent@example.com'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should throw PdsApiError on network failure', async () => {
+      const networkError = new Error('connect ECONNREFUSED');
+      (networkError as NodeJS.ErrnoException).code = 'ECONNREFUSED';
+
+      httpService.post.mockReturnValue(throwError(() => networkError));
+
+      await expect(
+        service.requestPasswordReset('alice@example.com'),
+      ).rejects.toThrow(PdsApiError);
     }, 15000);
   });
 });

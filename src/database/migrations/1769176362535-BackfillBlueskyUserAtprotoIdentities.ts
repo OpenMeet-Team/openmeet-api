@@ -19,10 +19,6 @@ export class BackfillBlueskyUserAtprotoIdentities1769176362535
 {
   name = 'BackfillBlueskyUserAtprotoIdentities1769176362535';
 
-  // Disable transaction wrapper - this migration uses best-effort approach
-  // and must continue even if individual user backfills fail
-  transaction = false as const;
-
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
@@ -206,7 +202,9 @@ export class BackfillBlueskyUserAtprotoIdentities1769176362535
     );
 
     // TypeORM query() returns [rows, affectedCount] for DELETE
-    const affectedCount = Array.isArray(result) ? result[1] : result?.rowCount || 0;
+    const affectedCount = Array.isArray(result)
+      ? result[1]
+      : result?.rowCount || 0;
     console.log(
       `  ✅ Removed ${affectedCount} non-custodial Bluesky identity records`,
     );

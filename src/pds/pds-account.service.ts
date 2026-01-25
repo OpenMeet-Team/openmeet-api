@@ -7,6 +7,31 @@ import { PdsApiError } from './pds.errors';
 import { AllConfigType } from '../config/config.type';
 
 /**
+ * Account view from PDS admin API.
+ */
+export interface AccountView {
+  did: string;
+  handle: string;
+  email?: string;
+  indexedAt?: string;
+  invitedBy?: { did: string };
+  invites?: {
+    code: string;
+    available: number;
+    disabled: boolean;
+    forAccount: string;
+    createdBy: string;
+    createdAt: string;
+    uses: { usedBy: string; usedAt: string }[];
+  }[];
+  invitesDisabled?: boolean;
+  emailConfirmedAt?: string;
+  inviteNote?: string;
+  deactivatedAt?: string;
+  threatSignatures?: { property: string; value: string }[];
+}
+
+/**
  * Response from PDS account creation.
  */
 export interface CreateAccountResponse {
@@ -189,6 +214,160 @@ export class PdsAccountService {
       // Re-throw all other errors
       throw this.mapToPdsApiError(error);
     }
+  }
+
+  /**
+   * Get account info by DID using the admin API.
+   *
+   * @param did - The DID of the account
+   * @returns The account info, or null if not found
+   * @throws PdsApiError if the request fails (except for NotFound)
+   */
+  async getAccountInfo(did: string): Promise<AccountView | null> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.admin.getAccountInfo`;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          params: { did },
+          headers: {
+            Authorization: this.getBasicAuthHeader(),
+          },
+        }),
+      );
+      return response.data as AccountView;
+    } catch (error) {
+      // Return null for "not found" errors
+      if (this.isAxiosError(error) && error.response?.status === 400) {
+        const data = error.response?.data as { error?: string } | undefined;
+        if (data?.error === 'NotFound') {
+          return null;
+        }
+      }
+      throw this.mapToPdsApiError(error);
+    }
+  }
+
+  /**
+   * List all repos (accounts) on the PDS.
+   *
+   * @returns Array of DIDs
+   * @throws PdsApiError if the request fails
+   */
+  private async listAllRepoDids(): Promise<string[]> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.sync.listRepos`;
+    const dids: string[] = [];
+    let cursor: string | undefined;
+
+    try {
+      do {
+        const response = await firstValueFrom(
+          this.httpService.get(url, {
+            params: { limit: 100, cursor },
+            headers: {
+              Authorization: this.getBasicAuthHeader(),
+            },
+          }),
+        );
+
+        const repos = response.data?.repos as { did: string }[] | undefined;
+        if (repos) {
+          dids.push(...repos.map((r) => r.did));
+        }
+        cursor = response.data?.cursor;
+      } while (cursor);
+
+      return dids;
+    } catch (error) {
+      throw this.mapToPdsApiError(error);
+    }
+  }
+
+  /**
+   * Search for an account by email using the admin API.
+   *
+   * Iterates through all accounts via listRepos + getAccountInfo.
+   * Note: com.atproto.admin.searchAccounts is only available on ozone moderation
+   * services, not standard PDS instances, so we use iteration directly.
+   *
+   * @param email - The email to search for (case-insensitive)
+   * @returns The account if found, or null if not found
+   * @throws PdsApiError if listRepos fails
+   */
+  async searchAccountsByEmail(email: string): Promise<AccountView | null> {
+    const normalizedEmail = email.toLowerCase();
+    const dids = await this.listAllRepoDids();
+
+    for (const did of dids) {
+      try {
+        const account = await this.getAccountInfo(did);
+        if (account?.email?.toLowerCase() === normalizedEmail) {
+          return account;
+        }
+      } catch (error) {
+        // Log but continue - one failed lookup shouldn't stop the search
+        this.logger.warn(`Failed to get account info for ${did}: ${error}`);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Update an account's password using the admin API.
+   *
+   * @param did - The DID of the account to update
+   * @param newPassword - The new password to set
+   * @throws PdsApiError if the request fails
+   */
+  async adminUpdateAccountPassword(
+    did: string,
+    newPassword: string,
+  ): Promise<void> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.admin.updateAccountPassword`;
+
+    return this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          {
+            did,
+            password: newPassword,
+          },
+          {
+            headers: {
+              Authorization: this.getBasicAuthHeader(),
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+    });
+  }
+
+  /**
+   * Request a password reset email for an account.
+   * This is a public endpoint and does not require admin authentication.
+   *
+   * @param email - The email address to send the reset link to
+   * @throws PdsApiError if the request fails (network errors, etc.)
+   */
+  async requestPasswordReset(email: string): Promise<void> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.server.requestPasswordReset`;
+
+    return this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          { email },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+    });
   }
 
   /**

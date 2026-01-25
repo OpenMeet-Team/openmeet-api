@@ -33,16 +33,21 @@ export class ExternalEventLocationDto {
     description: 'Location latitude (accepts string or number per AT Protocol)',
     example: 40.7128,
   })
-  @Transform(({ value }) => (typeof value === 'string' ? parseFloat(value) : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? parseFloat(value) : value,
+  )
   @IsNumber()
   @IsOptional()
   lat?: number;
 
   @ApiPropertyOptional({
-    description: 'Location longitude (accepts string or number per AT Protocol)',
+    description:
+      'Location longitude (accepts string or number per AT Protocol)',
     example: -74.006,
   })
-  @Transform(({ value }) => (typeof value === 'string' ? parseFloat(value) : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? parseFloat(value) : value,
+  )
   @IsNumber()
   @IsOptional()
   lon?: number;

@@ -625,12 +625,14 @@ describe('EventSeriesOccurrenceService', () => {
       // Mock template event lookup to return Bluesky event
       // First reset the mock completely, then set up the new implementation
       mockEventQueryService.findEventBySlug.mockReset();
-      mockEventQueryService.findEventBySlug.mockImplementation((slug: string) => {
-        if (slug === 'bluesky-template-event') {
-          return Promise.resolve(blueskyTemplateEvent);
-        }
-        return Promise.resolve(mockTemplateEvent);
-      });
+      mockEventQueryService.findEventBySlug.mockImplementation(
+        (slug: string) => {
+          if (slug === 'bluesky-template-event') {
+            return Promise.resolve(blueskyTemplateEvent);
+          }
+          return Promise.resolve(mockTemplateEvent);
+        },
+      );
 
       // Mock the created occurrence - create() now handles Bluesky sync internally
       // and returns the event with Bluesky metadata already set
@@ -653,7 +655,9 @@ describe('EventSeriesOccurrenceService', () => {
         },
       };
 
-      eventManagementService.create.mockResolvedValue(createdOccurrenceWithBluesky);
+      eventManagementService.create.mockResolvedValue(
+        createdOccurrenceWithBluesky,
+      );
 
       // Execute test
       const result = await service.materializeOccurrence(
@@ -775,12 +779,14 @@ describe('EventSeriesOccurrenceService', () => {
 
       // Mock template event lookup to return Bluesky event - reset first, then set up new implementation
       mockEventQueryService.findEventBySlug.mockReset();
-      mockEventQueryService.findEventBySlug.mockImplementation((slug: string) => {
-        if (slug === 'bluesky-template-event') {
-          return Promise.resolve(blueskyTemplateEvent);
-        }
-        return Promise.resolve(mockTemplateEvent);
-      });
+      mockEventQueryService.findEventBySlug.mockImplementation(
+        (slug: string) => {
+          if (slug === 'bluesky-template-event') {
+            return Promise.resolve(blueskyTemplateEvent);
+          }
+          return Promise.resolve(mockTemplateEvent);
+        },
+      );
 
       // Mock create() to throw (simulating Bluesky failure within create())
       eventManagementService.create.mockRejectedValue(

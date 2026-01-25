@@ -1317,6 +1317,78 @@ describe('AuthService', () => {
       });
     });
 
+    describe('Email Already Taken - Graceful Recovery', () => {
+      it('should return gracefully when PDS reports email already taken', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        // PDS account creation fails with "email already taken" error
+        mockPdsAccountService.createAccount.mockRejectedValue(
+          new PdsApiError('email already taken', 400, 'EmailAlreadyTaken'),
+        );
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Login should succeed (graceful degradation)
+        expect(result).toHaveProperty('token');
+        expect(result).toHaveProperty('user');
+        // No AT identity created since email was taken
+        expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+        // Should NOT retry (unlike handle taken)
+        expect(mockPdsAccountService.createAccount).toHaveBeenCalledTimes(1);
+      });
+
+      it('should handle various "email taken" error message formats', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        // Different error message format
+        mockPdsAccountService.createAccount.mockRejectedValue(
+          new PdsApiError('Email is already in use', 400),
+        );
+
+        // Act
+        const result = await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Login should succeed
+        expect(result).toHaveProperty('token');
+        expect(result).toHaveProperty('user');
+        expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+      });
+
+      it('should not retry when email is taken (unlike handle taken)', async () => {
+        // Arrange
+        mockUserService.findOrCreateUser.mockResolvedValue(mockGoogleUser);
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+        mockPdsAccountService.isHandleAvailable.mockResolvedValue(true);
+        // PDS account creation fails with email taken
+        mockPdsAccountService.createAccount.mockRejectedValue(
+          new PdsApiError('email taken', 400, 'EmailTaken'),
+        );
+
+        // Act
+        await authService.validateSocialLogin(
+          AuthProvidersEnum.google,
+          mockGoogleSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Should NOT retry (unlike handle taken which retries)
+        expect(mockPdsAccountService.createAccount).toHaveBeenCalledTimes(1);
+      });
+    });
+
     describe('Race Condition Retry', () => {
       it('should retry when handle is taken between check and create', async () => {
         // Arrange
