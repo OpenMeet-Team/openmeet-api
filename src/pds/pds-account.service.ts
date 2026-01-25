@@ -4,7 +4,6 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import { PdsApiError } from './pds.errors';
-import { isServiceNotConfiguredError } from './pds-error-detection';
 import { AllConfigType } from '../config/config.type';
 
 /**
@@ -253,77 +252,49 @@ export class PdsAccountService {
    * List all repos (accounts) on the PDS.
    *
    * @returns Array of DIDs
+   * @throws PdsApiError if the request fails
    */
   private async listAllRepoDids(): Promise<string[]> {
     const url = `${this.pdsUrl}/xrpc/com.atproto.sync.listRepos`;
     const dids: string[] = [];
     let cursor: string | undefined;
 
-    do {
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          params: { limit: 100, cursor },
-          headers: {
-            Authorization: this.getBasicAuthHeader(),
-          },
-        }),
-      );
-
-      const repos = response.data?.repos as { did: string }[] | undefined;
-      if (repos) {
-        dids.push(...repos.map((r) => r.did));
-      }
-      cursor = response.data?.cursor;
-    } while (cursor);
-
-    return dids;
-  }
-
-  /**
-   * Search for an account by email using the admin API.
-   *
-   * First tries com.atproto.admin.searchAccounts (available on ozone/moderation services).
-   * Falls back to iterating through all accounts if that endpoint isn't available.
-   *
-   * @param email - The email to search for
-   * @returns The account if found, or null if not found
-   * @throws PdsApiError if the request fails
-   */
-  async searchAccountsByEmail(email: string): Promise<AccountView | null> {
-    // First try the dedicated search endpoint (may not be available on all PDS)
     try {
-      const url = `${this.pdsUrl}/xrpc/com.atproto.admin.searchAccounts`;
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          params: { email },
-          headers: {
-            Authorization: this.getBasicAuthHeader(),
-          },
-        }),
-      );
-
-      const accounts = response.data?.accounts as AccountView[] | undefined;
-      return accounts && accounts.length > 0 ? accounts[0] : null;
-    } catch (error) {
-      // If searchAccounts isn't available, fall back to iteration
-      // Uses robust detection for various "not configured/implemented" error formats
-      if (isServiceNotConfiguredError(error)) {
-        this.logger.debug(
-          'searchAccounts not available, falling back to iteration',
+      do {
+        const response = await firstValueFrom(
+          this.httpService.get(url, {
+            params: { limit: 100, cursor },
+            headers: {
+              Authorization: this.getBasicAuthHeader(),
+            },
+          }),
         );
-        return this.findAccountByEmailViaIteration(email);
-      }
+
+        const repos = response.data?.repos as { did: string }[] | undefined;
+        if (repos) {
+          dids.push(...repos.map((r) => r.did));
+        }
+        cursor = response.data?.cursor;
+      } while (cursor);
+
+      return dids;
+    } catch (error) {
       throw this.mapToPdsApiError(error);
     }
   }
 
   /**
-   * Find an account by email by iterating through all accounts.
-   * Used as fallback when com.atproto.admin.searchAccounts isn't available.
+   * Search for an account by email using the admin API.
+   *
+   * Iterates through all accounts via listRepos + getAccountInfo.
+   * Note: com.atproto.admin.searchAccounts is only available on ozone moderation
+   * services, not standard PDS instances, so we use iteration directly.
+   *
+   * @param email - The email to search for (case-insensitive)
+   * @returns The account if found, or null if not found
+   * @throws PdsApiError if listRepos fails
    */
-  private async findAccountByEmailViaIteration(
-    email: string,
-  ): Promise<AccountView | null> {
+  async searchAccountsByEmail(email: string): Promise<AccountView | null> {
     const normalizedEmail = email.toLowerCase();
     const dids = await this.listAllRepoDids();
 

@@ -16,9 +16,7 @@ describe('pds-error-detection', () => {
       });
 
       it('when message contains "service not configured" (case-insensitive)', () => {
-        const error = new Error(
-          'Service Not Configured for this endpoint',
-        );
+        const error = new Error('Service Not Configured for this endpoint');
         expect(isServiceNotConfiguredError(error)).toBe(true);
       });
 
@@ -203,7 +201,9 @@ describe('pds-error-detection', () => {
     });
 
     it('should include expected patterns', () => {
-      expect(SERVICE_NOT_CONFIGURED_PATTERNS).toContain('no service configured');
+      expect(SERVICE_NOT_CONFIGURED_PATTERNS).toContain(
+        'no service configured',
+      );
       expect(SERVICE_NOT_CONFIGURED_PATTERNS).toContain('not implemented');
       expect(SERVICE_NOT_CONFIGURED_PATTERNS).toContain('not available');
     });

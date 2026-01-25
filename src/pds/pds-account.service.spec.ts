@@ -485,7 +485,16 @@ describe('PdsAccountService', () => {
   });
 
   describe('searchAccountsByEmail()', () => {
-    it('should return account when found', async () => {
+    // Helper to create a successful AxiosResponse
+    const makeResponse = <T>(data: T): AxiosResponse<T> => ({
+      data,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: { headers: new AxiosHeaders() },
+    });
+
+    it('should find account when email matches', async () => {
       const mockAccount: AccountView = {
         did: 'did:plc:abc123',
         handle: 'alice.dev.opnmt.me',
@@ -493,44 +502,50 @@ describe('PdsAccountService', () => {
         indexedAt: '2025-01-01T00:00:00Z',
       };
 
-      const successResponse: AxiosResponse = {
-        data: {
-          accounts: [mockAccount],
-        },
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: { headers: new AxiosHeaders() },
-      };
+      // listRepos returns one repo
+      httpService.get.mockReturnValueOnce(
+        of(makeResponse({ repos: [{ did: 'did:plc:abc123' }] })),
+      );
 
-      httpService.get.mockReturnValue(of(successResponse));
+      // getAccountInfo returns the matching account
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
 
       const result = await service.searchAccountsByEmail('alice@example.com');
 
       expect(result).toEqual(mockAccount);
-      expect(httpService.get).toHaveBeenCalledWith(
-        'https://pds-dev.openmeet.net/xrpc/com.atproto.admin.searchAccounts',
+      // First call: listRepos, second call: getAccountInfo
+      expect(httpService.get).toHaveBeenCalledTimes(2);
+      expect(httpService.get).toHaveBeenNthCalledWith(
+        1,
+        'https://pds-dev.openmeet.net/xrpc/com.atproto.sync.listRepos',
         expect.objectContaining({
-          params: { email: 'alice@example.com' },
-          headers: expect.objectContaining({
-            Authorization: expect.stringMatching(/^Basic /),
-          }),
+          params: { limit: 100, cursor: undefined },
+        }),
+      );
+      expect(httpService.get).toHaveBeenNthCalledWith(
+        2,
+        'https://pds-dev.openmeet.net/xrpc/com.atproto.admin.getAccountInfo',
+        expect.objectContaining({
+          params: { did: 'did:plc:abc123' },
         }),
       );
     });
 
-    it('should return null when no account found', async () => {
-      const successResponse: AxiosResponse = {
-        data: {
-          accounts: [],
-        },
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: { headers: new AxiosHeaders() },
+    it('should return null when no account matches email', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:abc123',
+        handle: 'alice.dev.opnmt.me',
+        email: 'alice@example.com',
+        indexedAt: '2025-01-01T00:00:00Z',
       };
 
-      httpService.get.mockReturnValue(of(successResponse));
+      // listRepos returns one repo
+      httpService.get.mockReturnValueOnce(
+        of(makeResponse({ repos: [{ did: 'did:plc:abc123' }] })),
+      );
+
+      // getAccountInfo returns account with different email
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
 
       const result = await service.searchAccountsByEmail(
         'notfound@example.com',
@@ -539,20 +554,154 @@ describe('PdsAccountService', () => {
       expect(result).toBeNull();
     });
 
-    it('should use Basic Auth header', async () => {
-      const successResponse: AxiosResponse = {
-        data: { accounts: [] },
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: { headers: new AxiosHeaders() },
+    it('should return null when no accounts exist', async () => {
+      // listRepos returns empty
+      httpService.get.mockReturnValueOnce(of(makeResponse({ repos: [] })));
+
+      const result = await service.searchAccountsByEmail('test@example.com');
+
+      expect(result).toBeNull();
+      // Only listRepos called, no getAccountInfo
+      expect(httpService.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle pagination with cursor', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:target',
+        handle: 'target.dev.opnmt.me',
+        email: 'target@example.com',
       };
 
-      httpService.get.mockReturnValue(of(successResponse));
+      // Implementation collects ALL DIDs first via listRepos pagination,
+      // then iterates through each DID calling getAccountInfo.
+
+      // First listRepos call returns 2 accounts with cursor
+      httpService.get.mockReturnValueOnce(
+        of(
+          makeResponse({
+            repos: [{ did: 'did:plc:first' }, { did: 'did:plc:second' }],
+            cursor: 'next-page-cursor',
+          }),
+        ),
+      );
+
+      // Second listRepos call returns target account (no cursor = last page)
+      httpService.get.mockReturnValueOnce(
+        of(makeResponse({ repos: [{ did: 'did:plc:target' }] })),
+      );
+
+      // Now getAccountInfo calls for each DID (in order: first, second, target)
+      httpService.get.mockReturnValueOnce(
+        of(
+          makeResponse({
+            did: 'did:plc:first',
+            handle: 'first.dev.opnmt.me',
+            email: 'first@example.com',
+          }),
+        ),
+      );
+
+      httpService.get.mockReturnValueOnce(
+        of(
+          makeResponse({
+            did: 'did:plc:second',
+            handle: 'second.dev.opnmt.me',
+            email: 'second@example.com',
+          }),
+        ),
+      );
+
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
+
+      const result = await service.searchAccountsByEmail('target@example.com');
+
+      expect(result).toEqual(mockAccount);
+      expect(httpService.get).toHaveBeenCalledTimes(5);
+
+      // Verify pagination: first two calls are listRepos
+      expect(httpService.get).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('listRepos'),
+        expect.objectContaining({
+          params: { limit: 100, cursor: undefined },
+        }),
+      );
+      expect(httpService.get).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('listRepos'),
+        expect.objectContaining({
+          params: { limit: 100, cursor: 'next-page-cursor' },
+        }),
+      );
+    });
+
+    it('should continue iteration when individual getAccountInfo call fails', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:second',
+        handle: 'second.dev.opnmt.me',
+        email: 'target@example.com',
+      };
+
+      // listRepos returns two accounts
+      httpService.get.mockReturnValueOnce(
+        of(
+          makeResponse({
+            repos: [{ did: 'did:plc:first' }, { did: 'did:plc:second' }],
+          }),
+        ),
+      );
+
+      // getAccountInfo for first account FAILS
+      const errorResponse: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: { error: 'InternalServerError', message: 'Database timeout' },
+          status: 500,
+          statusText: 'Internal Server Error',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 500',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+      httpService.get.mockReturnValueOnce(throwError(() => errorResponse));
+
+      // getAccountInfo for second account succeeds and matches
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
+
+      const result = await service.searchAccountsByEmail('target@example.com');
+
+      // Should find the second account despite first failing
+      expect(result).toEqual(mockAccount);
+      expect(httpService.get).toHaveBeenCalledTimes(3);
+    });
+
+    it('should be case-insensitive for email matching', async () => {
+      const mockAccount: AccountView = {
+        did: 'did:plc:abc123',
+        handle: 'alice.dev.opnmt.me',
+        email: 'Alice@Example.COM',
+      };
+
+      httpService.get.mockReturnValueOnce(
+        of(makeResponse({ repos: [{ did: 'did:plc:abc123' }] })),
+      );
+      httpService.get.mockReturnValueOnce(of(makeResponse(mockAccount)));
+
+      // Search with different case
+      const result = await service.searchAccountsByEmail('alice@example.com');
+
+      expect(result).toEqual(mockAccount);
+    });
+
+    it('should use Basic Auth header for admin API calls', async () => {
+      httpService.get.mockReturnValueOnce(of(makeResponse({ repos: [] })));
 
       await service.searchAccountsByEmail('test@example.com');
 
-      // Verify Basic Auth header is used (admin:admin-secret in base64)
+      // Verify Basic Auth header is used
       const expectedAuthHeader = `Basic ${Buffer.from('admin:admin-secret').toString('base64')}`;
       expect(httpService.get).toHaveBeenCalledWith(
         expect.any(String),
@@ -564,7 +713,7 @@ describe('PdsAccountService', () => {
       );
     });
 
-    it('should throw PdsApiError on failure', async () => {
+    it('should throw PdsApiError when listRepos fails', async () => {
       const errorResponse: AxiosError = {
         isAxiosError: true,
         response: {
@@ -588,157 +737,6 @@ describe('PdsAccountService', () => {
       await expect(
         service.searchAccountsByEmail('test@example.com'),
       ).rejects.toThrow(PdsApiError);
-    });
-
-    describe('fallback to iteration when searchAccounts not available', () => {
-      const makeServiceNotConfiguredError = (
-        message: string,
-        status = 400,
-      ): AxiosError => ({
-        isAxiosError: true,
-        response: {
-          data: { message },
-          status,
-          statusText: status === 501 ? 'Not Implemented' : 'Bad Request',
-          headers: {},
-          config: { headers: new AxiosHeaders() },
-        },
-        message: `Request failed with status code ${status}`,
-        name: 'AxiosError',
-        config: { headers: new AxiosHeaders() },
-        toJSON: () => ({}),
-      });
-
-      it('should fall back when message contains "No service configured"', async () => {
-        // First call to searchAccounts fails
-        httpService.get.mockReturnValueOnce(
-          throwError(() =>
-            makeServiceNotConfiguredError(
-              'No service configured for com.atproto.admin.searchAccounts',
-            ),
-          ),
-        );
-
-        // Fallback: listRepos returns empty (no accounts)
-        httpService.get.mockReturnValueOnce(
-          of({
-            data: { repos: [] },
-            status: 200,
-            statusText: 'OK',
-            headers: {},
-            config: { headers: new AxiosHeaders() },
-          }),
-        );
-
-        const result = await service.searchAccountsByEmail('test@example.com');
-
-        expect(result).toBeNull();
-        expect(httpService.get).toHaveBeenCalledTimes(2);
-      });
-
-      it('should fall back when message contains "service not configured" (case variation)', async () => {
-        httpService.get.mockReturnValueOnce(
-          throwError(() =>
-            makeServiceNotConfiguredError('Service Not Configured'),
-          ),
-        );
-
-        httpService.get.mockReturnValueOnce(
-          of({
-            data: { repos: [] },
-            status: 200,
-            statusText: 'OK',
-            headers: {},
-            config: { headers: new AxiosHeaders() },
-          }),
-        );
-
-        const result = await service.searchAccountsByEmail('test@example.com');
-
-        expect(result).toBeNull();
-        expect(httpService.get).toHaveBeenCalledTimes(2);
-      });
-
-      it('should fall back when message contains "not implemented"', async () => {
-        httpService.get.mockReturnValueOnce(
-          throwError(() => makeServiceNotConfiguredError('Method not implemented')),
-        );
-
-        httpService.get.mockReturnValueOnce(
-          of({
-            data: { repos: [] },
-            status: 200,
-            statusText: 'OK',
-            headers: {},
-            config: { headers: new AxiosHeaders() },
-          }),
-        );
-
-        const result = await service.searchAccountsByEmail('test@example.com');
-
-        expect(result).toBeNull();
-        expect(httpService.get).toHaveBeenCalledTimes(2);
-      });
-
-      it('should fall back when message contains "not available"', async () => {
-        httpService.get.mockReturnValueOnce(
-          throwError(() => makeServiceNotConfiguredError('Endpoint not available')),
-        );
-
-        httpService.get.mockReturnValueOnce(
-          of({
-            data: { repos: [] },
-            status: 200,
-            statusText: 'OK',
-            headers: {},
-            config: { headers: new AxiosHeaders() },
-          }),
-        );
-
-        const result = await service.searchAccountsByEmail('test@example.com');
-
-        expect(result).toBeNull();
-        expect(httpService.get).toHaveBeenCalledTimes(2);
-      });
-
-      it('should fall back when HTTP status is 501 (Not Implemented)', async () => {
-        httpService.get.mockReturnValueOnce(
-          throwError(() =>
-            makeServiceNotConfiguredError('Some error message', 501),
-          ),
-        );
-
-        httpService.get.mockReturnValueOnce(
-          of({
-            data: { repos: [] },
-            status: 200,
-            statusText: 'OK',
-            headers: {},
-            config: { headers: new AxiosHeaders() },
-          }),
-        );
-
-        const result = await service.searchAccountsByEmail('test@example.com');
-
-        expect(result).toBeNull();
-        expect(httpService.get).toHaveBeenCalledTimes(2);
-      });
-
-      it('should NOT fall back for unrelated errors', async () => {
-        httpService.get.mockReturnValue(
-          throwError(() =>
-            makeServiceNotConfiguredError('Internal server error', 500),
-          ),
-        );
-
-        // Should throw, not fall back
-        await expect(
-          service.searchAccountsByEmail('test@example.com'),
-        ).rejects.toThrow(PdsApiError);
-
-        // Should only call searchAccounts, not listRepos
-        expect(httpService.get).toHaveBeenCalledTimes(1);
-      });
     });
   });
 
