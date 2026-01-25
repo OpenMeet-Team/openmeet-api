@@ -1609,7 +1609,23 @@ export class AuthService {
           continue; // Retry with a new handle
         }
 
-        // Not a handle collision or exhausted retries - re-throw
+        // Check if this is an "email taken" error - user can recover via settings
+        const isEmailTaken =
+          error instanceof PdsApiError &&
+          error.message?.toLowerCase().includes('email') &&
+          (error.message?.toLowerCase().includes('taken') ||
+            error.message?.toLowerCase().includes('already') ||
+            error.message?.toLowerCase().includes('in use'));
+
+        if (isEmailTaken) {
+          this.logger.warn(
+            `PDS account already exists for email - user can recover via settings`,
+            { userId: user.id, email: user.email },
+          );
+          return; // Don't throw, login continues without AT Protocol identity
+        }
+
+        // Not a handle collision or email taken - re-throw
         throw error;
       }
     }

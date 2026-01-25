@@ -206,7 +206,9 @@ export class BackfillBlueskyUserAtprotoIdentities1769176362535
     );
 
     // TypeORM query() returns [rows, affectedCount] for DELETE
-    const affectedCount = Array.isArray(result) ? result[1] : result?.rowCount || 0;
+    const affectedCount = Array.isArray(result)
+      ? result[1]
+      : result?.rowCount || 0;
     console.log(
       `  ✅ Removed ${affectedCount} non-custodial Bluesky identity records`,
     );
