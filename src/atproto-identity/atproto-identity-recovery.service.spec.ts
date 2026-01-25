@@ -203,6 +203,38 @@ describe('AtprotoIdentityRecoveryService', () => {
       // Assert
       expect(result).toEqual({ hasExistingAccount: false });
     });
+
+    it('should return false when PDS admin API is not configured', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockRejectedValue(
+        new Error('No service configured for com.atproto.admin.searchAccounts'),
+      );
+
+      // Act
+      const result = await service.checkRecoveryStatus(
+        'test-tenant',
+        mockUser.ulid,
+      );
+
+      // Assert
+      expect(result).toEqual({ hasExistingAccount: false });
+    });
+
+    it('should re-throw non "No service configured" errors', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockRejectedValue(
+        new Error('Network error'),
+      );
+
+      // Act & Assert
+      await expect(
+        service.checkRecoveryStatus('test-tenant', mockUser.ulid),
+      ).rejects.toThrow('Network error');
+    });
   });
 
   describe('recoverAsCustodial', () => {
@@ -278,6 +310,23 @@ describe('AtprotoIdentityRecoveryService', () => {
       await expect(
         service.recoverAsCustodial('test-tenant', mockUser.ulid),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when PDS admin API is not configured', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      pdsAccountService.searchAccountsByEmail.mockRejectedValue(
+        new Error('No service configured for com.atproto.admin.searchAccounts'),
+      );
+
+      // Act & Assert
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.recoverAsCustodial('test-tenant', mockUser.ulid),
+      ).rejects.toThrow('PDS admin API not available');
     });
   });
 

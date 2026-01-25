@@ -69,18 +69,34 @@ export class AtprotoIdentityRecoveryService {
     }
 
     // Search for account on PDS
-    const pdsAccount = await this.pdsAccountService.searchAccountsByEmail(
-      user.email,
-    );
-    if (!pdsAccount) {
-      return { hasExistingAccount: false };
-    }
+    // Note: This uses admin API which may not be available on all PDS instances
+    try {
+      const pdsAccount = await this.pdsAccountService.searchAccountsByEmail(
+        user.email,
+      );
+      if (!pdsAccount) {
+        return { hasExistingAccount: false };
+      }
 
-    return {
-      hasExistingAccount: true,
-      did: pdsAccount.did,
-      handle: pdsAccount.handle,
-    };
+      return {
+        hasExistingAccount: true,
+        did: pdsAccount.did,
+        handle: pdsAccount.handle,
+      };
+    } catch (error) {
+      // Handle case where admin API isn't configured on the PDS
+      // "No service configured for com.atproto.admin.searchAccounts"
+      if (
+        error instanceof Error &&
+        error.message.includes('No service configured')
+      ) {
+        this.logger.warn(
+          `PDS admin API not available, cannot check for existing accounts: ${error.message}`,
+        );
+        return { hasExistingAccount: false };
+      }
+      throw error;
+    }
   }
 
   /**
@@ -110,9 +126,24 @@ export class AtprotoIdentityRecoveryService {
     }
 
     // Find account on PDS
-    const pdsAccount = await this.pdsAccountService.searchAccountsByEmail(
-      user.email,
-    );
+    // Note: This uses admin API which may not be available on all PDS instances
+    let pdsAccount;
+    try {
+      pdsAccount = await this.pdsAccountService.searchAccountsByEmail(
+        user.email,
+      );
+    } catch (error) {
+      // Handle case where admin API isn't configured on the PDS
+      if (
+        error instanceof Error &&
+        error.message.includes('No service configured')
+      ) {
+        throw new BadRequestException(
+          'PDS admin API not available. Recovery requires PDS admin access to be configured.',
+        );
+      }
+      throw error;
+    }
     if (!pdsAccount) {
       throw new NotFoundException('No PDS account found for this email');
     }
