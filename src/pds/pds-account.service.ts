@@ -7,6 +7,31 @@ import { PdsApiError } from './pds.errors';
 import { AllConfigType } from '../config/config.type';
 
 /**
+ * Account view from PDS admin API.
+ */
+export interface AccountView {
+  did: string;
+  handle: string;
+  email?: string;
+  indexedAt?: string;
+  invitedBy?: { did: string };
+  invites?: {
+    code: string;
+    available: number;
+    disabled: boolean;
+    forAccount: string;
+    createdBy: string;
+    createdAt: string;
+    uses: { usedBy: string; usedAt: string }[];
+  }[];
+  invitesDisabled?: boolean;
+  emailConfirmedAt?: string;
+  inviteNote?: string;
+  deactivatedAt?: string;
+  threatSignatures?: { property: string; value: string }[];
+}
+
+/**
  * Response from PDS account creation.
  */
 export interface CreateAccountResponse {
@@ -189,6 +214,88 @@ export class PdsAccountService {
       // Re-throw all other errors
       throw this.mapToPdsApiError(error);
     }
+  }
+
+  /**
+   * Search for an account by email using the admin API.
+   *
+   * @param email - The email to search for
+   * @returns The account if found, or null if not found
+   * @throws PdsApiError if the request fails
+   */
+  async searchAccountsByEmail(email: string): Promise<AccountView | null> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.admin.searchAccounts`;
+
+    return this.withRetry(async () => {
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          params: { email },
+          headers: {
+            Authorization: this.getBasicAuthHeader(),
+          },
+        }),
+      );
+
+      const accounts = response.data?.accounts as AccountView[] | undefined;
+      return accounts && accounts.length > 0 ? accounts[0] : null;
+    });
+  }
+
+  /**
+   * Update an account's password using the admin API.
+   *
+   * @param did - The DID of the account to update
+   * @param newPassword - The new password to set
+   * @throws PdsApiError if the request fails
+   */
+  async adminUpdateAccountPassword(
+    did: string,
+    newPassword: string,
+  ): Promise<void> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.admin.updateAccountPassword`;
+
+    return this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          {
+            did,
+            password: newPassword,
+          },
+          {
+            headers: {
+              Authorization: this.getBasicAuthHeader(),
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+    });
+  }
+
+  /**
+   * Request a password reset email for an account.
+   * This is a public endpoint and does not require admin authentication.
+   *
+   * @param email - The email address to send the reset link to
+   * @throws PdsApiError if the request fails (network errors, etc.)
+   */
+  async requestPasswordReset(email: string): Promise<void> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.server.requestPasswordReset`;
+
+    return this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          { email },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+    });
   }
 
   /**

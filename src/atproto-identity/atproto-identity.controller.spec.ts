@@ -1,7 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { AtprotoIdentityController } from './atproto-identity.controller';
 import { AtprotoIdentityService } from './atproto-identity.service';
+import {
+  AtprotoIdentityRecoveryService,
+  RecoveryStatus,
+} from './atproto-identity-recovery.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { UserService } from '../user/user.service';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +19,7 @@ describe('AtprotoIdentityController', () => {
   let controller: AtprotoIdentityController;
   let identityService: UserAtprotoIdentityService;
   let atprotoIdentityService: AtprotoIdentityService;
+  let recoveryService: AtprotoIdentityRecoveryService;
   let userService: UserService;
   let configService: ConfigService;
 
@@ -64,6 +73,13 @@ describe('AtprotoIdentityController', () => {
       createIdentity: jest.fn(),
     };
 
+    const mockRecoveryService = {
+      checkRecoveryStatus: jest.fn(),
+      recoverAsCustodial: jest.fn(),
+      initiateTakeOwnership: jest.fn(),
+      completeTakeOwnership: jest.fn(),
+    };
+
     const mockUserServiceImpl = {
       findById: jest.fn().mockResolvedValue(mockUserEntity),
     };
@@ -87,6 +103,10 @@ describe('AtprotoIdentityController', () => {
           useValue: mockAtprotoIdentityService,
         },
         {
+          provide: AtprotoIdentityRecoveryService,
+          useValue: mockRecoveryService,
+        },
+        {
           provide: UserService,
           useValue: mockUserServiceImpl,
         },
@@ -105,6 +125,9 @@ describe('AtprotoIdentityController', () => {
     );
     atprotoIdentityService = module.get<AtprotoIdentityService>(
       AtprotoIdentityService,
+    );
+    recoveryService = module.get<AtprotoIdentityRecoveryService>(
+      AtprotoIdentityRecoveryService,
     );
     userService = module.get<UserService>(UserService);
     configService = module.get<ConfigService>(ConfigService);
@@ -318,6 +341,242 @@ describe('AtprotoIdentityController', () => {
       // Assert
       expect(result).not.toHaveProperty('pdsCredentials');
       expect(JSON.stringify(result)).not.toContain('super-secret');
+    });
+  });
+
+  describe('getRecoveryStatus', () => {
+    it('should return recovery status when user exists', async () => {
+      // Arrange
+      const mockRecoveryStatus: RecoveryStatus = {
+        hasExistingAccount: true,
+        did: 'did:plc:existing123',
+        handle: 'existing-user.opnmt.me',
+      };
+      jest
+        .spyOn(recoveryService, 'checkRecoveryStatus')
+        .mockResolvedValue(mockRecoveryStatus);
+
+      // Act
+      const result = await controller.getRecoveryStatus(mockRequest);
+
+      // Assert
+      expect(userService.findById).toHaveBeenCalledWith(1, 'test-tenant');
+      expect(recoveryService.checkRecoveryStatus).toHaveBeenCalledWith(
+        'test-tenant',
+        '01234567890123456789012345',
+      );
+      expect(result).toEqual(mockRecoveryStatus);
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      // Arrange
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(controller.getRecoveryStatus(mockRequest)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return hasExistingAccount: false when no PDS account exists', async () => {
+      // Arrange
+      const mockRecoveryStatus: RecoveryStatus = {
+        hasExistingAccount: false,
+      };
+      jest
+        .spyOn(recoveryService, 'checkRecoveryStatus')
+        .mockResolvedValue(mockRecoveryStatus);
+
+      // Act
+      const result = await controller.getRecoveryStatus(mockRequest);
+
+      // Assert
+      expect(result.hasExistingAccount).toBe(false);
+      expect(result.did).toBeUndefined();
+      expect(result.handle).toBeUndefined();
+    });
+  });
+
+  describe('recoverAsCustodial', () => {
+    it('should recover existing PDS account as custodial', async () => {
+      // Arrange
+      const recoveredIdentity = {
+        ...mockIdentityEntity,
+        did: 'did:plc:recovered123',
+        handle: 'recovered-user.opnmt.me',
+      };
+      jest
+        .spyOn(recoveryService, 'recoverAsCustodial')
+        .mockResolvedValue(recoveredIdentity as UserAtprotoIdentityEntity);
+
+      // Act
+      const result = await controller.recoverAsCustodial(mockRequest);
+
+      // Assert
+      expect(userService.findById).toHaveBeenCalledWith(1, 'test-tenant');
+      expect(recoveryService.recoverAsCustodial).toHaveBeenCalledWith(
+        'test-tenant',
+        '01234567890123456789012345',
+      );
+      expect(result.did).toBe('did:plc:recovered123');
+      expect(result.handle).toBe('recovered-user.opnmt.me');
+      expect(result).not.toHaveProperty('pdsCredentials');
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      // Arrange
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(controller.recoverAsCustodial(mockRequest)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw BadRequestException when user already has identity', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'recoverAsCustodial')
+        .mockRejectedValue(
+          new BadRequestException('User already has AT Protocol identity'),
+        );
+
+      // Act & Assert
+      await expect(controller.recoverAsCustodial(mockRequest)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw NotFoundException when no PDS account found', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'recoverAsCustodial')
+        .mockRejectedValue(
+          new NotFoundException('No PDS account found for this email'),
+        );
+
+      // Act & Assert
+      await expect(controller.recoverAsCustodial(mockRequest)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('initiateTakeOwnership', () => {
+    it('should initiate take ownership and return email', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'initiateTakeOwnership')
+        .mockResolvedValue({ email: 'test@example.com' });
+
+      // Act
+      const result = await controller.initiateTakeOwnership(mockRequest);
+
+      // Assert
+      expect(userService.findById).toHaveBeenCalledWith(1, 'test-tenant');
+      expect(recoveryService.initiateTakeOwnership).toHaveBeenCalledWith(
+        'test-tenant',
+        '01234567890123456789012345',
+      );
+      expect(result).toEqual({ email: 'test@example.com' });
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      // Arrange
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        controller.initiateTakeOwnership(mockRequest),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when user has no identity', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'initiateTakeOwnership')
+        .mockRejectedValue(
+          new BadRequestException(
+            'User has no AT Protocol identity to take ownership of',
+          ),
+        );
+
+      // Act & Assert
+      await expect(
+        controller.initiateTakeOwnership(mockRequest),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when user already owns identity', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'initiateTakeOwnership')
+        .mockRejectedValue(
+          new BadRequestException('User already owns their AT Protocol identity'),
+        );
+
+      // Act & Assert
+      await expect(
+        controller.initiateTakeOwnership(mockRequest),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('completeTakeOwnership', () => {
+    it('should complete take ownership and return success', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockResolvedValue(undefined);
+
+      // Act
+      const result = await controller.completeTakeOwnership(mockRequest);
+
+      // Assert
+      expect(userService.findById).toHaveBeenCalledWith(1, 'test-tenant');
+      expect(recoveryService.completeTakeOwnership).toHaveBeenCalledWith(
+        'test-tenant',
+        '01234567890123456789012345',
+      );
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      // Arrange
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        controller.completeTakeOwnership(mockRequest),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when user has no identity', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockRejectedValue(
+          new BadRequestException('User has no AT Protocol identity'),
+        );
+
+      // Act & Assert
+      await expect(
+        controller.completeTakeOwnership(mockRequest),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when user already owns identity', async () => {
+      // Arrange
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockRejectedValue(
+          new BadRequestException('User already owns their AT Protocol identity'),
+        );
+
+      // Act & Assert
+      await expect(
+        controller.completeTakeOwnership(mockRequest),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });
