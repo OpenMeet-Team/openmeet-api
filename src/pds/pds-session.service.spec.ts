@@ -10,11 +10,14 @@ import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { Agent } from '@atproto/api';
 
-// Mock the @atproto/api Agent
+// Mock the @atproto/api Agent and CredentialSession
+const mockResumeSession = jest.fn().mockResolvedValue(undefined);
 jest.mock('@atproto/api', () => ({
   Agent: jest.fn().mockImplementation(() => ({
-    login: jest.fn().mockResolvedValue(undefined),
     did: 'did:plc:test123',
+  })),
+  CredentialSession: jest.fn().mockImplementation(() => ({
+    resumeSession: mockResumeSession,
   })),
 }));
 
@@ -45,7 +48,8 @@ describe('PdsSessionService', () => {
   const testDid = 'did:plc:test123';
   const testHandle = 'alice.dev.opnmt.me';
   const testPdsUrl = 'https://pds-dev.openmeet.net';
-  const encryptedCredentials = '{"v":1,"iv":"abc","ciphertext":"xyz","authTag":"tag"}';
+  const encryptedCredentials =
+    '{"v":1,"iv":"abc","ciphertext":"xyz","authTag":"tag"}';
   const decryptedPassword = 'secret-password';
 
   const mockRequest = { tenantId };
@@ -67,6 +71,9 @@ describe('PdsSessionService', () => {
     }) as UserAtprotoIdentityEntity;
 
   beforeEach(async () => {
+    // Reset the CredentialSession resumeSession mock
+    mockResumeSession.mockClear();
+
     // Create fresh mocks for each test
     mockUserAtprotoIdentityService = {
       findByUserUlid: jest.fn(),
@@ -232,6 +239,32 @@ describe('PdsSessionService', () => {
         );
         // Should not call createSession when cache hit
         expect(mockPdsAccountService.createSession).not.toHaveBeenCalled();
+      });
+
+      it('should call CredentialSession.resumeSession with active: true', async () => {
+        const custodialIdentity = createMockIdentity();
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+          custodialIdentity,
+        );
+
+        const cachedSession = {
+          accessJwt: 'cached-access-jwt',
+          refreshJwt: 'cached-refresh-jwt',
+          did: testDid,
+          handle: testHandle,
+        };
+        mockElastiCacheService.get.mockResolvedValue(cachedSession);
+
+        await service.getSessionForUser(tenantId, userUlid);
+
+        // Verify CredentialSession.resumeSession was called with active: true
+        expect(mockResumeSession).toHaveBeenCalledWith({
+          did: testDid,
+          handle: testHandle,
+          accessJwt: 'cached-access-jwt',
+          refreshJwt: 'cached-refresh-jwt',
+          active: true,
+        });
       });
 
       it('should create fresh session and cache when no cache hit', async () => {

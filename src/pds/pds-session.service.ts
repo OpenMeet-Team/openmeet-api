@@ -1,8 +1,11 @@
 import { Injectable, Inject, Scope, Logger } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Agent } from '@atproto/api';
+import { Agent, CredentialSession } from '@atproto/api';
 import { PdsCredentialService } from './pds-credential.service';
-import { PdsAccountService, CreateSessionResponse } from './pds-account.service';
+import {
+  PdsAccountService,
+  CreateSessionResponse,
+} from './pds-account.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
@@ -207,7 +210,7 @@ export class PdsSessionService {
       this.logger.debug(`Cache hit for session ${identity.did}`);
 
       try {
-        const agent = this.createAgentFromSession(
+        const agent = await this.createAgentFromSession(
           identity.pdsUrl,
           cachedSession,
         );
@@ -263,7 +266,7 @@ export class PdsSessionService {
       );
 
       // Create and return agent
-      const agent = this.createAgentFromSession(identity.pdsUrl, session);
+      const agent = await this.createAgentFromSession(identity.pdsUrl, session);
 
       return {
         agent,
@@ -273,7 +276,8 @@ export class PdsSessionService {
       };
     } catch (error) {
       this.logger.error(
-        `Failed to create custodial session for DID ${identity.did}: ${error.message}`,
+        `Failed to create custodial session for DID ${identity.did}`,
+        { tenantId, error: error.message },
       );
       return null;
     }
@@ -282,28 +286,28 @@ export class PdsSessionService {
   /**
    * Create an Agent instance from a session response.
    *
-   * The Agent from @atproto/api can be constructed with a URL string
-   * for unauthenticated access. For authenticated access with custodial
-   * credentials, we create an agent pointing to the PDS and manually
-   * set the session credentials.
+   * Uses CredentialSession to properly restore the session state.
+   * The CredentialSession handles token refresh and session management.
    */
-  private createAgentFromSession(
+  private async createAgentFromSession(
     pdsUrl: string,
     session: CreateSessionResponse,
-  ): Agent {
-    // Create agent pointing to the PDS URL
-    const agent = new Agent(pdsUrl);
+  ): Promise<Agent> {
+    // Create a CredentialSession pointing to the PDS URL
+    const credentialSession = new CredentialSession(new URL(pdsUrl));
 
-    // Manually set the session on the agent
-    // The Agent class stores session data that gets used for authenticated requests
-    (agent as any).session = {
+    // Resume the session with the stored credentials
+    // active: true is required by AtpSessionData interface
+    await credentialSession.resumeSession({
       did: session.did,
       handle: session.handle,
       accessJwt: session.accessJwt,
       refreshJwt: session.refreshJwt,
-    };
+      active: true,
+    });
 
-    return agent;
+    // Create and return an Agent using the authenticated session
+    return new Agent(credentialSession);
   }
 
   /**
