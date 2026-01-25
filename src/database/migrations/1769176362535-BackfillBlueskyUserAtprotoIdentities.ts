@@ -19,10 +19,6 @@ export class BackfillBlueskyUserAtprotoIdentities1769176362535
 {
   name = 'BackfillBlueskyUserAtprotoIdentities1769176362535';
 
-  // Disable transaction wrapper - this migration uses best-effort approach
-  // and must continue even if individual user backfills fail
-  transaction = false as const;
-
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
