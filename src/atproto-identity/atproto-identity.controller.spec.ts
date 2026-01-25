@@ -14,6 +14,7 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { UserService } from '../user/user.service';
 import { ConfigService } from '@nestjs/config';
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
+import 'reflect-metadata';
 
 describe('AtprotoIdentityController', () => {
   let controller: AtprotoIdentityController;
@@ -525,29 +526,20 @@ describe('AtprotoIdentityController', () => {
   });
 
   describe('completeTakeOwnership', () => {
-    const mockCompleteRequest = {
-      ...mockRequest,
-      body: { password: 'user-chosen-password-123' },
-    };
-
-    it('should complete take ownership with valid password and return success', async () => {
+    it('should complete take ownership and return success', async () => {
       // Arrange
       jest
         .spyOn(recoveryService, 'completeTakeOwnership')
         .mockResolvedValue(undefined);
 
       // Act
-      const result = await controller.completeTakeOwnership(
-        mockCompleteRequest,
-        { password: 'user-chosen-password-123' },
-      );
+      const result = await controller.completeTakeOwnership(mockRequest);
 
       // Assert
       expect(userService.findById).toHaveBeenCalledWith(1, 'test-tenant');
       expect(recoveryService.completeTakeOwnership).toHaveBeenCalledWith(
         'test-tenant',
         '01234567890123456789012345',
-        'user-chosen-password-123',
       );
       expect(result).toEqual({ success: true });
     });
@@ -558,9 +550,7 @@ describe('AtprotoIdentityController', () => {
 
       // Act & Assert
       await expect(
-        controller.completeTakeOwnership(mockCompleteRequest, {
-          password: 'some-password',
-        }),
+        controller.completeTakeOwnership(mockRequest),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -574,9 +564,7 @@ describe('AtprotoIdentityController', () => {
 
       // Act & Assert
       await expect(
-        controller.completeTakeOwnership(mockCompleteRequest, {
-          password: 'some-password',
-        }),
+        controller.completeTakeOwnership(mockRequest),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -592,28 +580,59 @@ describe('AtprotoIdentityController', () => {
 
       // Act & Assert
       await expect(
-        controller.completeTakeOwnership(mockCompleteRequest, {
-          password: 'some-password',
-        }),
+        controller.completeTakeOwnership(mockRequest),
       ).rejects.toThrow(BadRequestException);
     });
+  });
 
-    it('should throw BadRequestException when password verification fails', async () => {
-      // Arrange
-      jest
-        .spyOn(recoveryService, 'completeTakeOwnership')
-        .mockRejectedValue(
-          new BadRequestException(
-            'Invalid password - could not authenticate to PDS',
-          ),
-        );
+  describe('Rate Limiting', () => {
+    // Rate limiting is critical for security-sensitive operations like admin password reset.
+    // These tests verify that @Throttle decorators are applied to recovery endpoints.
 
-      // Act & Assert
-      await expect(
-        controller.completeTakeOwnership(mockCompleteRequest, {
-          password: 'wrong-password',
-        }),
-      ).rejects.toThrow(BadRequestException);
+    it('should have rate limiting on recoverAsCustodial endpoint', () => {
+      // Verify that @Throttle decorator metadata is set on the method
+      // The metadata key format is 'THROTTLER:LIMIT' + throttler name (e.g., 'default')
+      const metadata = Reflect.getMetadata(
+        'THROTTLER:LIMITdefault',
+        AtprotoIdentityController.prototype.recoverAsCustodial,
+      );
+
+      expect(metadata).toBeDefined();
+      // Should be a restrictive limit (e.g., 3 per hour)
+      expect(metadata).toBeLessThanOrEqual(5);
+    });
+
+    it('should have rate limiting on initiateTakeOwnership endpoint', () => {
+      const metadata = Reflect.getMetadata(
+        'THROTTLER:LIMITdefault',
+        AtprotoIdentityController.prototype.initiateTakeOwnership,
+      );
+
+      expect(metadata).toBeDefined();
+      // Should be a restrictive limit
+      expect(metadata).toBeLessThanOrEqual(5);
+    });
+
+    it('should have restrictive TTL (at least 1 hour) on recoverAsCustodial', () => {
+      const ttl = Reflect.getMetadata(
+        'THROTTLER:TTLdefault',
+        AtprotoIdentityController.prototype.recoverAsCustodial,
+      );
+
+      expect(ttl).toBeDefined();
+      // TTL should be at least 1 hour (3600000 ms)
+      expect(ttl).toBeGreaterThanOrEqual(3600000);
+    });
+
+    it('should have restrictive TTL (at least 1 hour) on initiateTakeOwnership', () => {
+      const ttl = Reflect.getMetadata(
+        'THROTTLER:TTLdefault',
+        AtprotoIdentityController.prototype.initiateTakeOwnership,
+      );
+
+      expect(ttl).toBeDefined();
+      // TTL should be at least 1 hour (3600000 ms)
+      expect(ttl).toBeGreaterThanOrEqual(3600000);
     });
   });
 });

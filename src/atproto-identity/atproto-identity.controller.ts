@@ -15,8 +15,10 @@ import {
   ApiConflictResponse,
   ApiTags,
   ApiOperation,
+  ApiResponse,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { AtprotoIdentityService } from './atproto-identity.service';
 import {
@@ -152,14 +154,20 @@ export class AtprotoIdentityController {
    * Recover existing PDS account as custodial (admin password reset).
    *
    * Sets a new random password and links the account.
+   * Rate limited to prevent abuse - admin password reset is a sensitive operation.
    */
   @ApiBearerAuth()
   @Post('recover-as-custodial')
   @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour per user
   @ApiOperation({ summary: 'Recover existing PDS account as custodial' })
   @ApiCreatedResponse({
     type: AtprotoIdentityDto,
     description: 'AT Protocol identity recovered and linked',
+  })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Rate limit exceeded - max 3 recovery attempts per hour',
   })
   @HttpCode(HttpStatus.CREATED)
   async recoverAsCustodial(
@@ -185,15 +193,21 @@ export class AtprotoIdentityController {
    * Initiate take ownership - sends PDS password reset email.
    *
    * User will receive email to set their own password.
+   * Rate limited to prevent email bombing.
    */
   @ApiBearerAuth()
   @Post('take-ownership/initiate')
   @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour per user
   @ApiOperation({
     summary: 'Initiate take ownership - sends PDS password reset email',
   })
   @ApiOkResponse({
     description: 'Password reset email sent to user',
+  })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Rate limit exceeded - max 3 requests per hour',
   })
   @HttpCode(HttpStatus.OK)
   async initiateTakeOwnership(
