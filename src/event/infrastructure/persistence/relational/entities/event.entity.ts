@@ -183,6 +183,29 @@ export class EventEntity
   @Column({ type: 'timestamp', nullable: true })
   lastSyncedAt: Date | null;
 
+  /**
+   * AT Protocol URI where this event is published (on organizer's PDS).
+   * Format: at://did:plc:xxx/community.lexicon.calendar.event/rkey
+   * NULL means not yet published (pending sync for public events).
+   * Note: Distinct from sourceId which tracks IMPORTED records from external sources.
+   */
+  @Column({ type: 'text', nullable: true })
+  atprotoUri: string | null;
+
+  /**
+   * AT Protocol record key for this event.
+   * Used for updates/deletes on the PDS. TIDs are ~13 chars.
+   */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  atprotoRkey: string | null;
+
+  /**
+   * When this event was last synced to the user's PDS.
+   * Compare with updatedAt to detect changes needing re-sync.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  atprotoSyncedAt: Date | null;
+
   // Explicitly define seriesSlug column - needed for TypeScript
   @Column({ type: 'varchar', length: 255, nullable: true })
   seriesSlug: string | null;
