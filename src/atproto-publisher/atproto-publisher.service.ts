@@ -67,29 +67,35 @@ export class AtprotoPublisherService {
    * Pre-flight check to ensure a user can publish to AT Protocol.
    *
    * This method:
-   * 1. Creates AT Protocol identity if user doesn't have one (lazy creation)
+   * 1. Attempts lazy identity creation if user doesn't have one
    * 2. Verifies we can get a session for the identity
    *
-   * Call this BEFORE creating an event in the database to fail early
-   * if AT Protocol publishing won't be possible.
+   * Returns { did, required: true } if user has identity and can publish.
+   * Returns { did, required: true } and throws if user HAS identity but can't get session (PDS down).
+   * Returns null if user has no identity and creation failed (not required - user can still create events).
+   *
+   * The "required" flag indicates whether the user already had an AT Protocol identity,
+   * meaning they've opted into AT Protocol publishing and failures should be fatal.
    *
    * @param tenantId - The tenant ID
    * @param user - User data (ulid, slug, email)
-   * @returns The identity if publishing is possible, null otherwise
+   * @returns The identity with required flag, or null if user has no identity
    */
   async ensurePublishingCapability(
     tenantId: string,
     user: { ulid: string; slug: string; email?: string | null },
-  ): Promise<{ did: string } | null> {
-    // Step 1: Ensure user has AT Protocol identity
+  ): Promise<{ did: string; required: boolean } | null> {
+    // Step 1: Try to ensure user has AT Protocol identity (may create lazily)
     const identity = await this.atprotoIdentityService.ensureIdentityForUser(
       tenantId,
       user,
     );
 
     if (!identity) {
-      this.logger.warn(
-        `Pre-flight check failed: Could not ensure AT Protocol identity for user ${user.ulid}`,
+      // User has no identity and we couldn't create one
+      // This is fine - they can still create events, just won't publish to AT Protocol
+      this.logger.debug(
+        `Pre-flight check: No AT Protocol identity for user ${user.ulid} - events will not be published`,
       );
       return null;
     }
@@ -111,7 +117,7 @@ export class AtprotoPublisherService {
       `Pre-flight check passed: User ${user.ulid} can publish to AT Protocol (DID: ${identity.did})`,
     );
 
-    return { did: identity.did };
+    return { did: identity.did, required: true };
   }
 
   /**

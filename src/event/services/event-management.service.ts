@@ -390,22 +390,19 @@ export class EventManagementService {
         !createEventDto.sourceType;
 
       if (isPublicEvent && user) {
-        // Ensure user has AT Protocol identity and session before creating event
-        const identity =
-          await this.atprotoPublisherService.ensurePublishingCapability(
-            this.request.tenantId,
-            {
-              ulid: user.ulid,
-              slug: user.slug,
-              email: user.email,
-            },
-          );
-
-        if (!identity) {
-          throw new Error(
-            'Cannot create public event: AT Protocol identity could not be created',
-          );
-        }
+        // Attempt to ensure AT Protocol publishing capability
+        // If user doesn't have an identity, that's fine - event will be created but not published
+        // If user HAS an identity but we can't get a session, that's also logged but not fatal
+        await this.atprotoPublisherService.ensurePublishingCapability(
+          this.request.tenantId,
+          {
+            ulid: user.ulid,
+            slug: user.slug,
+            email: user.email,
+          },
+        );
+        // Note: We don't throw if this returns null - user can still create events
+        // The publishEvent call later will handle the actual publishing decision
       }
 
       // Now safe to create in database

@@ -277,7 +277,7 @@ describe('EventManagementService', () => {
             publishRsvp: jest.fn().mockResolvedValue({ action: 'skipped' }),
             ensurePublishingCapability: jest
               .fn()
-              .mockResolvedValue({ did: 'did:plc:test' }),
+              .mockResolvedValue({ did: 'did:plc:test', required: true }),
           },
         },
       ],
