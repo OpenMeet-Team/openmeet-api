@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PdsSessionService } from '../pds/pds-session.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
@@ -55,7 +55,9 @@ export class AtprotoPublisherService {
 
   constructor(
     private readonly pdsSessionService: PdsSessionService,
+    @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
+    @Inject(forwardRef(() => BlueskyRsvpService))
     private readonly blueskyRsvpService: BlueskyRsvpService,
   ) {}
 

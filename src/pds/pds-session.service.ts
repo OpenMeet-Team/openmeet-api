@@ -1,4 +1,4 @@
-import { Injectable, Inject, Scope, Logger } from '@nestjs/common';
+import { Injectable, Inject, Scope, Logger, forwardRef } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Agent, CredentialSession } from '@atproto/api';
 import { PdsCredentialService } from './pds-credential.service';
@@ -58,6 +58,7 @@ export class PdsSessionService {
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
     private readonly pdsCredentialService: PdsCredentialService,
     private readonly pdsAccountService: PdsAccountService,
+    @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
     private readonly elastiCacheService: ElastiCacheService,
   ) {}
