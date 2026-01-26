@@ -149,7 +149,11 @@ export class GroupEntity extends EntityRelationalHelper {
   @BeforeInsert()
   generateSlug() {
     if (!this.slug) {
-      this.slug = `${slugify(this.name, { strict: true, lower: true })}-${generateShortCode().toLowerCase()}`;
+      this.slug =
+        `${slugify(this.name, { strict: true, lower: true })}-${generateShortCode().toLowerCase()}`.replace(
+          /-+$/,
+          '',
+        );
     }
   }
 
