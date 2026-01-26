@@ -15,7 +15,29 @@ npm run seed:run:prod
 # Note: Matrix setup is now deferred and will happen after Matrix starts
 echo "Matrix setup will be deferred until Matrix server is available..."
 
-# Start the API service in the background
+# Setup PDS invite code BEFORE starting API (so API has it in environment)
+echo "Waiting for PDS to be ready..."
+/opt/wait-for-it.sh pds:3000 -t 60
+
+echo "Creating PDS invite code..."
+INVITE_RESPONSE=$(curl -sf -X POST "http://pds:3000/xrpc/com.atproto.server.createInviteCode" \
+  -H "Authorization: Basic $(echo -n 'admin:ci-pds-admin-password' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{"useCount": 999999}' 2>&1) || true
+
+if [ -n "$INVITE_RESPONSE" ]; then
+  PDS_INVITE_CODE=$(echo "$INVITE_RESPONSE" | jq -r '.code // empty')
+  if [ -n "$PDS_INVITE_CODE" ]; then
+    export PDS_INVITE_CODE
+    echo "PDS invite code created: $PDS_INVITE_CODE"
+  else
+    echo "WARNING: Failed to parse invite code from response: $INVITE_RESPONSE"
+  fi
+else
+  echo "WARNING: Failed to create PDS invite code (PDS may have invites disabled)"
+fi
+
+# Start the API service in the background (with PDS_INVITE_CODE in environment)
 echo "Starting API service..."
 npm run start:prod > prod.log 2>&1 &
 
@@ -72,29 +94,7 @@ else
   echo "Nginx is ready!"
 fi
 
-# Setup PDS invite code for e2e tests (when PDS_INVITE_REQUIRED=true)
-echo "Waiting for PDS to be ready..."
-/opt/wait-for-it.sh pds:3000 -t 60
-
-echo "Creating PDS invite code..."
-INVITE_RESPONSE=$(curl -sf -X POST "http://pds:3000/xrpc/com.atproto.server.createInviteCode" \
-  -H "Authorization: Basic $(echo -n 'admin:ci-pds-admin-password' | base64)" \
-  -H "Content-Type: application/json" \
-  -d '{"useCount": 999999}' 2>&1) || true
-
-if [ -n "$INVITE_RESPONSE" ]; then
-  PDS_INVITE_CODE=$(echo "$INVITE_RESPONSE" | jq -r '.code // empty')
-  if [ -n "$PDS_INVITE_CODE" ]; then
-    export PDS_INVITE_CODE
-    echo "PDS invite code created: $PDS_INVITE_CODE"
-  else
-    echo "WARNING: Failed to parse invite code from response: $INVITE_RESPONSE"
-  fi
-else
-  echo "WARNING: Failed to create PDS invite code (PDS may have invites disabled)"
-fi
-
-# Run all E2E tests
+# Run all E2E tests (PDS invite code was set up before API started)
 echo "Running all E2E tests..."
 npm run test:e2e -- --runInBand --forceExit
 
