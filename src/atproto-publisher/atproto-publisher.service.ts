@@ -124,17 +124,27 @@ export class AtprotoPublisherService {
    */
   private shouldPublishEvent(event: EventEntity): boolean {
     if (event.visibility !== EventVisibility.Public) {
+      this.logger.debug(
+        `[shouldPublishEvent] ${event.slug}: NOT eligible - visibility=${event.visibility} (need public)`,
+      );
       return false;
     }
 
     if (!PUBLISHABLE_EVENT_STATUSES.has(event.status)) {
+      this.logger.debug(
+        `[shouldPublishEvent] ${event.slug}: NOT eligible - status=${event.status} (need published/cancelled)`,
+      );
       return false;
     }
 
     if (event.sourceType !== null) {
+      this.logger.debug(
+        `[shouldPublishEvent] ${event.slug}: NOT eligible - sourceType=${event.sourceType} (need null)`,
+      );
       return false;
     }
 
+    this.logger.debug(`[shouldPublishEvent] ${event.slug}: ELIGIBLE for publishing`);
     return true;
   }
 
