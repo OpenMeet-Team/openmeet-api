@@ -1,5 +1,6 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { Agent } from '@atproto/api';
 import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
@@ -53,6 +54,7 @@ export class BlueskyRsvpService {
     status: RsvpStatusShort,
     did: string,
     tenantId: string,
+    providedAgent?: Agent,
   ): Promise<{ success: boolean; rsvpUri: string; rsvpCid?: string }> {
     // Start measuring duration
     const timer = this.processingDuration.startTimer({
@@ -75,67 +77,86 @@ export class BlueskyRsvpService {
         },
       );
 
-      // Get the event's Bluesky URI
-      if (
-        !event.sourceData?.rkey ||
-        event.sourceType !== EventSourceType.BLUESKY
+      // Get the event's AT Protocol URI
+      // Support both legacy sourceType=bluesky and new atprotoUri publishing
+      let eventUri: string;
+      let eventCid: string | undefined;
+
+      if (event.atprotoUri && event.atprotoRkey) {
+        // New style: event was published via AtprotoPublisherService
+        eventUri = event.atprotoUri;
+        // CID is not currently stored for atproto-published events
+        eventCid = undefined;
+        this.logger.debug(`Using atprotoUri for RSVP: ${eventUri}`);
+      } else if (
+        event.sourceData?.rkey &&
+        event.sourceType === EventSourceType.BLUESKY
       ) {
+        // Legacy style: event was imported from Bluesky
+        const eventCreatorDid = event.sourceData.did as string;
+        if (!eventCreatorDid) {
+          this.logger.warn(
+            `Cannot create RSVP: Event source data is missing creator DID`,
+            {
+              eventId: event.id,
+              eventSourceData: event.sourceData,
+            },
+          );
+          throw new Error('Event source data is missing creator DID');
+        }
+        const standardEventCollection = BLUESKY_COLLECTIONS.EVENT;
+        eventUri = this.blueskyIdService.createUri(
+          eventCreatorDid,
+          standardEventCollection,
+          event.sourceData.rkey as string,
+        );
+        eventCid = event.sourceData.cid as string | undefined;
+      } else {
         this.logger.warn(
-          `Cannot create RSVP: Event does not have valid Bluesky source information`,
+          `Cannot create RSVP: Event does not have valid AT Protocol source information`,
           {
             eventId: event.id,
             eventSourceType: event.sourceType,
             eventSourceData: event.sourceData,
+            atprotoUri: event.atprotoUri,
           },
         );
-        throw new Error('Event does not have Bluesky source information');
+        throw new Error('Event does not have AT Protocol source information');
       }
 
-      // Extract event creator DID from sourceData
-      const eventCreatorDid = event.sourceData.did as string;
-      if (!eventCreatorDid) {
-        this.logger.warn(
-          `Cannot create RSVP: Event source data is missing creator DID`,
-          {
-            eventId: event.id,
-            eventSourceData: event.sourceData,
-          },
-        );
-        throw new Error('Event source data is missing creator DID');
-      }
-
-      // Create AT Protocol URI for the event - use standard collection name
-      const standardEventCollection = BLUESKY_COLLECTIONS.EVENT;
-      const eventUri = this.blueskyIdService.createUri(
-        eventCreatorDid,
-        standardEventCollection,
-        event.sourceData.rkey as string,
-      );
-
-      // Get event CID for StrongRef (required by community.lexicon.calendar.rsvp spec)
-      const eventCid = event.sourceData.cid as string | undefined;
       if (!eventCid) {
-        this.logger.warn(
-          `Event source data is missing CID - RSVP may not validate correctly`,
+        this.logger.debug(
+          `Event does not have CID - RSVP will use uri-only reference`,
           {
             eventId: event.id,
-            eventSourceData: event.sourceData,
           },
         );
       }
 
-      // Get Bluesky agent for the user
-      this.logger.debug(`Creating Bluesky session for user`, {
-        userDid: did,
-        tenantId,
-      });
-      const agent = await this.blueskyService.resumeSession(tenantId, did);
-      if (!agent) {
-        this.logger.warn(`Failed to create Bluesky session for user`, {
+      // Get agent for the user
+      // Use provided agent (from PdsSessionService for custodial users)
+      // or fall back to OAuth session (for Bluesky OAuth users)
+      let agent: Agent;
+      if (providedAgent) {
+        agent = providedAgent;
+        this.logger.debug(`Using provided agent for user ${did}`);
+      } else {
+        this.logger.debug(`Creating Bluesky OAuth session for user`, {
           userDid: did,
           tenantId,
         });
-        throw new Error(`Failed to create Bluesky session for user ${did}`);
+        const resumedAgent = await this.blueskyService.resumeSession(
+          tenantId,
+          did,
+        );
+        if (!resumedAgent) {
+          this.logger.warn(`Failed to create Bluesky session for user`, {
+            userDid: did,
+            tenantId,
+          });
+          throw new Error(`Failed to create Bluesky session for user ${did}`);
+        }
+        agent = resumedAgent;
       }
 
       // Create the RSVP record using StrongRef format per community.lexicon.calendar.rsvp spec

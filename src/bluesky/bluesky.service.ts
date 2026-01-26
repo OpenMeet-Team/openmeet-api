@@ -321,6 +321,7 @@ export class BlueskyService {
     did: string,
     handle: string,
     tenantId: string,
+    providedAgent?: Agent,
   ): Promise<{ rkey: string }> {
     this.logger.debug('Creating Bluesky event record:', {
       event: {
@@ -356,8 +357,9 @@ export class BlueskyService {
         });
       }
 
-      // Use direct approach without locking
-      const agent = await this.tryResumeSession(tenantId, did);
+      // Use provided agent (from PdsSessionService for custodial users)
+      // or fall back to OAuth session (for Bluesky OAuth users)
+      const agent = providedAgent ?? (await this.tryResumeSession(tenantId, did));
 
       // Convert event type to Bluesky mode
       const modeMap = {

@@ -30,6 +30,7 @@ import { BlueskyIdService } from '../bluesky/bluesky-id.service';
 import { RecurrenceFrequency } from '../event-series/interfaces/recurrence.interface';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { GroupMemberQueryService } from '../group-member/group-member-query.service';
+import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
 // import { DiscussionService } from '../chat/services/discussion.service'; // Removed unused import
 
 describe('EventManagementService Integration with EventSeriesService', () => {
@@ -177,6 +178,14 @@ describe('EventManagementService Integration with EventSeriesService', () => {
             createUri: jest.fn(),
             parseUri: jest.fn(),
             isValidUri: jest.fn(),
+          },
+        },
+        {
+          provide: AtprotoPublisherService,
+          useValue: {
+            publishEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
+            deleteEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
+            publishRsvp: jest.fn().mockResolvedValue({ action: 'skipped' }),
           },
         },
         {
