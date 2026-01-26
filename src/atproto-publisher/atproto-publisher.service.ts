@@ -2,6 +2,7 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PdsSessionService } from '../pds/pds-session.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
+import { AtprotoIdentityService } from '../atproto-identity/atproto-identity.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import {
@@ -59,7 +60,59 @@ export class AtprotoPublisherService {
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => BlueskyRsvpService))
     private readonly blueskyRsvpService: BlueskyRsvpService,
+    private readonly atprotoIdentityService: AtprotoIdentityService,
   ) {}
+
+  /**
+   * Pre-flight check to ensure a user can publish to AT Protocol.
+   *
+   * This method:
+   * 1. Creates AT Protocol identity if user doesn't have one (lazy creation)
+   * 2. Verifies we can get a session for the identity
+   *
+   * Call this BEFORE creating an event in the database to fail early
+   * if AT Protocol publishing won't be possible.
+   *
+   * @param tenantId - The tenant ID
+   * @param user - User data (ulid, slug, email)
+   * @returns The identity if publishing is possible, null otherwise
+   */
+  async ensurePublishingCapability(
+    tenantId: string,
+    user: { ulid: string; slug: string; email?: string | null },
+  ): Promise<{ did: string } | null> {
+    // Step 1: Ensure user has AT Protocol identity
+    const identity = await this.atprotoIdentityService.ensureIdentityForUser(
+      tenantId,
+      user,
+    );
+
+    if (!identity) {
+      this.logger.warn(
+        `Pre-flight check failed: Could not ensure AT Protocol identity for user ${user.ulid}`,
+      );
+      return null;
+    }
+
+    // Step 2: Verify we can get a session
+    const session = await this.pdsSessionService.getSessionForUser(
+      tenantId,
+      user.ulid,
+    );
+
+    if (!session) {
+      this.logger.warn(
+        `Pre-flight check failed: Could not get AT Protocol session for user ${user.ulid} (DID: ${identity.did})`,
+      );
+      return null;
+    }
+
+    this.logger.debug(
+      `Pre-flight check passed: User ${user.ulid} can publish to AT Protocol (DID: ${identity.did})`,
+    );
+
+    return { did: identity.did };
+  }
 
   /**
    * Check if an event should be published to AT Protocol.
@@ -170,6 +223,9 @@ export class AtprotoPublisherService {
 
   /**
    * Internal async method to publish event to PDS.
+   *
+   * Lazy identity creation: If the user has no AT Protocol identity,
+   * we create a custodial one before attempting to publish.
    */
   private async doPublishEvent(
     event: EventEntity,
@@ -177,9 +233,29 @@ export class AtprotoPublisherService {
   ): Promise<PublishResult> {
     const isUpdate = !!event.atprotoUri;
 
-    const userUlid = event.user?.ulid;
+    const user = event.user;
+    const userUlid = user?.ulid;
     if (!userUlid) {
       throw new Error(`Event ${event.slug} has no organizer`);
+    }
+
+    // Lazy identity creation: ensure user has AT Protocol identity
+    const identity = await this.atprotoIdentityService.ensureIdentityForUser(
+      tenantId,
+      {
+        ulid: userUlid,
+        slug: user.slug,
+        email: user.email,
+      },
+    );
+
+    if (!identity) {
+      this.logger.warn(
+        `Could not ensure AT Protocol identity for user ${userUlid}`,
+      );
+      throw new Error(
+        `No AT Protocol identity for organizer of event ${event.slug}`,
+      );
     }
 
     const session = await this.pdsSessionService.getSessionForUser(

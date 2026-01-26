@@ -382,7 +382,33 @@ export class EventManagementService {
         throw error; // Re-throw to propagate the exception
       }
     } else {
-      // For non-Bluesky events, just save directly to database
+      // For non-Bluesky events, pre-flight check for AT Protocol publishing
+      // If this is a public event, ensure we can publish BEFORE creating in DB
+      const isPublicEvent =
+        eventData.visibility === EventVisibility.Public &&
+        eventData.status === EventStatus.Published &&
+        !createEventDto.sourceType;
+
+      if (isPublicEvent && user) {
+        // Ensure user has AT Protocol identity and session before creating event
+        const identity =
+          await this.atprotoPublisherService.ensurePublishingCapability(
+            this.request.tenantId,
+            {
+              ulid: user.ulid,
+              slug: user.slug,
+              email: user.email,
+            },
+          );
+
+        if (!identity) {
+          throw new Error(
+            'Cannot create public event: AT Protocol identity could not be created',
+          );
+        }
+      }
+
+      // Now safe to create in database
       const event = this.eventRepository.create(
         eventData as Partial<EventEntity>,
       );
@@ -459,32 +485,27 @@ export class EventManagementService {
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     const eventToPublish = event || createdEvent;
     if (eventToPublish && !createEventDto.sourceType) {
-      try {
-        const publishResult = await this.atprotoPublisherService.publishEvent(
-          eventToPublish,
-          this.request.tenantId,
+      const publishResult = await this.atprotoPublisherService.publishEvent(
+        eventToPublish,
+        this.request.tenantId,
+      );
+
+      if (
+        publishResult.action === 'published' ||
+        publishResult.action === 'updated'
+      ) {
+        // Save AT Protocol metadata to database
+        await this.eventRepository.update(
+          { id: eventToPublish.id },
+          {
+            atprotoUri: publishResult.atprotoUri,
+            atprotoRkey: publishResult.atprotoRkey,
+            atprotoSyncedAt: new Date(),
+          },
         );
 
-        if (publishResult.action === 'published' || publishResult.action === 'updated') {
-          // Save AT Protocol metadata to database
-          await this.eventRepository.update(
-            { id: eventToPublish.id },
-            {
-              atprotoUri: publishResult.atprotoUri,
-              atprotoRkey: publishResult.atprotoRkey,
-              atprotoSyncedAt: new Date(),
-            },
-          );
-
-          this.logger.debug(
-            `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
-          );
-        }
-      } catch (error) {
-        // Log but don't fail - AT Protocol publishing is best-effort
-        // The firehose will catch orphaned records if PDS succeeded but DB failed
-        this.logger.warn(
-          `Failed to publish event ${eventToPublish.slug} to AT Protocol: ${error.message}`,
+        this.logger.debug(
+          `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
         );
       }
     }
@@ -920,31 +941,27 @@ export class EventManagementService {
     // Publish to AT Protocol (user's PDS) if eligible
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     if (!event.sourceType) {
-      try {
-        const publishResult = await this.atprotoPublisherService.publishEvent(
-          updatedEvent,
-          this.request.tenantId,
+      const publishResult = await this.atprotoPublisherService.publishEvent(
+        updatedEvent,
+        this.request.tenantId,
+      );
+
+      if (
+        publishResult.action === 'published' ||
+        publishResult.action === 'updated'
+      ) {
+        // Save AT Protocol metadata to database
+        await this.eventRepository.update(
+          { id: updatedEvent.id },
+          {
+            atprotoUri: publishResult.atprotoUri,
+            atprotoRkey: publishResult.atprotoRkey,
+            atprotoSyncedAt: new Date(),
+          },
         );
 
-        if (publishResult.action === 'published' || publishResult.action === 'updated') {
-          // Save AT Protocol metadata to database
-          await this.eventRepository.update(
-            { id: updatedEvent.id },
-            {
-              atprotoUri: publishResult.atprotoUri,
-              atprotoRkey: publishResult.atprotoRkey,
-              atprotoSyncedAt: new Date(),
-            },
-          );
-
-          this.logger.debug(
-            `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
-          );
-        }
-      } catch (error) {
-        // Log but don't fail - AT Protocol publishing is best-effort
-        this.logger.warn(
-          `Failed to publish event ${updatedEvent.slug} to AT Protocol: ${error.message}`,
+        this.logger.debug(
+          `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
         );
       }
     }
@@ -1062,21 +1079,14 @@ export class EventManagementService {
     // Delete from AT Protocol (user's PDS) if the event was published there
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     if (!event.sourceType && event.atprotoUri) {
-      try {
-        const deleteResult = await this.atprotoPublisherService.deleteEvent(
-          event,
-          this.request.tenantId,
-        );
+      const deleteResult = await this.atprotoPublisherService.deleteEvent(
+        event,
+        this.request.tenantId,
+      );
 
-        if (deleteResult.action === 'deleted') {
-          this.logger.debug(
-            `Deleted event ${event.slug} from AT Protocol: ${event.atprotoUri}`,
-          );
-        }
-      } catch (error) {
-        // Log but don't fail - proceed with local deletion
-        this.logger.warn(
-          `Failed to delete event ${event.slug} from AT Protocol: ${error.message}`,
+      if (deleteResult.action === 'deleted') {
+        this.logger.debug(
+          `Deleted event ${event.slug} from AT Protocol: ${event.atprotoUri}`,
         );
       }
     }

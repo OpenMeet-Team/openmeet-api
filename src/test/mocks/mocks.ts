@@ -223,4 +223,5 @@ export const mockAtprotoPublisherService = {
   publishEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
   deleteEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
   publishRsvp: jest.fn().mockResolvedValue({ action: 'skipped' }),
+  ensurePublishingCapability: jest.fn().mockResolvedValue({ did: 'did:plc:test' }),
 };

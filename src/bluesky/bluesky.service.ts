@@ -359,7 +359,8 @@ export class BlueskyService {
 
       // Use provided agent (from PdsSessionService for custodial users)
       // or fall back to OAuth session (for Bluesky OAuth users)
-      const agent = providedAgent ?? (await this.tryResumeSession(tenantId, did));
+      const agent =
+        providedAgent ?? (await this.tryResumeSession(tenantId, did));
 
       // Convert event type to Bluesky mode
       const modeMap = {

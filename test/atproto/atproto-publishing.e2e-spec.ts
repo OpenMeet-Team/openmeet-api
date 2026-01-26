@@ -91,7 +91,9 @@ describe('AT Protocol Publishing (e2e)', () => {
         (email) =>
           email.to?.some(
             (to) => to.address.toLowerCase() === newUserEmail.toLowerCase(),
-          ) && (email.subject?.includes('Code') || email.subject?.includes('Verify')),
+          ) &&
+          (email.subject?.includes('Code') ||
+            email.subject?.includes('Verify')),
         30000,
       );
       expect(verificationEmail).toBeDefined();
@@ -179,7 +181,9 @@ describe('AT Protocol Publishing (e2e)', () => {
         .set('Authorization', `Bearer ${userToken}`);
 
       if (!identityResponse.body?.did) {
-        console.warn('Skipping event publishing test - no AT Protocol identity');
+        console.warn(
+          'Skipping event publishing test - no AT Protocol identity',
+        );
         return;
       }
 
@@ -265,7 +269,9 @@ describe('AT Protocol Publishing (e2e)', () => {
         maxAttendees: 10,
         visibility: EventVisibility.Private,
         status: EventStatus.Published,
-        startDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        startDate: new Date(
+          Date.now() + 14 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
         endDate: new Date(
           Date.now() + 14 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
         ).toISOString(),
@@ -338,7 +344,8 @@ describe('AT Protocol Publishing (e2e)', () => {
           email.to?.some(
             (to) => to.address.toLowerCase() === user2Email.toLowerCase(),
           ) &&
-          (email.subject?.includes('Code') || email.subject?.includes('Verify')),
+          (email.subject?.includes('Code') ||
+            email.subject?.includes('Verify')),
         30000,
       );
       expect(verificationEmail).toBeDefined();
@@ -470,8 +477,7 @@ describe('AT Protocol Publishing (e2e)', () => {
       // Query the PDS directly to verify records exist
       // This uses the com.atproto.repo.listRecords endpoint
       // Note: TESTING_PDS_URL may be Docker-internal (openmeet_pds:3000), so use localhost:3101
-      const hostPdsUrl =
-        process.env.PDS_HOST_URL || 'http://localhost:3101';
+      const hostPdsUrl = process.env.PDS_HOST_URL || 'http://localhost:3101';
 
       try {
         const pdsResponse = await request(hostPdsUrl)

@@ -275,6 +275,9 @@ describe('EventManagementService', () => {
             publishEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
             deleteEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
             publishRsvp: jest.fn().mockResolvedValue({ action: 'skipped' }),
+            ensurePublishingCapability: jest
+              .fn()
+              .mockResolvedValue({ did: 'did:plc:test' }),
           },
         },
       ],
@@ -1614,6 +1617,210 @@ describe('EventManagementService', () => {
         service.update('single-attendee-event', updateDto),
       ).rejects.toThrow(
         'Cannot reduce capacity to 0. Event has 1 confirmed attendee.',
+      );
+    });
+  });
+
+  describe('AT Protocol Publishing Error Propagation', () => {
+    let mockAtprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
+
+    beforeEach(async () => {
+      // Reset mocks before each test
+      mockRepository.findOne.mockReset();
+      mockRepository.save.mockReset();
+      mockRepository.create.mockReset();
+      mockRepository.update.mockReset();
+
+      // Get the mock service instance
+      mockAtprotoPublisherService = service[
+        'atprotoPublisherService'
+      ] as jest.Mocked<AtprotoPublisherService>;
+
+      // Setup common mock responses
+      jest
+        .spyOn(service['categoryService'], 'findByIds')
+        .mockResolvedValue([]);
+      jest
+        .spyOn(eventAttendeeService, 'create')
+        .mockResolvedValue({} as EventAttendeesEntity);
+    });
+
+    it('should propagate AT Protocol errors during event creation', async () => {
+      // Mock the event creation flow
+      const createdEvent = {
+        ...findOneMockEventEntity,
+        id: 900,
+        slug: 'atproto-error-test',
+        sourceType: null, // Not a Bluesky-sourced event
+      } as EventEntity;
+
+      mockRepository.create.mockReturnValue(createdEvent);
+      mockRepository.save.mockResolvedValue(createdEvent);
+      mockRepository.findOne.mockResolvedValue(createdEvent);
+
+      // Mock AT Protocol publisher to throw an error
+      mockAtprotoPublisherService.publishEvent.mockRejectedValue(
+        new Error('PDS unavailable: connection refused'),
+      );
+
+      const createEventDto: CreateEventDto = {
+        name: 'Test Event',
+        description: 'Test Event Description',
+        startDate: new Date(),
+        type: EventType.InPerson,
+        location: 'Test Location',
+        locationOnline: '',
+        maxAttendees: 100,
+        categories: [],
+        lat: 1,
+        lon: 1,
+        timeZone: 'UTC',
+      };
+
+      // The error should propagate, not be swallowed
+      await expect(service.create(createEventDto, mockUser.id)).rejects.toThrow(
+        'PDS unavailable: connection refused',
+      );
+    });
+
+    it('should propagate AT Protocol errors during event update', async () => {
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 901,
+        slug: 'atproto-update-error-test',
+        sourceType: null, // Not a Bluesky-sourced event
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...existingEvent,
+        name: 'Updated Event Name',
+        updatedAt: new Date('2024-01-02'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+
+      // First call returns existing event, second returns updated
+      let callCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve(existingEvent);
+        return Promise.resolve(updatedEvent);
+      });
+      mockRepository.save.mockResolvedValue(updatedEvent);
+
+      // Mock AT Protocol publisher to throw an error
+      mockAtprotoPublisherService.publishEvent.mockRejectedValue(
+        new Error('Failed to publish to AT Protocol: identity not found'),
+      );
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Event Name',
+      };
+
+      // The error should propagate, not be swallowed
+      await expect(
+        service.update('atproto-update-error-test', updateDto),
+      ).rejects.toThrow('Failed to publish to AT Protocol: identity not found');
+    });
+
+    it('should propagate AT Protocol errors during event deletion', async () => {
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 902,
+        slug: 'atproto-delete-error-test',
+        sourceType: null, // Not a Bluesky-sourced event
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/abc123', // Has AT Protocol record
+        atprotoRkey: 'abc123',
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+      mockRepository.findOne.mockResolvedValue(existingEvent);
+
+      // Mock AT Protocol publisher to throw an error
+      mockAtprotoPublisherService.deleteEvent.mockRejectedValue(
+        new Error('Failed to delete from AT Protocol: PDS timeout'),
+      );
+
+      // The error should propagate, not be swallowed
+      await expect(service.remove('atproto-delete-error-test')).rejects.toThrow(
+        'Failed to delete from AT Protocol: PDS timeout',
+      );
+    });
+
+    it('should skip AT Protocol publishing for Bluesky-sourced events', async () => {
+      // Bluesky-sourced events have their own publishing path (via BlueskyService)
+      // and should not use AtprotoPublisherService
+      const blueskySourcedEvent = {
+        ...findOneMockEventEntity,
+        id: 903,
+        slug: 'bluesky-sourced-event',
+        sourceType: 'bluesky', // Bluesky-sourced event
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+      mockRepository.findOne.mockResolvedValue(blueskySourcedEvent);
+      mockRepository.save.mockResolvedValue(blueskySourcedEvent);
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Bluesky Event',
+      };
+
+      // Update should succeed without calling AtprotoPublisherService
+      await service.update('bluesky-sourced-event', updateDto);
+
+      // AtprotoPublisherService.publishEvent should NOT have been called
+      expect(mockAtprotoPublisherService.publishEvent).not.toHaveBeenCalled();
+    });
+
+    it('should succeed when AT Protocol publishing succeeds', async () => {
+      const createdEvent = {
+        ...findOneMockEventEntity,
+        id: 904,
+        slug: 'atproto-success-test',
+        sourceType: null,
+      } as EventEntity;
+
+      mockRepository.create.mockReturnValue(createdEvent);
+      mockRepository.save.mockResolvedValue(createdEvent);
+      mockRepository.findOne.mockResolvedValue(createdEvent);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock successful AT Protocol publishing
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'published',
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/xyz789',
+        atprotoRkey: 'xyz789',
+      });
+
+      const createEventDto: CreateEventDto = {
+        name: 'Successful AT Protocol Event',
+        description: 'Test Event Description',
+        startDate: new Date(),
+        type: EventType.InPerson,
+        location: 'Test Location',
+        locationOnline: '',
+        maxAttendees: 100,
+        categories: [],
+        lat: 1,
+        lon: 1,
+        timeZone: 'UTC',
+      };
+
+      const result = await service.create(createEventDto, mockUser.id);
+
+      expect(result).toBeDefined();
+      expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { id: createdEvent.id },
+        expect.objectContaining({
+          atprotoUri: 'at://did:plc:test/community.openmeet.event/xyz789',
+          atprotoRkey: 'xyz789',
+        }),
       );
     });
   });
