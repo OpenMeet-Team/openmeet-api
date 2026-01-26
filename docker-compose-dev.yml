@@ -349,6 +349,7 @@ services:
     profiles: ["pds"]
     image: itaru2622/bluesky-did-method-plc:latest
     container_name: openmeet_plc
+    restart: unless-stopped
     ports:
       - "2582:2582"
     environment:
@@ -378,6 +379,7 @@ services:
     profiles: ["pds"]
     image: ghcr.io/bluesky-social/pds:0.4
     container_name: openmeet_pds
+    restart: unless-stopped
     ports:
       - "3101:3000"
     environment:
