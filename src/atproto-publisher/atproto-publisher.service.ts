@@ -198,6 +198,7 @@ export class AtprotoPublisherService {
       session.did,
       session.did, // Use DID as handle fallback
       tenantId,
+      session.agent, // Pass the agent from PdsSessionService
     );
 
     const atprotoUri = `at://${session.did}/${BLUESKY_EVENT_COLLECTION}/${rkey}`;
@@ -344,6 +345,7 @@ export class AtprotoPublisherService {
       rsvpStatus,
       session.did,
       tenantId,
+      session.agent, // Pass the agent from PdsSessionService
     );
 
     if (!result.success) {

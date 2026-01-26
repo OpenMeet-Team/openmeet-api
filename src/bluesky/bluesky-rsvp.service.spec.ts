@@ -231,7 +231,7 @@ describe('BlueskyRsvpService', () => {
       // Call the service method and expect it to throw
       await expect(
         service.createRsvp(event, 'going', 'did:plc:xyz789', 'tenant123'),
-      ).rejects.toThrow('Event does not have Bluesky source information');
+      ).rejects.toThrow('Event does not have AT Protocol source information');
     });
   });
 

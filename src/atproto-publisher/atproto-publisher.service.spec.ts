@@ -336,6 +336,7 @@ describe('AtprotoPublisherService', () => {
         mockSessionResult.did,
         expect.any(String),
         tenantId,
+        mockSessionResult.agent, // Agent from PdsSessionService
       );
     });
 
