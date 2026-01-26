@@ -28,6 +28,7 @@ import { EventIntegrationService } from './services/event-integration.service';
 import { RsvpIntegrationController } from './rsvp-integration.controller';
 import { RsvpIntegrationService } from './services/rsvp-integration.service';
 import { MetricsModule } from '../metrics/metrics.module';
+import { AtprotoPublisherModule } from '../atproto-publisher/atproto-publisher.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { MetricsModule } from '../metrics/metrics.module';
     // ChatModule removed - Matrix Application Service handles room operations directly
     forwardRef(() => EventSeriesModule),
     MetricsModule,
+    AtprotoPublisherModule,
   ],
   controllers: [
     EventController,

@@ -49,6 +49,7 @@ import { GroupRole } from '../../core/constants/constant';
 import { assert } from 'console';
 import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
+import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -80,6 +81,7 @@ export class EventManagementService {
     private readonly eventQueryService: EventQueryService,
     @Inject(forwardRef(() => GroupMemberQueryService))
     private readonly groupMemberQueryService: GroupMemberQueryService,
+    private readonly atprotoPublisherService: AtprotoPublisherService,
   ) {
     void this.initializeRepository();
   }
@@ -451,6 +453,40 @@ export class EventManagementService {
       this.logger.error(
         `[SERIES_SLUG_LOST] Final check after retrieval. Expected: ${originalSeriesSlug}, Got: ${event.seriesSlug || 'null'}`,
       );
+    }
+
+    // Publish to AT Protocol (user's PDS) if eligible
+    // This is for user-created events (not Bluesky-sourced events which are handled above)
+    const eventToPublish = event || createdEvent;
+    if (eventToPublish && !createEventDto.sourceType) {
+      try {
+        const publishResult = await this.atprotoPublisherService.publishEvent(
+          eventToPublish,
+          this.request.tenantId,
+        );
+
+        if (publishResult.action === 'published' || publishResult.action === 'updated') {
+          // Save AT Protocol metadata to database
+          await this.eventRepository.update(
+            { id: eventToPublish.id },
+            {
+              atprotoUri: publishResult.atprotoUri,
+              atprotoRkey: publishResult.atprotoRkey,
+              atprotoSyncedAt: new Date(),
+            },
+          );
+
+          this.logger.debug(
+            `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
+          );
+        }
+      } catch (error) {
+        // Log but don't fail - AT Protocol publishing is best-effort
+        // The firehose will catch orphaned records if PDS succeeded but DB failed
+        this.logger.warn(
+          `Failed to publish event ${eventToPublish.slug} to AT Protocol: ${error.message}`,
+        );
+      }
     }
 
     return event || createdEvent; // Fallback to createdEvent if findOne returns null
@@ -881,6 +917,38 @@ export class EventManagementService {
       }
     }
 
+    // Publish to AT Protocol (user's PDS) if eligible
+    // This is for user-created events (not Bluesky-sourced events which are handled above)
+    if (!event.sourceType) {
+      try {
+        const publishResult = await this.atprotoPublisherService.publishEvent(
+          updatedEvent,
+          this.request.tenantId,
+        );
+
+        if (publishResult.action === 'published' || publishResult.action === 'updated') {
+          // Save AT Protocol metadata to database
+          await this.eventRepository.update(
+            { id: updatedEvent.id },
+            {
+              atprotoUri: publishResult.atprotoUri,
+              atprotoRkey: publishResult.atprotoRkey,
+              atprotoSyncedAt: new Date(),
+            },
+          );
+
+          this.logger.debug(
+            `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
+          );
+        }
+      } catch (error) {
+        // Log but don't fail - AT Protocol publishing is best-effort
+        this.logger.warn(
+          `Failed to publish event ${updatedEvent.slug} to AT Protocol: ${error.message}`,
+        );
+      }
+    }
+
     // Emit event update event
     this.eventEmitter.emit('event.updated', {
       eventId: updatedEvent.id,
@@ -987,6 +1055,28 @@ export class EventManagementService {
         // Continue with local deletion
         this.logger.warn(
           'Proceeding with local event deletion despite unexpected error',
+        );
+      }
+    }
+
+    // Delete from AT Protocol (user's PDS) if the event was published there
+    // This is for user-created events (not Bluesky-sourced events which are handled above)
+    if (!event.sourceType && event.atprotoUri) {
+      try {
+        const deleteResult = await this.atprotoPublisherService.deleteEvent(
+          event,
+          this.request.tenantId,
+        );
+
+        if (deleteResult.action === 'deleted') {
+          this.logger.debug(
+            `Deleted event ${event.slug} from AT Protocol: ${event.atprotoUri}`,
+          );
+        }
+      } catch (error) {
+        // Log but don't fail - proceed with local deletion
+        this.logger.warn(
+          `Failed to delete event ${event.slug} from AT Protocol: ${error.message}`,
         );
       }
     }

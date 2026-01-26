@@ -30,6 +30,7 @@ import { RsvpStatusShort } from '../bluesky/BlueskyTypes';
 import { UserService } from '../user/user.service';
 import { EventAttendeeQueryService } from './event-attendee-query.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -48,6 +49,7 @@ export class EventAttendeeService {
     private readonly userService: UserService,
     private readonly eventAttendeeQueryService: EventAttendeeQueryService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly atprotoPublisherService: AtprotoPublisherService,
   ) {
     this.logger.log('EventAttendeeService Constructed');
   }
@@ -163,6 +165,61 @@ export class EventAttendeeService {
     }
   }
 
+  /**
+   * Sync an RSVP to the user's AT Protocol PDS
+   * This is for user-created events (NOT Bluesky-sourced events)
+   * @param attendee The attendee entity (must have event with atprotoUri for published events)
+   * @returns true if sync was successful or skipped, false if it failed
+   */
+  @Trace('event-attendee.syncRsvpToAtproto')
+  private async syncRsvpToAtproto(
+    attendee: EventAttendeesEntity,
+  ): Promise<boolean> {
+    // Only sync for non-Bluesky events (Bluesky events are handled by syncRsvpToBluesky)
+    if (attendee.event?.sourceType === EventSourceType.BLUESKY) {
+      this.logger.debug(
+        `[syncRsvpToAtproto] Skipping - this is a Bluesky event`,
+        { eventSlug: attendee.event?.slug },
+      );
+      return true;
+    }
+
+    try {
+      const publishResult = await this.atprotoPublisherService.publishRsvp(
+        attendee,
+        this.request.tenantId,
+      );
+
+      if (publishResult.action === 'published') {
+        // Update the attendee record with AT Protocol fields
+        await this.eventAttendeesRepository.update(
+          { id: attendee.id },
+          {
+            atprotoUri: publishResult.atprotoUri,
+            atprotoRkey: publishResult.atprotoRkey,
+            atprotoSyncedAt: new Date(),
+          },
+        );
+
+        this.logger.debug(
+          `[syncRsvpToAtproto] Published RSVP to AT Protocol: ${publishResult.atprotoUri}`,
+        );
+      } else if (publishResult.action === 'skipped') {
+        this.logger.debug(
+          `[syncRsvpToAtproto] Skipped - event not eligible for AT Protocol publishing`,
+        );
+      }
+
+      return true;
+    } catch (error) {
+      // Log but don't fail - AT Protocol publishing is best-effort
+      this.logger.warn(
+        `[syncRsvpToAtproto] Failed to sync RSVP: ${error.message}`,
+      );
+      return false;
+    }
+  }
+
   @Trace('event-attendee.create')
   async create(
     createEventAttendeeDto: CreateEventAttendeeDto,
@@ -203,6 +260,16 @@ export class EventAttendeeService {
             `[create] Skipping Bluesky sync - explicitly disabled`,
             { eventSlug: createEventAttendeeDto.event.slug },
           );
+        }
+
+        // Sync to AT Protocol (user's PDS) for non-Bluesky events
+        // Need to reload the attendee with event relation for the publisher
+        const attendeeWithEvent = await this.eventAttendeesRepository.findOne({
+          where: { id: saved.id },
+          relations: ['event', 'user'],
+        });
+        if (attendeeWithEvent) {
+          await this.syncRsvpToAtproto(attendeeWithEvent);
         }
 
         // Emit event for activity feed
@@ -619,6 +686,9 @@ export class EventAttendeeService {
       updatedAttendee.id,
     );
 
+    // Sync cancellation to AT Protocol (user's PDS) for non-Bluesky events
+    await this.syncRsvpToAtproto(updatedAttendee);
+
     return updatedAttendee;
   }
 
@@ -1010,6 +1080,9 @@ export class EventAttendeeService {
       updatedAttendee.status,
       updatedAttendee.id,
     );
+
+    // Sync reactivated status to AT Protocol (user's PDS) for non-Bluesky events
+    await this.syncRsvpToAtproto(updatedAttendee);
 
     return updatedAttendee;
   }

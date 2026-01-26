@@ -218,3 +218,9 @@ export const mockRecurrenceService = {
     newSeries: {},
   }),
 };
+
+export const mockAtprotoPublisherService = {
+  publishEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
+  deleteEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
+  publishRsvp: jest.fn().mockResolvedValue({ action: 'skipped' }),
+};

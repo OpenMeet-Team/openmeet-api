@@ -18,6 +18,7 @@ import { EventRoleEntity } from '../event-role/infrastructure/persistence/relati
 import { NotFoundException } from '@nestjs/common';
 import { EventSourceType } from '../core/constants/source-type.constant';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
 
 describe('EventAttendeeService', () => {
   let service: EventAttendeeService;
@@ -139,6 +140,14 @@ describe('EventAttendeeService', () => {
           useValue: {
             emit: jest.fn(),
             emitAsync: jest.fn(),
+          },
+        },
+        {
+          provide: AtprotoPublisherService,
+          useValue: {
+            publishEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
+            deleteEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
+            publishRsvp: jest.fn().mockResolvedValue({ action: 'skipped' }),
           },
         },
       ],

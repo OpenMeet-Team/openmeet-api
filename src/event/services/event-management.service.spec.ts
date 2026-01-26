@@ -35,6 +35,7 @@ import { EventSeriesEntity } from '../../event-series/infrastructure/persistence
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence-frequency.enum';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
 
 describe('EventManagementService', () => {
   let service: EventManagementService;
@@ -267,6 +268,14 @@ describe('EventManagementService', () => {
         {
           provide: GroupMemberQueryService,
           useValue: mockGroupMemberQueryService,
+        },
+        {
+          provide: AtprotoPublisherService,
+          useValue: {
+            publishEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
+            deleteEvent: jest.fn().mockResolvedValue({ action: 'skipped' }),
+            publishRsvp: jest.fn().mockResolvedValue({ action: 'skipped' }),
+          },
         },
       ],
     })
