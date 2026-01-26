@@ -85,39 +85,47 @@ export class AtprotoPublisherService {
     tenantId: string,
     user: { ulid: string; slug: string; email?: string | null },
   ): Promise<{ did: string; required: boolean } | null> {
-    // Step 1: Try to ensure user has AT Protocol identity (may create lazily)
-    const identity = await this.atprotoIdentityService.ensureIdentityForUser(
-      tenantId,
-      user,
-    );
+    try {
+      // Step 1: Try to ensure user has AT Protocol identity (may create lazily)
+      const identity = await this.atprotoIdentityService.ensureIdentityForUser(
+        tenantId,
+        user,
+      );
 
-    if (!identity) {
-      // User has no identity and we couldn't create one
-      // This is fine - they can still create events, just won't publish to AT Protocol
+      if (!identity) {
+        // User has no identity and we couldn't create one
+        // This is fine - they can still create events, just won't publish to AT Protocol
+        this.logger.debug(
+          `Pre-flight check: No AT Protocol identity for user ${user.ulid} - events will not be published`,
+        );
+        return null;
+      }
+
+      // Step 2: Verify we can get a session
+      const session = await this.pdsSessionService.getSessionForUser(
+        tenantId,
+        user.ulid,
+      );
+
+      if (!session) {
+        this.logger.warn(
+          `Pre-flight check failed: Could not get AT Protocol session for user ${user.ulid} (DID: ${identity.did})`,
+        );
+        return null;
+      }
+
       this.logger.debug(
-        `Pre-flight check: No AT Protocol identity for user ${user.ulid} - events will not be published`,
+        `Pre-flight check passed: User ${user.ulid} can publish to AT Protocol (DID: ${identity.did})`,
       );
-      return null;
-    }
 
-    // Step 2: Verify we can get a session
-    const session = await this.pdsSessionService.getSessionForUser(
-      tenantId,
-      user.ulid,
-    );
-
-    if (!session) {
+      return { did: identity.did, required: true };
+    } catch (error) {
+      // Don't let pre-flight check failures block event creation
       this.logger.warn(
-        `Pre-flight check failed: Could not get AT Protocol session for user ${user.ulid} (DID: ${identity.did})`,
+        `Pre-flight check error for user ${user.ulid}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       return null;
     }
-
-    this.logger.debug(
-      `Pre-flight check passed: User ${user.ulid} can publish to AT Protocol (DID: ${identity.did})`,
-    );
-
-    return { did: identity.did, required: true };
   }
 
   /**
@@ -266,12 +274,10 @@ export class AtprotoPublisherService {
     );
 
     if (!identity) {
-      this.logger.warn(
-        `Could not ensure AT Protocol identity for user ${userUlid}`,
+      this.logger.debug(
+        `Skipping publish for event ${event.slug}: could not ensure AT Protocol identity for user ${userUlid}`,
       );
-      throw new Error(
-        `No AT Protocol identity for organizer of event ${event.slug}`,
-      );
+      return { action: 'skipped' };
     }
 
     const session = await this.pdsSessionService.getSessionForUser(
@@ -280,9 +286,10 @@ export class AtprotoPublisherService {
     );
 
     if (!session) {
-      throw new Error(
-        `No session available for organizer of event ${event.slug}`,
+      this.logger.debug(
+        `Skipping publish for event ${event.slug}: no session available for organizer`,
       );
+      return { action: 'skipped' };
     }
 
     const { rkey } = await this.blueskyService.createEventRecord(
@@ -427,9 +434,10 @@ export class AtprotoPublisherService {
     );
 
     if (!session) {
-      throw new Error(
-        `No session available for attendee of RSVP ${attendee.id}`,
+      this.logger.debug(
+        `Skipping publish for RSVP ${attendee.id}: no session available for attendee`,
       );
+      return { action: 'skipped' };
     }
 
     const result = await this.blueskyRsvpService.createRsvp(

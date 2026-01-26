@@ -318,7 +318,7 @@ describe('AtprotoPublisherService', () => {
       expect(blueskyService.createEventRecord).not.toHaveBeenCalled();
     });
 
-    it('should throw when no session available', async () => {
+    it('should return skipped when no session available', async () => {
       const event = createMockEvent();
       const mockIdentity = {
         id: 1,
@@ -331,9 +331,9 @@ describe('AtprotoPublisherService', () => {
       );
       pdsSessionService.getSessionForUser.mockResolvedValue(null);
 
-      await expect(service.publishEvent(event, tenantId)).rejects.toThrow(
-        /session/i,
-      );
+      const result = await service.publishEvent(event, tenantId);
+
+      expect(result).toEqual({ action: 'skipped' });
     });
 
     it('should publish event successfully and return result', async () => {
@@ -452,16 +452,15 @@ describe('AtprotoPublisherService', () => {
         expect(ensureCallOrder).toBeLessThan(sessionCallOrder);
       });
 
-      it('should throw when ensureIdentityForUser returns null (no identity)', async () => {
+      it('should return skipped when ensureIdentityForUser returns null (no identity)', async () => {
         const event = createMockEvent();
 
         // Identity service returns null (PDS unavailable, user has no slug, etc.)
         atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(null);
 
-        await expect(service.publishEvent(event, tenantId)).rejects.toThrow(
-          /AT Protocol identity/i,
-        );
+        const result = await service.publishEvent(event, tenantId);
 
+        expect(result).toEqual({ action: 'skipped' });
         // Should not attempt to get session when no identity
         expect(pdsSessionService.getSessionForUser).not.toHaveBeenCalled();
       });
@@ -719,7 +718,7 @@ describe('AtprotoPublisherService', () => {
       expect(result.atprotoUri).toContain('rsvp');
     });
 
-    it('should throw when session unavailable', async () => {
+    it('should return skipped when session unavailable', async () => {
       const event = createMockEvent({
         atprotoUri:
           'at://did:plc:organizer/community.lexicon.calendar.event/event-rkey',
@@ -731,9 +730,9 @@ describe('AtprotoPublisherService', () => {
 
       pdsSessionService.getSessionForUser.mockResolvedValue(null);
 
-      await expect(service.publishRsvp(attendee, tenantId)).rejects.toThrow(
-        /session/i,
-      );
+      const result = await service.publishRsvp(attendee, tenantId);
+
+      expect(result).toEqual({ action: 'skipped' });
     });
   });
 
@@ -761,7 +760,7 @@ describe('AtprotoPublisherService', () => {
         testUser,
       );
 
-      expect(result).toEqual({ did: 'did:plc:existing' });
+      expect(result).toEqual({ did: 'did:plc:existing', required: true });
       expect(atprotoIdentityService.ensureIdentityForUser).toHaveBeenCalledWith(
         tenantId,
         testUser,
