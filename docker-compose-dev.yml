@@ -77,12 +77,12 @@ services:
   migrate:
     profiles: ["migrate"]
     image: node:24-alpine
+    user: "${UID:-1000}:${GID:-1000}"
     container_name: openmeet_migrate
     working_dir: /app
     command: sh -c "npm install && npm run migration:run:tenants && npm run seed:run:relational"
     volumes:
       - .:/app
-      - /app/node_modules
     environment:
       - NODE_ENV=development
       - DATABASE_HOST=postgres
@@ -199,6 +199,7 @@ services:
   # NestJS API with hot reload
   api:
     image: node:24-alpine
+    user: "${UID:-1000}:${GID:-1000}"
     container_name: openmeet_api
     hostname: api
     working_dir: /app
@@ -207,7 +208,6 @@ services:
       - ${APP_PORT}:${APP_PORT}
     volumes:
       - .:/app
-      - /app/node_modules  # Prevent overwriting node_modules
     environment:
       - NODE_ENV=development
       - TZ=UTC
@@ -275,6 +275,7 @@ services:
   # Bluesky Firehose Consumer - connects to Bluesky and publishes to RabbitMQ
   bsky-firehose-consumer:
     image: node:24-alpine
+    user: "${UID:-1000}:${GID:-1000}"
     container_name: bsky-firehose-consumer
     working_dir: /app
     command: sh -c "npm install && npm run start:dev"
@@ -282,7 +283,6 @@ services:
       - "3001:3001"
     volumes:
       - ../bsky-firehose-consumer:/app
-      - /app/node_modules
     environment:
       - NODE_ENV=development
       - PORT=3001
@@ -308,6 +308,7 @@ services:
   #   BSKY_TENANT_ID - tenant ID (e.g., lsdfaopkljdfs for local dev)
   bsky-event-processor:
     image: node:24-alpine
+    user: "${UID:-1000}:${GID:-1000}"
     container_name: bsky-event-processor
     working_dir: /app
     command: sh -c "npm install && npm run start:dev"
@@ -315,7 +316,6 @@ services:
       - "3002:3002"
     volumes:
       - ../bsky-event-processor:/app
-      - /app/node_modules
     environment:
       - NODE_ENV=development
       - PORT=3002
