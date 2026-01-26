@@ -131,6 +131,32 @@ Run migrations after: initial setup, pulling code with new migrations, or schema
 npm run migration:reset
 ```
 
+### PDS Invite Code (Local Development)
+
+When setting up a fresh local environment or after resetting the PDS, you need to generate a new invite code:
+
+```bash
+# Generate a new invite code (100 uses)
+curl -s -u admin:local-dev-admin-password \
+  http://localhost:3101/xrpc/com.atproto.server.createInviteCode \
+  -X POST -H "Content-Type: application/json" -d '{"useCount": 100}'
+```
+
+Update your `.env` file with the returned code:
+```
+PDS_INVITE_CODE=pds-test-xxxxx-xxxxx
+```
+
+Then force-recreate the API container to pick up the new value:
+```bash
+docker compose -f docker-compose-dev.yml up -d --force-recreate api
+```
+
+**Note:** The PDS and PLC containers must both be running for account creation to work:
+```bash
+docker compose -f docker-compose-dev.yml --profile pds up -d
+```
+
 ### Testing
 
 ```bash
