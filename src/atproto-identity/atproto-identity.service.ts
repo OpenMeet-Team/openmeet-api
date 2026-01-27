@@ -1,6 +1,8 @@
 import {
   Injectable,
   ConflictException,
+  NotFoundException,
+  BadRequestException,
   Logger,
   Inject,
   Scope,
@@ -125,6 +127,100 @@ export class AtprotoIdentityService {
     }
 
     return this.createIdentityInternal(tenantId, user, pdsUrl);
+  }
+
+  /**
+   * Update the handle for an AT Protocol identity hosted on OpenMeet's PDS.
+   *
+   * Only supports identities on our PDS. Validates the new handle is within
+   * our allowed domains and is available before calling the PDS API.
+   *
+   * @param tenantId - The tenant ID
+   * @param userUlid - The user's ULID
+   * @param newHandle - The new handle to set
+   * @returns The updated identity entity
+   * @throws NotFoundException if no identity exists
+   * @throws BadRequestException if identity is on external PDS or handle domain is invalid
+   * @throws ConflictException if handle is already taken
+   */
+  async updateHandle(
+    tenantId: string,
+    userUlid: string,
+    newHandle: string,
+  ): Promise<UserAtprotoIdentityEntity> {
+    // 1. Get existing identity
+    const identity = await this.userAtprotoIdentityService.findByUserUlid(
+      tenantId,
+      userUlid,
+    );
+    if (!identity) {
+      throw new NotFoundException('AT Protocol identity not found');
+    }
+
+    // 2. Check if this is our PDS
+    const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+    if (identity.pdsUrl !== ourPdsUrl) {
+      throw new BadRequestException(
+        'Handle changes are only supported for identities hosted on OpenMeet PDS',
+      );
+    }
+
+    // 3. Validate handle is within our domain
+    const handleDomains =
+      this.configService.get('pds.serviceHandleDomains', { infer: true }) ||
+      '.opnmt.me';
+    const domains = handleDomains.split(',').map((d: string) => d.trim());
+    const isValidDomain = domains.some((domain: string) =>
+      newHandle.endsWith(domain),
+    );
+    if (!isValidDomain) {
+      throw new BadRequestException(
+        `Handle must end with one of: ${domains.join(', ')}`,
+      );
+    }
+
+    // 4. Check handle availability via PDS
+    const isAvailable =
+      await this.pdsAccountService.isHandleAvailable(newHandle);
+    if (!isAvailable) {
+      throw new ConflictException('Handle is already taken');
+    }
+
+    // 5. Get a PDS session for the custodial identity
+    if (!identity.pdsCredentials) {
+      throw new BadRequestException(
+        'Cannot update handle: no stored credentials for this identity',
+      );
+    }
+    const password = this.pdsCredentialService.decrypt(
+      identity.pdsCredentials,
+    );
+    const session = await this.pdsAccountService.createSession(
+      identity.did,
+      password,
+    );
+
+    // 6. Call com.atproto.identity.updateHandle on PDS
+    await this.pdsAccountService.updateHandle(session.accessJwt, newHandle);
+
+    // 7. Update handle in database
+    const updated = await this.userAtprotoIdentityService.update(
+      tenantId,
+      identity.id,
+      { handle: newHandle },
+    );
+
+    if (!updated) {
+      throw new NotFoundException(
+        'Failed to update identity - record not found',
+      );
+    }
+
+    this.logger.log(
+      `Updated handle for user ${userUlid}: ${identity.handle} -> ${newHandle}`,
+    );
+
+    return updated;
   }
 
   /**

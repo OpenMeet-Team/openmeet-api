@@ -38,6 +38,13 @@ export class AtprotoIdentityDto {
   isOurPds: boolean;
 
   @ApiProperty({
+    description:
+      'Whether this identity has an active AT Protocol OAuth session for publishing',
+    example: true,
+  })
+  hasActiveSession: boolean;
+
+  @ApiProperty({
     description: 'When the identity was created',
   })
   createdAt: Date;

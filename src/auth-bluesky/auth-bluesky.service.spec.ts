@@ -597,6 +597,8 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
     findByUserUlid: jest.Mock;
     findByDid: jest.Mock;
     create: jest.Mock;
+    update: jest.Mock;
+    deleteByUserUlid: jest.Mock;
   };
   let mockBlueskyIdentityService: {
     resolveProfile: jest.Mock;
@@ -604,6 +606,8 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
   let mockUserService: {
     findBySocialIdAndProvider: jest.Mock;
     findByUlid: jest.Mock;
+    findById: jest.Mock;
+    findByIdentifier: jest.Mock;
     update: jest.Mock;
   };
   let mockAuthService: { validateSocialLogin: jest.Mock };
@@ -637,6 +641,8 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       findByUserUlid: jest.fn(),
       findByDid: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
+      deleteByUserUlid: jest.fn(),
     };
 
     mockBlueskyIdentityService = {
@@ -660,6 +666,8 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
     mockUserService = {
       findBySocialIdAndProvider: jest.fn(),
       findByUlid: jest.fn(),
+      findById: jest.fn(),
+      findByIdentifier: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -987,6 +995,375 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
         user: null,
         foundVia: null,
       });
+    });
+  });
+
+  describe('createLinkAuthUrl', () => {
+    it('should store link data in Redis and return auth URL', async () => {
+      // Arrange
+      const mockUrl = new URL('https://bsky.social/oauth/authorize?par=xyz');
+      const mockClient = {
+        authorize: jest.fn().mockResolvedValue(mockUrl),
+      };
+      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+
+      // Act
+      const result = await service.createLinkAuthUrl(
+        'alice.bsky.social',
+        'tenant-123',
+        '01hqvxz6j8k9m0n1p2q3r4s5t6',
+      );
+
+      // Assert
+      expect(result).toBe(mockUrl.toString());
+      expect(mockElastiCacheService.set).toHaveBeenCalledWith(
+        expect.stringMatching(/^auth:bluesky:link:.+$/),
+        JSON.stringify({
+          userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+          tenantId: 'tenant-123',
+        }),
+        600,
+      );
+      expect(mockClient.authorize).toHaveBeenCalledWith(
+        'alice.bsky.social',
+        expect.objectContaining({ state: expect.any(String) }),
+      );
+    });
+
+    it('should store platform in Redis for mobile link flow', async () => {
+      // Arrange
+      const mockUrl = new URL('https://bsky.social/oauth/authorize');
+      const mockClient = {
+        authorize: jest.fn().mockResolvedValue(mockUrl),
+      };
+      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+
+      // Act
+      await service.createLinkAuthUrl(
+        'alice.bsky.social',
+        'tenant-123',
+        '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        'android',
+      );
+
+      // Assert: Both link data and platform should be stored
+      expect(mockElastiCacheService.set).toHaveBeenCalledWith(
+        expect.stringMatching(/^auth:bluesky:link:.+$/),
+        expect.any(String),
+        600,
+      );
+      expect(mockElastiCacheService.set).toHaveBeenCalledWith(
+        expect.stringMatching(/^auth:bluesky:platform:.+$/),
+        'android',
+        600,
+      );
+    });
+  });
+
+  describe('getStoredLinkData', () => {
+    it('should return link data and delete from Redis', async () => {
+      // Arrange
+      const linkData = JSON.stringify({
+        userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        tenantId: 'tenant-123',
+      });
+      mockElastiCacheService.get.mockResolvedValue(linkData);
+
+      // Act
+      const result = await service.getStoredLinkData('test-state');
+
+      // Assert
+      expect(result).toEqual({
+        userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        tenantId: 'tenant-123',
+      });
+      expect(mockElastiCacheService.get).toHaveBeenCalledWith(
+        'auth:bluesky:link:test-state',
+      );
+      expect(mockElastiCacheService.del).toHaveBeenCalledWith(
+        'auth:bluesky:link:test-state',
+      );
+    });
+
+    it('should return null when no link data is stored', async () => {
+      // Arrange
+      mockElastiCacheService.get.mockResolvedValue(null);
+
+      // Act
+      const result = await service.getStoredLinkData('missing-state');
+
+      // Assert
+      expect(result).toBeNull();
+      expect(mockElastiCacheService.del).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleLinkCallback', () => {
+    const mockLinkData = {
+      userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+      tenantId: 'tenant-123',
+    };
+
+    const mockOauthSession = { did: 'did:plc:newdid123' };
+
+    const mockRestoredSession = {
+      did: 'did:plc:newdid123',
+      pdsUrl: 'https://bsky.social',
+    };
+
+    const mockProfile = {
+      data: {
+        did: 'did:plc:newdid123',
+        handle: 'alice.bsky.social',
+        displayName: 'Alice',
+        avatar: 'https://cdn.bsky.app/img/avatar/alice.jpg',
+      },
+    };
+
+    it('should create new identity when user has none', async () => {
+      // Arrange: No existing identity for the user
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 1,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:newdid123',
+        handle: 'alice.bsky.social',
+        pdsUrl: 'https://bsky.social',
+        isCustodial: false,
+      });
+
+      mockUserService.findByIdentifier.mockResolvedValue({
+        id: 1,
+        ulid: mockLinkData.userUlid,
+        preferences: {},
+      });
+
+      // Act
+      const result = await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        mockProfile as any,
+      );
+
+      // Assert
+      expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+        'tenant-123',
+        expect.objectContaining({
+          userUlid: mockLinkData.userUlid,
+          did: 'did:plc:newdid123',
+          isCustodial: false,
+          pdsCredentials: null,
+        }),
+      );
+      expect(result.redirectUrl).toContain('linkSuccess=true');
+      expect(result.sessionId).toBeUndefined();
+    });
+
+    it('should update identity to non-custodial when same DID', async () => {
+      // Arrange: Existing custodial identity with same DID
+      const existingIdentity = {
+        id: 5,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:newdid123', // Same DID
+        handle: 'alice.dev.opnmt.me',
+        pdsUrl: 'https://pds-dev.openmeet.net',
+        isCustodial: true,
+        pdsCredentials: 'encrypted-creds',
+      };
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        existingIdentity,
+      );
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+        existingIdentity,
+      );
+      mockUserAtprotoIdentityService.update = jest
+        .fn()
+        .mockResolvedValue({ ...existingIdentity, isCustodial: false });
+
+      mockUserService.findByIdentifier.mockResolvedValue({
+        id: 1,
+        ulid: mockLinkData.userUlid,
+        preferences: {},
+      });
+
+      // Act
+      const result = await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        mockProfile as any,
+      );
+
+      // Assert: Should update, not create
+      expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
+        'tenant-123',
+        existingIdentity.id,
+        expect.objectContaining({
+          isCustodial: false,
+          pdsCredentials: null,
+        }),
+      );
+      expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+      expect(result.redirectUrl).toContain('linkSuccess=true');
+    });
+
+    it('should replace identity when different DID (delete old + create new)', async () => {
+      // Arrange: Existing identity with different DID
+      const existingIdentity = {
+        id: 5,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:olddid999', // Different DID
+        handle: 'alice.dev.opnmt.me',
+        pdsUrl: 'https://pds-dev.openmeet.net',
+        isCustodial: true,
+        pdsCredentials: 'encrypted-creds',
+      };
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        existingIdentity,
+      );
+      // New DID is not linked to anyone
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.deleteByUserUlid = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 6,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:newdid123',
+        handle: 'alice.bsky.social',
+        pdsUrl: 'https://bsky.social',
+        isCustodial: false,
+      });
+
+      mockUserService.findByIdentifier.mockResolvedValue({
+        id: 1,
+        ulid: mockLinkData.userUlid,
+        preferences: {},
+      });
+
+      // Act
+      const result = await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        mockProfile as any,
+      );
+
+      // Assert: Should delete old and create new
+      expect(
+        mockUserAtprotoIdentityService.deleteByUserUlid,
+      ).toHaveBeenCalledWith('tenant-123', mockLinkData.userUlid);
+      expect(mockUserAtprotoIdentityService.create).toHaveBeenCalledWith(
+        'tenant-123',
+        expect.objectContaining({
+          did: 'did:plc:newdid123',
+          isCustodial: false,
+        }),
+      );
+      expect(result.redirectUrl).toContain('linkSuccess=true');
+    });
+
+    it('should return error redirect when DID is linked to a different user', async () => {
+      // Arrange: The DID is already linked to someone else
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue({
+        id: 10,
+        userUlid: 'different-user-ulid',
+        did: 'did:plc:newdid123',
+        handle: 'alice.bsky.social',
+        isCustodial: false,
+      });
+
+      // Act
+      const result = await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        mockProfile as any,
+      );
+
+      // Assert: Should return error redirect
+      expect(result.redirectUrl).toContain('linkError=');
+      expect(result.redirectUrl).toContain('already');
+      expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
+    });
+
+    it('should update user preferences with DID and avatar', async () => {
+      // Arrange
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 1,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:newdid123',
+      });
+
+      const existingUser = {
+        id: 1,
+        ulid: mockLinkData.userUlid,
+        preferences: { bluesky: { autoPost: true } },
+      };
+      mockUserService.findByIdentifier.mockResolvedValue(existingUser);
+
+      // Act
+      await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        mockProfile as any,
+      );
+
+      // Assert: User preferences should be updated
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        existingUser.id,
+        expect.objectContaining({
+          preferences: expect.objectContaining({
+            bluesky: expect.objectContaining({
+              did: 'did:plc:newdid123',
+              avatar: 'https://cdn.bsky.app/img/avatar/alice.jpg',
+              connected: true,
+              connectedAt: expect.any(Date),
+              autoPost: true, // Preserved from existing
+            }),
+          }),
+        }),
+        'tenant-123',
+      );
+    });
+  });
+
+  describe('buildLinkRedirectUrl', () => {
+    it('should return success URL', () => {
+      const result = service.buildLinkRedirectUrl('tenant-123', true);
+
+      expect(result).toBe(
+        'https://platform.openmeet.net/dashboard/profile?linkSuccess=true',
+      );
+    });
+
+    it('should return error URL with message', () => {
+      const result = service.buildLinkRedirectUrl(
+        'tenant-123',
+        false,
+        'DID already linked to another account',
+      );
+
+      expect(result).toContain(
+        'https://platform.openmeet.net/dashboard/profile?linkError=',
+      );
+      expect(result).toContain('already');
     });
   });
 });
