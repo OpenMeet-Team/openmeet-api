@@ -137,6 +137,35 @@ export class EmailVerificationTestHelpers {
   }
 
   /**
+   * Extract PDS password reset token from email.
+   * PDS sends a code in format XXXXX-XXXXX (uppercase alphanumeric with hyphen)
+   * in a <code> HTML element or as a standalone line in the text version.
+   * @param email - MailDev email object
+   * @returns The reset token or null if not found
+   */
+  static extractPdsResetToken(email: MailDevEmail): string | null {
+    // Try HTML version first — token is inside a <code> tag
+    if (email.html) {
+      const codeMatch = email.html.match(
+        /<code[^>]*>([A-Z0-9]{5}-[A-Z0-9]{5})<\/code>/,
+      );
+      if (codeMatch) {
+        return codeMatch[1];
+      }
+    }
+
+    // Fall back to text version — token appears on its own line
+    if (email.text) {
+      const lineMatch = email.text.match(/^([A-Z0-9]{5}-[A-Z0-9]{5})$/m);
+      if (lineMatch) {
+        return lineMatch[1];
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Extract all 6-digit codes from email (in case multiple codes present)
    * @param email - MailDev email object
    * @returns Array of all 6-digit codes found

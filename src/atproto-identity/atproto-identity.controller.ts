@@ -32,6 +32,7 @@ import { ConfigService } from '@nestjs/config';
 import { AtprotoIdentityDto } from './dto/atproto-identity.dto';
 import { ResetPdsPasswordDto } from './dto/reset-pds-password.dto';
 import { PdsAccountService } from '../pds/pds-account.service';
+import { PdsApiError } from '../pds/pds.errors';
 import { NullableType } from '../utils/types/nullable.type';
 import { AllConfigType } from '../config/config.type';
 
@@ -164,7 +165,7 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('recover-as-custodial')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour per user
+  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
   @ApiOperation({ summary: 'Recover existing PDS account as custodial' })
   @ApiCreatedResponse({
     type: AtprotoIdentityDto,
@@ -203,7 +204,7 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('take-ownership/initiate')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour per user
+  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
   @ApiOperation({
     summary: 'Initiate take ownership - sends PDS password reset email',
   })
@@ -268,7 +269,7 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('reset-pds-password')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour per user
+  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
   @ApiOperation({
     summary: 'Reset PDS password using token from email',
   })
@@ -311,7 +312,14 @@ export class AtprotoIdentityController {
     }
 
     // Call PDS to reset password
-    await this.pdsAccountService.resetPassword(dto.token, dto.password);
+    try {
+      await this.pdsAccountService.resetPassword(dto.token, dto.password);
+    } catch (error) {
+      if (error instanceof PdsApiError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
 
     return { success: true };
   }
