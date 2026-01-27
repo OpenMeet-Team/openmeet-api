@@ -207,10 +207,10 @@ export class UserEntity extends EntityRelationalHelper {
   generateSlug() {
     if (!this.slug) {
       const name = `${this.firstName || ''} ${this.lastName || ''}`.trim();
-      this.slug = `${slugify(name.toLowerCase() || 'user', {
-        strict: true,
-        lower: true,
-      })}-${generateShortCode().toLowerCase()}`;
+      this.slug = slugify(
+        (name || 'user') + '-' + generateShortCode().toLowerCase(),
+        { strict: true, lower: true },
+      );
     }
   }
 
