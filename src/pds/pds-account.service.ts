@@ -371,6 +371,33 @@ export class PdsAccountService {
   }
 
   /**
+   * Reset account password using a reset token.
+   * This is a public endpoint and does not require admin authentication.
+   * The token is obtained via email from requestPasswordReset.
+   *
+   * @param token - The password reset token from the email
+   * @param password - The new password to set
+   * @throws PdsApiError if the request fails (invalid token, weak password, etc.)
+   */
+  async resetPassword(token: string, password: string): Promise<void> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.server.resetPassword`;
+
+    return this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          { token, password },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+    });
+  }
+
+  /**
    * Execute an operation with exponential backoff retry.
    *
    * Retries on:

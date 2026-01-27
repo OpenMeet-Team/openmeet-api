@@ -903,4 +903,131 @@ describe('PdsAccountService', () => {
       ).rejects.toThrow(PdsApiError);
     }, 15000);
   });
+
+  describe('resetPassword()', () => {
+    it('should reset password successfully with token', async () => {
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await expect(
+        service.resetPassword('reset-token-123', 'new-secure-password'),
+      ).resolves.toBeUndefined();
+
+      expect(httpService.post).toHaveBeenCalledWith(
+        'https://pds-dev.openmeet.net/xrpc/com.atproto.server.resetPassword',
+        {
+          token: 'reset-token-123',
+          password: 'new-secure-password',
+        },
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      );
+    });
+
+    it('should NOT use Basic Auth header (public endpoint)', async () => {
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await service.resetPassword('reset-token-123', 'new-secure-password');
+
+      // Verify NO Authorization header is used
+      const callArgs = httpService.post.mock.calls[0];
+      const headers = callArgs[2]?.headers;
+      expect(headers).not.toHaveProperty('Authorization');
+    });
+
+    it('should throw PdsApiError on invalid token', async () => {
+      const errorResponse: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: {
+            error: 'ExpiredToken',
+            message: 'Token has expired',
+          },
+          status: 400,
+          statusText: 'Bad Request',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 400',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+
+      httpService.post.mockReturnValue(throwError(() => errorResponse));
+
+      await expect(
+        service.resetPassword('expired-token', 'new-secure-password'),
+      ).rejects.toThrow(PdsApiError);
+
+      await expect(
+        service.resetPassword('expired-token', 'new-secure-password'),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        atError: 'ExpiredToken',
+      });
+    });
+
+    it('should throw PdsApiError on invalid password (too short)', async () => {
+      const errorResponse: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: {
+            error: 'InvalidPassword',
+            message: 'Password is too short',
+          },
+          status: 400,
+          statusText: 'Bad Request',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 400',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+
+      httpService.post.mockReturnValue(throwError(() => errorResponse));
+
+      await expect(
+        service.resetPassword('valid-token', 'short'),
+      ).rejects.toThrow(PdsApiError);
+
+      await expect(
+        service.resetPassword('valid-token', 'short'),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        atError: 'InvalidPassword',
+      });
+    });
+
+    it('should throw PdsApiError on network failure', async () => {
+      const networkError = new Error('connect ECONNREFUSED');
+      (networkError as NodeJS.ErrnoException).code = 'ECONNREFUSED';
+
+      httpService.post.mockReturnValue(throwError(() => networkError));
+
+      await expect(
+        service.resetPassword('valid-token', 'new-secure-password'),
+      ).rejects.toThrow(PdsApiError);
+    }, 15000);
+  });
 });
