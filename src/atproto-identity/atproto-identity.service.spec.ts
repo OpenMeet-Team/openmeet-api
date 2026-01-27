@@ -329,4 +329,139 @@ describe('AtprotoIdentityService', () => {
       ).rejects.toThrow('PDS_URL is not configured');
     });
   });
+
+  describe('ensureIdentityForUser', () => {
+    it('should return existing identity when user already has one', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
+
+      // Act
+      const result = await service.ensureIdentityForUser(
+        'test-tenant',
+        mockUser,
+      );
+
+      // Assert
+      expect(userAtprotoIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        'test-tenant',
+        mockUser.ulid,
+      );
+      expect(pdsAccountService.createAccount).not.toHaveBeenCalled();
+      expect(result).toEqual(mockIdentityEntity);
+    });
+
+    it('should create new identity when user has none', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(null);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(true);
+      jest.spyOn(pdsAccountService, 'createAccount').mockResolvedValue({
+        did: 'did:plc:abc123xyz789',
+        handle: 'test-user.opnmt.me',
+        accessJwt: 'access-jwt',
+        refreshJwt: 'refresh-jwt',
+      });
+      jest
+        .spyOn(pdsCredentialService, 'encrypt')
+        .mockReturnValue('encrypted-password');
+      jest
+        .spyOn(userAtprotoIdentityService, 'create')
+        .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
+
+      // Act
+      const result = await service.ensureIdentityForUser(
+        'test-tenant',
+        mockUser,
+      );
+
+      // Assert
+      expect(userAtprotoIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        'test-tenant',
+        mockUser.ulid,
+      );
+      expect(pdsAccountService.createAccount).toHaveBeenCalled();
+      expect(result).toEqual(mockIdentityEntity);
+    });
+
+    it('should return null when PDS is unavailable (does not throw)', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(null);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockRejectedValue(new Error('Network error'));
+
+      // Act
+      const result = await service.ensureIdentityForUser(
+        'test-tenant',
+        mockUser,
+      );
+
+      // Assert
+      expect(result).toBeNull();
+    });
+
+    it('should return null when PDS_URL is not configured (does not throw)', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(null);
+      jest.spyOn(configService, 'get').mockReturnValue(null);
+
+      // Act
+      const result = await service.ensureIdentityForUser(
+        'test-tenant',
+        mockUser,
+      );
+
+      // Assert
+      expect(result).toBeNull();
+    });
+
+    it('should return null when user has no slug', async () => {
+      // Arrange
+      const userWithoutSlug = { ...mockUser, slug: '' };
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(null);
+
+      // Act
+      const result = await service.ensureIdentityForUser(
+        'test-tenant',
+        userWithoutSlug,
+      );
+
+      // Assert
+      expect(result).toBeNull();
+      expect(pdsAccountService.createAccount).not.toHaveBeenCalled();
+    });
+
+    it('should return null when PDS account creation fails', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(null);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(pdsAccountService, 'createAccount')
+        .mockRejectedValue(new PdsApiError('Server error', 500));
+
+      // Act
+      const result = await service.ensureIdentityForUser(
+        'test-tenant',
+        mockUser,
+      );
+
+      // Assert
+      expect(result).toBeNull();
+    });
+  });
 });

@@ -169,54 +169,44 @@ export class EventAttendeeService {
    * Sync an RSVP to the user's AT Protocol PDS
    * This is for user-created events (NOT Bluesky-sourced events)
    * @param attendee The attendee entity (must have event with atprotoUri for published events)
-   * @returns true if sync was successful or skipped, false if it failed
+   * @throws Error if AT Protocol publishing fails (errors propagate, not swallowed)
    */
   @Trace('event-attendee.syncRsvpToAtproto')
   private async syncRsvpToAtproto(
     attendee: EventAttendeesEntity,
-  ): Promise<boolean> {
+  ): Promise<void> {
     // Only sync for non-Bluesky events (Bluesky events are handled by syncRsvpToBluesky)
     if (attendee.event?.sourceType === EventSourceType.BLUESKY) {
       this.logger.debug(
         `[syncRsvpToAtproto] Skipping - this is a Bluesky event`,
         { eventSlug: attendee.event?.slug },
       );
-      return true;
+      return;
     }
 
-    try {
-      const publishResult = await this.atprotoPublisherService.publishRsvp(
-        attendee,
-        this.request.tenantId,
+    const publishResult = await this.atprotoPublisherService.publishRsvp(
+      attendee,
+      this.request.tenantId,
+    );
+
+    if (publishResult.action === 'published') {
+      // Update the attendee record with AT Protocol fields
+      await this.eventAttendeesRepository.update(
+        { id: attendee.id },
+        {
+          atprotoUri: publishResult.atprotoUri,
+          atprotoRkey: publishResult.atprotoRkey,
+          atprotoSyncedAt: new Date(),
+        },
       );
 
-      if (publishResult.action === 'published') {
-        // Update the attendee record with AT Protocol fields
-        await this.eventAttendeesRepository.update(
-          { id: attendee.id },
-          {
-            atprotoUri: publishResult.atprotoUri,
-            atprotoRkey: publishResult.atprotoRkey,
-            atprotoSyncedAt: new Date(),
-          },
-        );
-
-        this.logger.debug(
-          `[syncRsvpToAtproto] Published RSVP to AT Protocol: ${publishResult.atprotoUri}`,
-        );
-      } else if (publishResult.action === 'skipped') {
-        this.logger.debug(
-          `[syncRsvpToAtproto] Skipped - event not eligible for AT Protocol publishing`,
-        );
-      }
-
-      return true;
-    } catch (error) {
-      // Log but don't fail - AT Protocol publishing is best-effort
-      this.logger.warn(
-        `[syncRsvpToAtproto] Failed to sync RSVP: ${error.message}`,
+      this.logger.debug(
+        `[syncRsvpToAtproto] Published RSVP to AT Protocol: ${publishResult.atprotoUri}`,
       );
-      return false;
+    } else if (publishResult.action === 'skipped') {
+      this.logger.debug(
+        `[syncRsvpToAtproto] Skipped - event not eligible for AT Protocol publishing`,
+      );
     }
   }
 

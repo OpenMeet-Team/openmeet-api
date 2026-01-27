@@ -3,9 +3,11 @@ import { AtprotoPublisherService } from './atproto-publisher.service';
 import { PdsSessionService, SessionResult } from '../pds/pds-session.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
+import { AtprotoIdentityService } from '../atproto-identity/atproto-identity.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import {
   EventStatus,
   EventVisibility,
@@ -58,6 +60,8 @@ function createMockEvent(overrides: Partial<EventEntity> = {}): EventEntity {
   event.user = {
     id: 1,
     ulid: 'user-ulid-123',
+    slug: 'test-user',
+    email: 'test@example.com',
   } as UserEntity;
 
   Object.assign(event, overrides);
@@ -94,6 +98,7 @@ describe('AtprotoPublisherService', () => {
   let pdsSessionService: jest.Mocked<PdsSessionService>;
   let blueskyService: jest.Mocked<BlueskyService>;
   let blueskyRsvpService: jest.Mocked<BlueskyRsvpService>;
+  let atprotoIdentityService: jest.Mocked<AtprotoIdentityService>;
 
   const tenantId = 'test-tenant';
 
@@ -112,12 +117,17 @@ describe('AtprotoPublisherService', () => {
       createRsvp: jest.fn(),
     } as unknown as jest.Mocked<BlueskyRsvpService>;
 
+    atprotoIdentityService = {
+      ensureIdentityForUser: jest.fn(),
+    } as unknown as jest.Mocked<AtprotoIdentityService>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AtprotoPublisherService,
         { provide: PdsSessionService, useValue: pdsSessionService },
         { provide: BlueskyService, useValue: blueskyService },
         { provide: BlueskyRsvpService, useValue: blueskyRsvpService },
+        { provide: AtprotoIdentityService, useValue: atprotoIdentityService },
       ],
     }).compile();
 
@@ -276,7 +286,7 @@ describe('AtprotoPublisherService', () => {
         visibility: EventVisibility.Private,
       });
 
-      const result = service.publishEvent(event, tenantId);
+      const result = service.publishEvent(event, tenantId) as PublishResult;
 
       expect(result.action).toBe('skipped');
       expect(pdsSessionService.getSessionForUser).not.toHaveBeenCalled();
@@ -287,7 +297,7 @@ describe('AtprotoPublisherService', () => {
         sourceType: EventSourceType.BLUESKY,
       });
 
-      const result = service.publishEvent(event, tenantId);
+      const result = service.publishEvent(event, tenantId) as PublishResult;
 
       expect(result.action).toBe('skipped');
       expect(pdsSessionService.getSessionForUser).not.toHaveBeenCalled();
@@ -302,25 +312,42 @@ describe('AtprotoPublisherService', () => {
         updatedAt: new Date('2026-01-01T00:00:00Z'),
       });
 
-      const result = service.publishEvent(event, tenantId);
+      const result = service.publishEvent(event, tenantId) as PublishResult;
 
       expect(result.action).toBe('skipped');
       expect(blueskyService.createEventRecord).not.toHaveBeenCalled();
     });
 
-    it('should throw when no session available', async () => {
+    it('should return skipped when no session available', async () => {
       const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
       pdsSessionService.getSessionForUser.mockResolvedValue(null);
 
-      await expect(service.publishEvent(event, tenantId)).rejects.toThrow(
-        /session/i,
-      );
+      const result = await service.publishEvent(event, tenantId);
+
+      expect(result).toEqual({ action: 'skipped' });
     });
 
     it('should publish event successfully and return result', async () => {
       const event = createMockEvent();
       const rkey = 'test-rkey-123';
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
 
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
       pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
       blueskyService.createEventRecord.mockResolvedValue({ rkey });
 
@@ -349,7 +376,15 @@ describe('AtprotoPublisherService', () => {
         updatedAt: new Date('2026-01-02T00:00:00Z'),
       });
       const rkey = 'old-rkey';
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
 
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
       pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
       blueskyService.createEventRecord.mockResolvedValue({ rkey });
 
@@ -360,6 +395,15 @@ describe('AtprotoPublisherService', () => {
 
     it('should throw when PDS call fails', async () => {
       const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
       pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
       blueskyService.createEventRecord.mockRejectedValue(
         new Error('PDS unavailable'),
@@ -368,6 +412,85 @@ describe('AtprotoPublisherService', () => {
       await expect(service.publishEvent(event, tenantId)).rejects.toThrow(
         'PDS unavailable',
       );
+    });
+
+    describe('lazy identity creation', () => {
+      it('should call ensureIdentityForUser before getting session', async () => {
+        const event = createMockEvent();
+        const rkey = 'test-rkey-123';
+        const mockIdentity = {
+          id: 1,
+          userUlid: 'user-ulid-123',
+          did: 'did:plc:testuser123',
+        } as UserAtprotoIdentityEntity;
+
+        atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+          mockIdentity,
+        );
+        pdsSessionService.getSessionForUser.mockResolvedValue(
+          mockSessionResult,
+        );
+        blueskyService.createEventRecord.mockResolvedValue({ rkey });
+
+        await service.publishEvent(event, tenantId);
+
+        // Verify ensureIdentityForUser was called with correct arguments
+        expect(
+          atprotoIdentityService.ensureIdentityForUser,
+        ).toHaveBeenCalledWith(tenantId, {
+          ulid: 'user-ulid-123',
+          slug: expect.any(String),
+          email: expect.anything(),
+        });
+
+        // Verify it was called before getSessionForUser
+        const ensureCallOrder =
+          atprotoIdentityService.ensureIdentityForUser.mock
+            .invocationCallOrder[0];
+        const sessionCallOrder =
+          pdsSessionService.getSessionForUser.mock.invocationCallOrder[0];
+        expect(ensureCallOrder).toBeLessThan(sessionCallOrder);
+      });
+
+      it('should return skipped when ensureIdentityForUser returns null (no identity)', async () => {
+        const event = createMockEvent();
+
+        // Identity service returns null (PDS unavailable, user has no slug, etc.)
+        atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(null);
+
+        const result = await service.publishEvent(event, tenantId);
+
+        expect(result).toEqual({ action: 'skipped' });
+        // Should not attempt to get session when no identity
+        expect(pdsSessionService.getSessionForUser).not.toHaveBeenCalled();
+      });
+
+      it('should create identity for user without one, then publish successfully', async () => {
+        const event = createMockEvent();
+        const rkey = 'test-rkey-123';
+
+        // First ensure creates the identity
+        const mockIdentity = {
+          id: 1,
+          userUlid: 'user-ulid-123',
+          did: 'did:plc:newlycreated',
+          handle: 'test-user.opnmt.me',
+          isCustodial: true,
+        } as UserAtprotoIdentityEntity;
+
+        atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+          mockIdentity,
+        );
+        pdsSessionService.getSessionForUser.mockResolvedValue(
+          mockSessionResult,
+        );
+        blueskyService.createEventRecord.mockResolvedValue({ rkey });
+
+        const result = await service.publishEvent(event, tenantId);
+
+        expect(result.action).toBe('published');
+        expect(atprotoIdentityService.ensureIdentityForUser).toHaveBeenCalled();
+      });
     });
   });
 
@@ -378,7 +501,7 @@ describe('AtprotoPublisherService', () => {
         atprotoRkey: null,
       });
 
-      const result = service.deleteEvent(event, tenantId);
+      const result = service.deleteEvent(event, tenantId) as PublishResult;
 
       expect(result.action).toBe('skipped');
     });
@@ -566,7 +689,7 @@ describe('AtprotoPublisherService', () => {
       const event = createMockEvent({ atprotoUri: null });
       const attendee = createMockAttendee({ event });
 
-      const result = service.publishRsvp(attendee, tenantId);
+      const result = service.publishRsvp(attendee, tenantId) as PublishResult;
 
       expect(result.action).toBe('skipped');
     });
@@ -595,7 +718,7 @@ describe('AtprotoPublisherService', () => {
       expect(result.atprotoUri).toContain('rsvp');
     });
 
-    it('should throw when session unavailable', async () => {
+    it('should return skipped when session unavailable', async () => {
       const event = createMockEvent({
         atprotoUri:
           'at://did:plc:organizer/community.lexicon.calendar.event/event-rkey',
@@ -607,9 +730,77 @@ describe('AtprotoPublisherService', () => {
 
       pdsSessionService.getSessionForUser.mockResolvedValue(null);
 
-      await expect(service.publishRsvp(attendee, tenantId)).rejects.toThrow(
-        /session/i,
+      const result = await service.publishRsvp(attendee, tenantId);
+
+      expect(result).toEqual({ action: 'skipped' });
+    });
+  });
+
+  describe('ensurePublishingCapability', () => {
+    const testUser = {
+      ulid: 'user-ulid-123',
+      slug: 'test-user',
+      email: 'test@example.com',
+    };
+
+    it('should return identity when user has existing identity and session', async () => {
+      const mockIdentity = {
+        id: 1,
+        userUlid: testUser.ulid,
+        did: 'did:plc:existing',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
       );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+
+      const result = await service.ensurePublishingCapability(
+        tenantId,
+        testUser,
+      );
+
+      expect(result).toEqual({ did: 'did:plc:existing', required: true });
+      expect(atprotoIdentityService.ensureIdentityForUser).toHaveBeenCalledWith(
+        tenantId,
+        testUser,
+      );
+      expect(pdsSessionService.getSessionForUser).toHaveBeenCalledWith(
+        tenantId,
+        testUser.ulid,
+      );
+    });
+
+    it('should return null when identity creation fails', async () => {
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(null);
+
+      const result = await service.ensurePublishingCapability(
+        tenantId,
+        testUser,
+      );
+
+      expect(result).toBeNull();
+      expect(pdsSessionService.getSessionForUser).not.toHaveBeenCalled();
+    });
+
+    it('should return null when session cannot be obtained', async () => {
+      const mockIdentity = {
+        id: 1,
+        userUlid: testUser.ulid,
+        did: 'did:plc:test',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(null);
+
+      const result = await service.ensurePublishingCapability(
+        tenantId,
+        testUser,
+      );
+
+      expect(result).toBeNull();
     });
   });
 });

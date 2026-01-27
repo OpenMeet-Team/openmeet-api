@@ -40,6 +40,61 @@ export class AtprotoIdentityService {
   ) {}
 
   /**
+   * Ensure a user has an AT Protocol identity, creating one if needed.
+   *
+   * This is a "lazy creation" method suitable for use when publishing:
+   * - Returns existing identity if user already has one
+   * - Creates custodial identity if user has none
+   * - Returns null on any failure (does not throw)
+   *
+   * @param tenantId - The tenant ID
+   * @param user - User data (ulid, slug, email)
+   * @returns The identity entity, or null if creation failed
+   */
+  async ensureIdentityForUser(
+    tenantId: string,
+    user: CreateIdentityUser,
+  ): Promise<UserAtprotoIdentityEntity | null> {
+    try {
+      // Check if user already has an identity
+      const existingIdentity =
+        await this.userAtprotoIdentityService.findByUserUlid(
+          tenantId,
+          user.ulid,
+        );
+
+      if (existingIdentity) {
+        return existingIdentity;
+      }
+
+      // Validate slug before attempting to create
+      if (!user.slug || user.slug.trim().length === 0) {
+        this.logger.warn(
+          `Cannot create AT Protocol identity for user ${user.ulid}: no slug`,
+        );
+        return null;
+      }
+
+      // Check if PDS is configured
+      const pdsUrl = this.configService.get('pds.url', { infer: true });
+      if (!pdsUrl) {
+        this.logger.warn(
+          `Cannot create AT Protocol identity for user ${user.ulid}: PDS_URL not configured`,
+        );
+        return null;
+      }
+
+      // Attempt to create identity
+      return await this.createIdentityInternal(tenantId, user, pdsUrl);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to ensure AT Protocol identity for user ${user.ulid}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Create an AT Protocol identity for a user.
    *
    * Creates a custodial PDS account on OpenMeet's PDS.
@@ -69,6 +124,20 @@ export class AtprotoIdentityService {
       throw new Error('PDS_URL is not configured');
     }
 
+    return this.createIdentityInternal(tenantId, user, pdsUrl);
+  }
+
+  /**
+   * Internal method to create a custodial PDS account.
+   *
+   * Shared by createIdentity (throws on failure) and ensureIdentityForUser
+   * (catches errors and returns null).
+   */
+  private async createIdentityInternal(
+    tenantId: string,
+    user: CreateIdentityUser,
+    pdsUrl: string,
+  ): Promise<UserAtprotoIdentityEntity> {
     const email = user.email || `${user.ulid}@openmeet.net`;
     const maxCreateAttempts = 5;
 

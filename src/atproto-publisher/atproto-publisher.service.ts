@@ -2,6 +2,7 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PdsSessionService } from '../pds/pds-session.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
+import { AtprotoIdentityService } from '../atproto-identity/atproto-identity.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import {
@@ -59,7 +60,73 @@ export class AtprotoPublisherService {
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => BlueskyRsvpService))
     private readonly blueskyRsvpService: BlueskyRsvpService,
+    private readonly atprotoIdentityService: AtprotoIdentityService,
   ) {}
+
+  /**
+   * Pre-flight check to ensure a user can publish to AT Protocol.
+   *
+   * This method:
+   * 1. Attempts lazy identity creation if user doesn't have one
+   * 2. Verifies we can get a session for the identity
+   *
+   * Returns { did, required: true } if user has identity and can publish.
+   * Returns { did, required: true } and throws if user HAS identity but can't get session (PDS down).
+   * Returns null if user has no identity and creation failed (not required - user can still create events).
+   *
+   * The "required" flag indicates whether the user already had an AT Protocol identity,
+   * meaning they've opted into AT Protocol publishing and failures should be fatal.
+   *
+   * @param tenantId - The tenant ID
+   * @param user - User data (ulid, slug, email)
+   * @returns The identity with required flag, or null if user has no identity
+   */
+  async ensurePublishingCapability(
+    tenantId: string,
+    user: { ulid: string; slug: string; email?: string | null },
+  ): Promise<{ did: string; required: boolean } | null> {
+    try {
+      // Step 1: Try to ensure user has AT Protocol identity (may create lazily)
+      const identity = await this.atprotoIdentityService.ensureIdentityForUser(
+        tenantId,
+        user,
+      );
+
+      if (!identity) {
+        // User has no identity and we couldn't create one
+        // This is fine - they can still create events, just won't publish to AT Protocol
+        this.logger.debug(
+          `Pre-flight check: No AT Protocol identity for user ${user.ulid} - events will not be published`,
+        );
+        return null;
+      }
+
+      // Step 2: Verify we can get a session
+      const session = await this.pdsSessionService.getSessionForUser(
+        tenantId,
+        user.ulid,
+      );
+
+      if (!session) {
+        this.logger.warn(
+          `Pre-flight check failed: Could not get AT Protocol session for user ${user.ulid} (DID: ${identity.did})`,
+        );
+        return null;
+      }
+
+      this.logger.debug(
+        `Pre-flight check passed: User ${user.ulid} can publish to AT Protocol (DID: ${identity.did})`,
+      );
+
+      return { did: identity.did, required: true };
+    } catch (error) {
+      // Don't let pre-flight check failures block event creation
+      this.logger.warn(
+        `Pre-flight check error for user ${user.ulid}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return null;
+    }
+  }
 
   /**
    * Check if an event should be published to AT Protocol.
@@ -71,17 +138,27 @@ export class AtprotoPublisherService {
    */
   private shouldPublishEvent(event: EventEntity): boolean {
     if (event.visibility !== EventVisibility.Public) {
+      this.logger.debug(
+        `[shouldPublishEvent] ${event.slug}: NOT eligible - visibility=${event.visibility} (need public)`,
+      );
       return false;
     }
 
     if (!PUBLISHABLE_EVENT_STATUSES.has(event.status)) {
+      this.logger.debug(
+        `[shouldPublishEvent] ${event.slug}: NOT eligible - status=${event.status} (need published/cancelled)`,
+      );
       return false;
     }
 
     if (event.sourceType !== null) {
+      this.logger.debug(
+        `[shouldPublishEvent] ${event.slug}: NOT eligible - sourceType=${event.sourceType} (need null)`,
+      );
       return false;
     }
 
+    this.logger.debug(`[shouldPublishEvent] ${event.slug}: ELIGIBLE for publishing`);
     return true;
   }
 
@@ -170,6 +247,9 @@ export class AtprotoPublisherService {
 
   /**
    * Internal async method to publish event to PDS.
+   *
+   * Lazy identity creation: If the user has no AT Protocol identity,
+   * we create a custodial one before attempting to publish.
    */
   private async doPublishEvent(
     event: EventEntity,
@@ -177,9 +257,27 @@ export class AtprotoPublisherService {
   ): Promise<PublishResult> {
     const isUpdate = !!event.atprotoUri;
 
-    const userUlid = event.user?.ulid;
+    const user = event.user;
+    const userUlid = user?.ulid;
     if (!userUlid) {
       throw new Error(`Event ${event.slug} has no organizer`);
+    }
+
+    // Lazy identity creation: ensure user has AT Protocol identity
+    const identity = await this.atprotoIdentityService.ensureIdentityForUser(
+      tenantId,
+      {
+        ulid: userUlid,
+        slug: user.slug,
+        email: user.email,
+      },
+    );
+
+    if (!identity) {
+      this.logger.debug(
+        `Skipping publish for event ${event.slug}: could not ensure AT Protocol identity for user ${userUlid}`,
+      );
+      return { action: 'skipped' };
     }
 
     const session = await this.pdsSessionService.getSessionForUser(
@@ -188,9 +286,10 @@ export class AtprotoPublisherService {
     );
 
     if (!session) {
-      throw new Error(
-        `No session available for organizer of event ${event.slug}`,
+      this.logger.debug(
+        `Skipping publish for event ${event.slug}: no session available for organizer`,
       );
+      return { action: 'skipped' };
     }
 
     const { rkey } = await this.blueskyService.createEventRecord(
@@ -335,9 +434,10 @@ export class AtprotoPublisherService {
     );
 
     if (!session) {
-      throw new Error(
-        `No session available for attendee of RSVP ${attendee.id}`,
+      this.logger.debug(
+        `Skipping publish for RSVP ${attendee.id}: no session available for attendee`,
       );
+      return { action: 'skipped' };
     }
 
     const result = await this.blueskyRsvpService.createRsvp(

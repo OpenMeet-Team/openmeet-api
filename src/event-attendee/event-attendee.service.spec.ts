@@ -713,6 +713,136 @@ describe('EventAttendeeService', () => {
     });
   });
 
+  describe('AT Protocol RSVP Error Propagation', () => {
+    let mockAtprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
+
+    beforeEach(() => {
+      mockAtprotoPublisherService = module.get(
+        AtprotoPublisherService,
+      ) as jest.Mocked<AtprotoPublisherService>;
+      jest.clearAllMocks();
+    });
+
+    it('should propagate AT Protocol errors when creating RSVP', async () => {
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const createDto = {
+        event: { ...mockEvent, sourceType: null } as EventEntity, // Not a Bluesky-sourced event
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      const savedAttendee = {
+        id: 1,
+        ...createDto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Mock successful DB operations
+      mockRepository.create.mockReturnValue(createDto);
+      mockRepository.save.mockResolvedValue(savedAttendee);
+      mockRepository.findOne.mockResolvedValue(savedAttendee);
+
+      // Mock AT Protocol publisher to throw an error
+      mockAtprotoPublisherService.publishRsvp.mockRejectedValue(
+        new Error('PDS unavailable: connection refused'),
+      );
+
+      // The error should propagate, not be swallowed
+      await expect(service.create(createDto)).rejects.toThrow(
+        'PDS unavailable: connection refused',
+      );
+    });
+
+    it('should succeed when AT Protocol RSVP publishing succeeds', async () => {
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const createDto = {
+        event: { ...mockEvent, sourceType: null } as EventEntity,
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      const savedAttendee = {
+        id: 1,
+        ...createDto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockRepository.create.mockReturnValue(createDto);
+      mockRepository.save.mockResolvedValue(savedAttendee);
+      mockRepository.findOne.mockResolvedValue(savedAttendee);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock UserService for Bluesky integration check (will skip since not Bluesky user)
+      mockUserService.findBySlug.mockResolvedValue({
+        ...mockUser,
+        provider: 'local', // Not a Bluesky user
+      } as UserEntity);
+
+      // Mock successful AT Protocol publishing
+      mockAtprotoPublisherService.publishRsvp.mockResolvedValue({
+        action: 'published',
+        atprotoUri: 'at://did:plc:test/community.openmeet.rsvp/xyz789',
+        atprotoRkey: 'xyz789',
+      });
+
+      const result = await service.create(createDto);
+
+      expect(result).toBeDefined();
+      expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
+    });
+
+    it('should skip AT Protocol publishing for Bluesky-sourced events', async () => {
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const blueskySourcedEvent = {
+        ...mockEvent,
+        sourceType: EventSourceType.BLUESKY,
+      } as EventEntity;
+
+      const createDto = {
+        event: blueskySourcedEvent,
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      const savedAttendee = {
+        id: 1,
+        ...createDto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockRepository.create.mockReturnValue(createDto);
+      mockRepository.save.mockResolvedValue(savedAttendee);
+      mockRepository.findOne.mockResolvedValue(savedAttendee);
+
+      // Mock UserService for Bluesky integration
+      mockUserService.findBySlug.mockResolvedValue(mockUser as UserEntity);
+      mockBlueskyRsvpService.createRsvp.mockResolvedValue({
+        success: true,
+        rsvpUri: 'at://did:plc:test/app.bsky.feed.post/test',
+      });
+
+      await service.create(createDto);
+
+      // AtprotoPublisherService.publishRsvp should NOT be called for Bluesky-sourced events
+      expect(mockAtprotoPublisherService.publishRsvp).not.toHaveBeenCalled();
+    });
+  });
+
   afterEach(async () => {
     await module.close();
     jest.clearAllMocks();

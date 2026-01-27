@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AtprotoIdentityController } from './atproto-identity.controller';
 import { AtprotoIdentityService } from './atproto-identity.service';
 import { AtprotoIdentityRecoveryService } from './atproto-identity-recovery.service';
@@ -7,7 +7,7 @@ import { PdsModule } from '../pds/pds.module';
 import { UserModule } from '../user/user.module';
 
 @Module({
-  imports: [UserAtprotoIdentityModule, PdsModule, UserModule],
+  imports: [UserAtprotoIdentityModule, PdsModule, forwardRef(() => UserModule)],
   controllers: [AtprotoIdentityController],
   providers: [AtprotoIdentityService, AtprotoIdentityRecoveryService],
   exports: [AtprotoIdentityService, AtprotoIdentityRecoveryService],

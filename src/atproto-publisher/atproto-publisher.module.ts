@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { AtprotoPublisherService } from './atproto-publisher.service';
 import { PdsModule } from '../pds/pds.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+import { AtprotoIdentityModule } from '../atproto-identity/atproto-identity.module';
 
 /**
  * Module for publishing events and RSVPs to AT Protocol (user's PDS).
@@ -21,7 +22,7 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
  * This module publishes ALL public user-created events to AT Protocol.
  */
 @Module({
-  imports: [PdsModule, forwardRef(() => BlueskyModule)],
+  imports: [PdsModule, forwardRef(() => BlueskyModule), AtprotoIdentityModule],
   providers: [AtprotoPublisherService],
   exports: [AtprotoPublisherService],
 })
