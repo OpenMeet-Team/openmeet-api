@@ -131,9 +131,15 @@ describeIfPds('PDS Password Reset (e2e)', () => {
       // Verify custodial identity exists
       const identityResponse = await serverApp
         .get('/api/atproto/identity')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
+        .set('Authorization', `Bearer ${authToken}`);
 
+      console.log(
+        'Identity response:',
+        identityResponse.status,
+        JSON.stringify(identityResponse.body),
+      );
+
+      expect(identityResponse.status).toBe(200);
       const identity = identityResponse.body;
       expect(identity.did).toMatch(/^did:(plc|web):/);
       expect(identity.isCustodial).toBe(true);
