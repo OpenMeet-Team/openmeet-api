@@ -134,13 +134,12 @@ export class ShadowAccountService {
           shadowUser.status = status;
 
           shadowUser.ulid = ulid().toLowerCase();
-          shadowUser.slug = `${slugify(
-            (displayName || 'shadow-user').trim().toLowerCase(),
-            {
-              strict: true,
-              lower: true,
-            },
-          )}-${generateShortCode().toLowerCase()}`;
+          shadowUser.slug = slugify(
+            (displayName || 'shadow-user').trim() +
+              '-' +
+              generateShortCode().toLowerCase(),
+            { strict: true, lower: true },
+          );
 
           // Set provider-specific preferences
           shadowUser.preferences = preferences || {};

@@ -247,10 +247,10 @@ export class GroupService {
     }
 
     const shortCode = await generateShortCode();
-    const slugifiedName = `${slugify(createGroupDto.name, {
-      strict: true,
-      lower: true,
-    })}-${shortCode.toLowerCase()}`;
+    const slugifiedName = slugify(
+      createGroupDto.name + '-' + shortCode.toLowerCase(),
+      { strict: true, lower: true },
+    );
 
     let locationPoint;
     if (createGroupDto.lat && createGroupDto.lon) {
