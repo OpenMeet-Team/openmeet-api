@@ -1637,9 +1637,7 @@ describe('EventManagementService', () => {
       ] as jest.Mocked<AtprotoPublisherService>;
 
       // Setup common mock responses
-      jest
-        .spyOn(service['categoryService'], 'findByIds')
-        .mockResolvedValue([]);
+      jest.spyOn(service['categoryService'], 'findByIds').mockResolvedValue([]);
       jest
         .spyOn(eventAttendeeService, 'create')
         .mockResolvedValue({} as EventAttendeesEntity);

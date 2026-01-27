@@ -158,7 +158,9 @@ export class AtprotoPublisherService {
       return false;
     }
 
-    this.logger.debug(`[shouldPublishEvent] ${event.slug}: ELIGIBLE for publishing`);
+    this.logger.debug(
+      `[shouldPublishEvent] ${event.slug}: ELIGIBLE for publishing`,
+    );
     return true;
   }
 

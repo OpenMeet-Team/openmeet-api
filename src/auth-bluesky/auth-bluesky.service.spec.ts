@@ -572,11 +572,10 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
 
     it('should use default scheme when MOBILE_CUSTOM_URL_SCHEME is not set', () => {
       // Clear the mock to return undefined for MOBILE_CUSTOM_URL_SCHEME
-      mockConfigService.get.mockImplementation(
-        (key: string, defaultValue?: string) => {
-          return defaultValue;
-        },
-      );
+      // When using { infer: true } pattern, return undefined to trigger fallback
+      mockConfigService.get.mockImplementation((_key: string) => {
+        return undefined;
+      });
 
       const result = service.buildRedirectUrl(
         'tenant-123',
@@ -592,7 +591,7 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
   });
 });
 
-describe('AuthBlueskyService - AT Protocol Identity Creation', () => {
+describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
   let service: AuthBlueskyService;
   let mockUserAtprotoIdentityService: {
     findByUserUlid: jest.Mock;
@@ -604,7 +603,7 @@ describe('AuthBlueskyService - AT Protocol Identity Creation', () => {
   };
   let mockUserService: {
     findBySocialIdAndProvider: jest.Mock;
-    findById: jest.Mock;
+    findByUlid: jest.Mock;
     update: jest.Mock;
   };
   let mockAuthService: { validateSocialLogin: jest.Mock };
@@ -615,6 +614,23 @@ describe('AuthBlueskyService - AT Protocol Identity Creation', () => {
     del: jest.Mock;
   };
   let mockConfigService: { get: jest.Mock };
+
+  const mockExistingUser = {
+    id: 1,
+    ulid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+    email: 'test@example.com',
+    provider: 'bluesky',
+    preferences: {},
+  };
+
+  const mockAtprotoIdentity = {
+    id: 1,
+    userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+    did: 'did:plc:test123',
+    handle: 'test.bsky.social',
+    pdsUrl: 'https://bsky.social',
+    isCustodial: false,
+  };
 
   beforeEach(async () => {
     mockUserAtprotoIdentityService = {
@@ -643,7 +659,7 @@ describe('AuthBlueskyService - AT Protocol Identity Creation', () => {
 
     mockUserService = {
       findBySocialIdAndProvider: jest.fn(),
-      findById: jest.fn(),
+      findByUlid: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -861,6 +877,116 @@ describe('AuthBlueskyService - AT Protocol Identity Creation', () => {
 
       // Assert: Should return a reasonable fallback
       expect(pdsUrl).toBe('https://bsky.social');
+    });
+  });
+
+  describe('findUserByAtprotoIdentity', () => {
+    it('should find user via AT Protocol identity when identity record exists', async () => {
+      // Arrange: User has an AT Protocol identity record
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+        mockAtprotoIdentity,
+      );
+      mockUserService.findByUlid.mockResolvedValue(mockExistingUser);
+
+      // Act
+      const result = await service.findUserByAtprotoIdentity(
+        'tenant-123',
+        'did:plc:test123',
+      );
+
+      // Assert
+      expect(mockUserAtprotoIdentityService.findByDid).toHaveBeenCalledWith(
+        'tenant-123',
+        'did:plc:test123',
+      );
+      expect(mockUserService.findByUlid).toHaveBeenCalledWith(
+        '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        'tenant-123',
+      );
+      expect(result).toEqual({
+        user: mockExistingUser,
+        foundVia: 'atproto-identity',
+      });
+    });
+
+    it('should fall back to legacy lookup when no identity record exists', async () => {
+      // Arrange: No AT Protocol identity record, but legacy user exists
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserService.findBySocialIdAndProvider.mockResolvedValue(
+        mockExistingUser,
+      );
+
+      // Act
+      const result = await service.findUserByAtprotoIdentity(
+        'tenant-123',
+        'did:plc:test123',
+      );
+
+      // Assert
+      expect(mockUserAtprotoIdentityService.findByDid).toHaveBeenCalledWith(
+        'tenant-123',
+        'did:plc:test123',
+      );
+      expect(mockUserService.findBySocialIdAndProvider).toHaveBeenCalledWith(
+        { socialId: 'did:plc:test123', provider: 'bluesky' },
+        'tenant-123',
+      );
+      expect(result).toEqual({
+        user: mockExistingUser,
+        foundVia: 'legacy-bluesky',
+      });
+    });
+
+    it('should return null when no user is found via either method', async () => {
+      // Arrange: No identity record and no legacy user
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserService.findBySocialIdAndProvider.mockResolvedValue(null);
+
+      // Act
+      const result = await service.findUserByAtprotoIdentity(
+        'tenant-123',
+        'did:plc:test123',
+      );
+
+      // Assert
+      expect(result).toEqual({
+        user: null,
+        foundVia: null,
+      });
+    });
+
+    it('should not call legacy lookup when identity record is found', async () => {
+      // Arrange: User has an AT Protocol identity record
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+        mockAtprotoIdentity,
+      );
+      mockUserService.findByUlid.mockResolvedValue(mockExistingUser);
+
+      // Act
+      await service.findUserByAtprotoIdentity('tenant-123', 'did:plc:test123');
+
+      // Assert: Legacy lookup should NOT be called
+      expect(mockUserService.findBySocialIdAndProvider).not.toHaveBeenCalled();
+    });
+
+    it('should handle case where identity exists but user was deleted', async () => {
+      // Arrange: Identity exists but user no longer exists
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+        mockAtprotoIdentity,
+      );
+      mockUserService.findByUlid.mockResolvedValue(null);
+
+      // Act
+      const result = await service.findUserByAtprotoIdentity(
+        'tenant-123',
+        'did:plc:test123',
+      );
+
+      // Assert: Should return null even though identity exists
+      expect(result).toEqual({
+        user: null,
+        foundVia: null,
+      });
     });
   });
 });

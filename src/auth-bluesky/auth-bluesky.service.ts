@@ -40,6 +40,78 @@ export class AuthBlueskyService {
     });
   }
 
+  /**
+   * Find a user by their AT Protocol DID using a two-tier lookup strategy.
+   *
+   * Primary lookup: Check userAtprotoIdentities table by DID
+   * - This is the source of truth after the migration
+   * - Finds users regardless of how they originally signed up (Bluesky, Google, GitHub, Email)
+   *
+   * Fallback lookup: Check users table by socialId + provider='bluesky'
+   * - For backwards compatibility with legacy Bluesky users
+   * - Only used if no identity record exists
+   *
+   * @param tenantId - The tenant ID
+   * @param did - The user's DID (decentralized identifier)
+   * @returns Object with user (if found) and how they were found
+   */
+  async findUserByAtprotoIdentity(
+    tenantId: string,
+    did: string,
+  ): Promise<{
+    user: UserEntity | null;
+    foundVia: 'atproto-identity' | 'legacy-bluesky' | null;
+  }> {
+    const userService = await this.getUserService();
+
+    // PRIMARY: Look up by DID in userAtprotoIdentities
+    const identity = await this.userAtprotoIdentityService.findByDid(
+      tenantId,
+      did,
+    );
+
+    if (identity) {
+      this.logger.debug('Found AT Protocol identity record', {
+        did,
+        userUlid: identity.userUlid,
+      });
+
+      // Get the user by their ULID from the identity record
+      const user = await userService.findByUlid(identity.userUlid, tenantId);
+
+      if (user) {
+        return { user: user as UserEntity, foundVia: 'atproto-identity' };
+      }
+
+      // Identity exists but user was deleted - treat as not found
+      this.logger.warn('AT Protocol identity exists but user not found', {
+        did,
+        userUlid: identity.userUlid,
+      });
+      return { user: null, foundVia: null };
+    }
+
+    // FALLBACK: Legacy lookup for native Bluesky users without identity record
+    this.logger.debug('No identity record, falling back to legacy lookup', {
+      did,
+    });
+
+    const legacyUser = (await userService.findBySocialIdAndProvider(
+      { socialId: did, provider: 'bluesky' },
+      tenantId,
+    )) as UserEntity | null;
+
+    if (legacyUser) {
+      this.logger.debug('Found user via legacy Bluesky lookup', {
+        did,
+        userId: legacyUser.id,
+      });
+      return { user: legacyUser, foundVia: 'legacy-bluesky' };
+    }
+
+    return { user: null, foundVia: null };
+  }
+
   public async initializeClient(tenantId: string) {
     this.logger.debug('initializeClient called', { tenantId });
     try {
@@ -97,10 +169,10 @@ export class AuthBlueskyService {
 
     let baseUrl: string;
     if (isMobile) {
-      const customScheme = this.configService.get<string>(
-        'MOBILE_CUSTOM_URL_SCHEME',
-        'net.openmeet.platform',
-      );
+      const customScheme =
+        (this.configService.get('MOBILE_CUSTOM_URL_SCHEME', {
+          infer: true,
+        }) as string | undefined) ?? 'net.openmeet.platform';
       baseUrl = `${customScheme}:`;
     } else {
       baseUrl = tenantConfig.frontendDomain;
@@ -172,35 +244,30 @@ export class AuthBlueskyService {
       emailConfirmed: emailConfirmed,
     };
 
-    this.logger.debug('Finding existing user:', {
-      socialId: profileData.did,
-      provider: 'bluesky',
+    this.logger.debug('Finding existing user by AT Protocol identity:', {
+      did: profileData.did,
       tenantId,
     });
 
-    // Get existing user if any to preserve preferences
-    const userService = await this.getUserService();
-    const existingUser = (await userService.findBySocialIdAndProvider(
-      {
-        socialId: profileData.did,
-        provider: 'bluesky',
-      },
-      tenantId,
-    )) as UserEntity;
+    // Look up user via AT Protocol identity (primary) or legacy Bluesky (fallback)
+    const { user: existingUser, foundVia } =
+      await this.findUserByAtprotoIdentity(tenantId, profileData.did);
 
-    this.logger.debug('Validating social login:', {
+    this.logger.debug('User lookup result:', {
       did: profileData.did,
-      displayName: profileData.displayName,
-      handle: profileData.handle,
-      tenantId,
+      foundVia,
+      existingUserId: existingUser?.id,
       existingUserEmail: existingUser?.email,
     });
+
+    const userService = await this.getUserService();
 
     if (existingUser) {
       this.logger.debug('Found existing user:', {
         id: existingUser.id,
         email: existingUser.email,
         provider: existingUser.provider,
+        foundVia,
       });
 
       // Ensure that the DID is stored in preferences.bluesky.did
@@ -251,9 +318,16 @@ export class AuthBlueskyService {
     );
     this.logger.debug('Social login validated:', { loginResponse, tenantId });
 
-    // Ensure AT Protocol identity record exists for Bluesky user
-    // This backfills existing users and creates records for new users
-    if (loginResponse.user?.ulid && profileData.did) {
+    // Ensure AT Protocol identity record exists
+    // - For users found via 'atproto-identity': record already exists, skip
+    // - For users found via 'legacy-bluesky': backfill identity record
+    // - For new users: create identity record
+    const shouldCreateIdentityRecord =
+      loginResponse.user?.ulid &&
+      profileData.did &&
+      foundVia !== 'atproto-identity';
+
+    if (shouldCreateIdentityRecord) {
       // Try to get the PDS URL from the session, otherwise resolve it
       // The restoredSession's serviceUrl contains the PDS URL
       const pdsUrl =
