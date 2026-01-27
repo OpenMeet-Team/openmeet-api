@@ -28,7 +28,7 @@ jest.setTimeout(120000);
 
 describeIfPds('PDS Password Reset (e2e)', () => {
   const app = TESTING_APP_URL;
-  const hostPdsUrl = process.env.PDS_HOST_URL || 'http://localhost:3101';
+  const pdsUrl = process.env.PDS_URL || 'http://localhost:3101';
 
   // Test user state shared across sequential tests
   const testRunId = Date.now();
@@ -53,7 +53,7 @@ describeIfPds('PDS Password Reset (e2e)', () => {
   async function requestPdsResetToken(email: string): Promise<string> {
     const timestampBefore = Date.now();
 
-    await request(hostPdsUrl)
+    await request(pdsUrl)
       .post('/xrpc/com.atproto.server.requestPasswordReset')
       .set('Content-Type', 'application/json')
       .send({ email });
@@ -125,22 +125,31 @@ describeIfPds('PDS Password Reset (e2e)', () => {
       authToken = loginResponse.body.token;
       expect(authToken).toBeDefined();
 
-      // Wait for async PDS account creation
-      await waitForBackend(5000);
+      // Poll for async PDS account creation (may take several seconds)
+      let identity: any;
+      const maxAttempts = 20;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        await waitForBackend(3000);
+        const identityResponse = await serverApp
+          .get('/api/atproto/identity')
+          .set('Authorization', `Bearer ${authToken}`);
 
-      // Verify custodial identity exists
-      const identityResponse = await serverApp
-        .get('/api/atproto/identity')
-        .set('Authorization', `Bearer ${authToken}`);
+        if (
+          identityResponse.status === 200 &&
+          identityResponse.body?.did
+        ) {
+          identity = identityResponse.body;
+          break;
+        }
 
-      console.log(
-        'Identity response:',
-        identityResponse.status,
-        JSON.stringify(identityResponse.body),
-      );
+        if (attempt === maxAttempts) {
+          throw new Error(
+            `Identity not created after ${maxAttempts} attempts. ` +
+            `Last response: ${identityResponse.status} ${JSON.stringify(identityResponse.body)}`,
+          );
+        }
+      }
 
-      expect(identityResponse.status).toBe(200);
-      const identity = identityResponse.body;
       expect(identity.did).toMatch(/^did:(plc|web):/);
       expect(identity.isCustodial).toBe(true);
       userHandle = identity.handle;
@@ -164,7 +173,7 @@ describeIfPds('PDS Password Reset (e2e)', () => {
       expect(resetResponse.body).toEqual({ success: true });
 
       // Verify new password works by creating a PDS session directly
-      const sessionResponse = await request(hostPdsUrl)
+      const sessionResponse = await request(pdsUrl)
         .post('/xrpc/com.atproto.server.createSession')
         .set('Content-Type', 'application/json')
         .send({ identifier: userHandle, password: newPassword })

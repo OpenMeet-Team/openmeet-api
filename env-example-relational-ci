@@ -179,3 +179,4 @@ PDS_HOSTNAME=pds.test
 PDS_SERVICE_HANDLE_DOMAINS=.pds.test
 PDS_ADMIN_PASSWORD=ci-pds-admin-password
 PDS_JWT_SECRET=ci-pds-jwt-secret-not-for-production
+PDS_CREDENTIAL_KEY_1=Y2ktcGRzLWNyZWRlbnRpYWwta2V5LW5vdC1wcm9kISE=
