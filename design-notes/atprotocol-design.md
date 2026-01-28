@@ -1,11 +1,30 @@
-# ATProtocol/Bluesky Integration Design
+# AT Protocol Design
 
-This document serves as the authoritative source of truth for the design and implementation of ATProtocol/Bluesky integration in OpenMeet. It consolidates and references information from various other design documents to provide a comprehensive overview.
+This document serves as the authoritative source of truth for OpenMeet's AT Protocol architecture. OpenMeet is an **AT Protocol-native application** - not merely an app that integrates with AT Protocol, but one where AT Protocol is fundamental to how user data is stored and owned.
+
+**Core Architecture Principle:**
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────────┐
+│   User      │────▶│  OpenMeet   │────▶│  PostgreSQL     │
+│  (Browser)  │     │    API      │     │  (Query Index)  │
+└─────────────┘     └──────┬──────┘     └─────────────────┘
+                          │
+                          ▼
+                   ┌─────────────┐
+                   │ PDS         │  ◀── Source of truth for
+                   │ (User Data) │      public user-owned data
+                   └─────────────┘
+```
+
+**What this means:**
+- Every user gets an AT Protocol identity (DID + handle), regardless of how they sign up
+- Public user-owned data (events, RSVPs) is written to the user's PDS first, then indexed in PostgreSQL
+- PostgreSQL remains authoritative for private data (AT Protocol repos are public) and objects without lexicons (series, groups)
+- Users own their data and can take it to any AT Protocol-compatible app
 
 ## Table of Contents
 
 - [Table of Contents](#table-of-contents)
-- [Introduction and Overview](#introduction-and-overview)
 - [Key Design Principles](#key-design-principles)
 - [Architecture Components](#architecture-components)
   - [1. Authentication Components](#1-authentication-components)
@@ -56,45 +75,42 @@ This document serves as the authoritative source of truth for the design and imp
 - [OpenMeet Custodial PDS](#openmeet-custodial-pds)
 - [References](#references-1)
 
-## Introduction and Overview
-
-OpenMeet integrates with the AT Protocol (specifically Bluesky) to enable decentralized identity and event management. This integration allows users to:
-
-- Log in using their Bluesky accounts
-- Publish events created in OpenMeet to their Bluesky PDS
-- Discover events from the Bluesky network
-- Maintain synchronized event attendance across platforms
-
-The AT Protocol, being decentralized, presents unique challenges and opportunities that this design addresses.
-
 ## Key Design Principles
 
-1. **Source of Truth Management**
+1. **Layered Source of Truth**
 
-   The source of truth depends on the user type and data ownership:
+   OpenMeet uses a hybrid data architecture where the source of truth depends on three factors: whether a lexicon exists, whether the data is public, and whether the user has an AT Protocol identity.
 
-   | User Type | Data Type | Source of Truth | OpenMeet Role |
-   |-----------|-----------|-----------------|---------------|
-   | Bluesky user | User's own data (RSVPs, memberships, posts) | User's PDS | Cache/Index |
-   | Bluesky user | Events they create | User's PDS | Cache/Index |
-   | Email/OAuth user (with custodial PDS) | Public data | OpenMeet PDS | Authoritative + Custodial |
-   | Email/OAuth user (with custodial PDS) | Private data | OpenMeet PostgreSQL | Authoritative |
-   | ATProto-enabled Group | Group profile, events, governance | Group's PDS | Cache/Index |
-   | Non-ATProto Group | All group data | OpenMeet PostgreSQL | Authoritative |
+   | Data Type | Lexicon? | Visibility | Source of Truth | PostgreSQL Role |
+   |-----------|----------|------------|-----------------|-----------------|
+   | Events, RSVPs | ✅ Yes | Public | **User's PDS** | Query index |
+   | Events, RSVPs | ✅ Yes | Private/Unlisted | **PostgreSQL** | Authoritative |
+   | Event Series | ❌ No | Any | **PostgreSQL** | Authoritative |
+   | Groups | ❌ No | Any | **PostgreSQL** | Authoritative |
+   | User preferences | N/A | Private | **PostgreSQL** | Authoritative |
+   | Group-owned events | ✅ Yes | Public | **Group's PDS** | Query index (future) |
+
+   **Why this hybrid approach:**
+   - **AT Protocol repos are public** - private data cannot go to PDS
+   - **Lexicons don't exist yet for all concepts** - series, groups have no community lexicon
+   - **PostgreSQL is still valuable** - fast queries, joins, full-text search, analytics
 
    **Key Principles:**
-   - **For Bluesky users**: Write to PDS first, cache locally second
-   - **For custodial users**: OpenMeet writes to PDS on their behalf (see [OpenMeet Custodial PDS](#openmeet-custodial-pds))
-   - **On conflict**: PDS wins, update local cache
-   - **Firehose subscription**: Keeps cache synchronized with external changes
+   - **For public data with lexicons**: Write to PDS first, index locally second
+   - **For private data**: PostgreSQL only (never expose to public AT Protocol network)
+   - **For data without lexicons**: PostgreSQL authoritative until lexicons emerge, then migrate
+   - **On conflict**: PDS wins for public data, update local index
+   - **Firehose subscription**: Keeps PostgreSQL index synchronized with external changes
    - **User data portability**: Users can verify their data exists in their PDS independent of OpenMeet
-   - **Clear origin tracking**: `sourceType`, `sourceId`, `sourceCid` fields track data provenance
-   - **Private content**: Stays in PostgreSQL only (AT Protocol repos are public)
+   - **Clear origin tracking**: `atprotoUri`, `atprotoRkey`, `atprotoSyncedAt` track published records; `sourceType`, `sourceId`, `sourceCid` track imported records
+   - **Graceful degradation**: OpenMeet works if AT Protocol is temporarily unavailable
 
-2. **Decentralized Identity**
-   - Support for multiple PDSes, not just bsky.social
-   - Proper DID and handle resolution
-   - Profile data syncing with respect for user privacy
+2. **Universal AT Protocol Identity**
+   - **Every user gets an AT Protocol identity** - regardless of signup method (Google, GitHub, email, or AT Protocol OAuth)
+   - Users who sign up via Google/GitHub/email get a **custodial PDS account** on `pds.openmeet.net` with handle `@username.opnmt.me`
+   - Users who sign up via AT Protocol OAuth bring their existing identity (e.g., `@user.bsky.social`)
+   - Support for multiple PDSes - OpenMeet works with any AT Protocol-compatible PDS
+   - Proper DID and handle resolution via `plc.directory`
    - Group DIDs for collective identity (planned)
 
 3. **Shadow Account Architecture**
@@ -108,11 +124,19 @@ The AT Protocol, being decentralized, presents unique challenges and opportuniti
    - Graceful degradation when Bluesky services are unavailable
    - Periodic reconciliation to ensure cache consistency
 
-5. **Hybrid User Support**
-   - Full functionality for non-Bluesky users (email, OAuth)
-   - **All users get AT Protocol identities** via custodial PDS (see [OpenMeet Custodial PDS](#openmeet-custodial-pds))
-   - Users can take ownership of their PDS account (password reset → self-custody)
-   - Migration path: custodial account → self-custody when Tranquil supports social login
+5. **Custody Spectrum**
+
+   Users exist on a spectrum from fully custodial to fully self-sovereign:
+
+   | Signup Method | Initial Custody | Can Take Ownership? | End State |
+   |---------------|-----------------|---------------------|-----------|
+   | Google/GitHub/Email | Custodial (OpenMeet holds PDS password) | Yes (password reset flow) | Self-sovereign |
+   | AT Protocol OAuth | Self-sovereign (user owns PDS) | N/A (already owns) | Self-sovereign |
+
+   - **Custodial users**: OpenMeet writes to their PDS on their behalf using stored credentials
+   - **Self-sovereign users**: OpenMeet uses AT Protocol OAuth tokens (same as any AT Protocol app)
+   - **Migration path**: Custodial → self-sovereign via "Take Ownership" flow (password reset + OAuth)
+   - **Long-term vision**: When Tranquil PDS supports social login, users can link Google/GitHub directly to their PDS
 
 ## Architecture Components
 
@@ -522,116 +546,118 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
 
 ### Completed
 
-1. **Authentication Flow**
-   - Bluesky OAuth login implementation
-   - Token storage in Redis
+1. **AT Protocol Authentication Flow**
+   - AT Protocol OAuth login implementation (works with any PDS)
+   - Token storage in Redis with automatic refresh
    - Session management for API calls
    - Email retrieval from OAuth with `transition:email` scope
    - Email verification status handling (`emailConfirmed` flag)
    - Account status based on email verification (ACTIVE/INACTIVE)
-   - Automatic email update for existing users
-   - Email replacement when OAuth provides different verified email
-   - Graceful handling when email permission not granted or unverified
 
-2. **Event Publication**
-   - Basic event publishing to Bluesky
-   - Proper error handling and retries
-   - Storage of external references
+2. **OpenMeet PDS Infrastructure** ✅ (2026-01-19)
+   - PDS deployed to Kubernetes (dev: `pds-dev.openmeet.net`)
+   - Handle domain configured (`*.dev.opnmt.me` for dev, `*.opnmt.me` for prod)
+   - DNS and TLS configured via ACM
+   - Uses official Bluesky PDS image (`ghcr.io/bluesky-social/pds:0.4`)
 
-3. **Profile Management**
-   - Public profile lookup via ATProtocol
-   - Enhanced profiles for authenticated users
-   - Profile data syncing from Bluesky
+3. **User AT Protocol Identity Schema** ✅ (2026-01-20)
+   - `userAtprotoIdentities` table for tracking AT Protocol identities
+   - Supports both custodial (OpenMeet-managed) and self-sovereign (user-owned) accounts
+   - `PdsCredentialService` for secure credential encryption (AES-256-GCM)
+   - `PdsAccountService` for PDS API interactions
+   - `UserAtprotoIdentityService` for identity CRUD operations
 
-4. **Event Integration Flow**
-   - Firehose consumer implementation for Bluesky event capture
-   - Event processor service transforming and routing events
-   - Enhanced server-side deduplication with multi-criteria matching
-   - Comprehensive metrics and monitoring with Prometheus/Grafana
-   - DELETE endpoint for integration events
-   - Shadow account handling for Bluesky event creators
+4. **Auth Integration - Universal AT Protocol Identity** ✅ (2026-01-22)
+   - Google/GitHub/Email login auto-creates custodial PDS account
+   - AT Protocol OAuth login links existing DID (no custodial account)
+   - Handle collision avoidance (truncate + append number)
+   - Graceful degradation if PDS unavailable at login
 
-5. **RSVP Integration**
-   - RSVP capture from Bluesky firehose
-   - Integration/rsvps endpoint implementation
-   - Shadow account creation for RSVP users
-   - Mapping from Bluesky RSVP statuses to OpenMeet attendance statuses
-   - Metrics for RSVP processing effectiveness
+5. **Profile Settings UI** ✅ (2026-01-23)
+   - `GET /api/v1/atproto/identity` - Get current user's AT Protocol identity
+   - Identity included in `/auth/me` response
+   - Platform UI: `AtprotoIdentityCard` component in settings
 
-6. **Infrastructure Setup**
-   - Kubernetes configurations for both bsky-firehose-consumer and bsky-event-processor
-   - Enhanced monitoring with Grafana dashboards
-   - Improved error handling with proper logging
-   - Exponential backoff implementation for temporary errors
+6. **Session Management** ✅ (2026-01-24)
+   - `PdsSessionService` abstracts credential differences
+   - Custodial users: decrypt credentials → create session → cache in Redis
+   - OAuth users: delegate to existing token refresh flow
+   - 15-minute Redis TTL for custodial sessions
+
+7. **Sync Tracking Schema** ✅ (2026-01-24)
+   - `atprotoUri`, `atprotoRkey`, `atprotoSyncedAt` columns on events and eventAttendees
+   - Distinguishes published records (OpenMeet → PDS) from imported records (firehose → OpenMeet)
+   - Partial index `IDX_events_atproto_pending_sync` for efficient pending sync queries
+
+8. **Event/RSVP Ingestion (Firehose)**
+   - Firehose consumer for AT Protocol event capture
+   - Event processor service with deduplication
+   - RSVP integration with status mapping
+   - Shadow account creation for external AT Protocol users
+   - Prometheus metrics and Grafana dashboards
 
 ### In Progress
 
-1. **Shadow Account Service Enhancements**
-   - Account claiming process implementation
-   - Profile synchronization improvements
-   - Admin interface for shadow account management
+1. **Publish as User (Phase 5.4)**
+   - Event/RSVP publishing flow to user's PDS
+   - Public events → write to PDS first, index locally
+   - Private/unlisted events → PostgreSQL only
+   - Retry logic for failed publishes
 
-2. **RSVP Handling Improvements**
-   - RSVP deletion functionality
-   - User PDS RSVP Synchronization development
+2. **AT Protocol Login Refactor**
+   - Use `userAtprotoIdentities` as primary lookup (PR #476)
+   - Two-tier lookup: identity table first, legacy `socialId` fallback
+   - Identity linking for users who took ownership
 
-3. **Recurrence Handling**
-   - Strategy defined for publishing recurring events
-   - Implementation of occurrence selection algorithm 
-   - Next occurrence publishing logic
+3. **Identity Management UI**
+   - Link AT Protocol Account OAuth flow (PR #478)
+   - Handle change endpoint
+   - Take ownership flow (password reset → self-custody)
 
 ### Planned
 
-1. **Improved Conflict Resolution**
-   - Define field-specific conflict resolution policies
-   - Implement reconciliation process for out-of-sync events
-   - Add admin tools for manual conflict resolution
+1. **Lazy Identity Creation**
+   - `ensureAtprotoIdentity()` call from event creation path
+   - Handles case where PDS was unavailable at login
+   - Re-link orphaned PDS accounts (email conflict detection)
 
-2. **Enhanced Series Detection**
-   - Implement heuristics for identifying related events
-   - Build similarity scoring for potential series members
-   - Create UI for confirming series detection results
+2. **Backfill Existing Events**
+   - Async job queued after AT identity creation
+   - Only backfills future public events (not past)
+   - On-demand full export for migration to other AT Protocol apps
 
-3. **Comprehensive Testing**
-   - End-to-end tests for the event and RSVP ingestion pipeline
-   - User profile navigation tests for shadow accounts
-   - Integration tests for bidirectional event sync
+3. **AT Protocol User Migration**
+   - Migrate existing AT Protocol OAuth users to `userAtprotoIdentities` table
+   - One-time backfill script + login-time creation for consistency
+   - Resolve PDS URL from DID via `com.atproto.repo.describeRepo`
 
-4. **User-Initiated Event Sync**
-   - Complete the `UserEventSyncService` for login-triggered syncs
-   - Implement bidirectional sync with proper conflict resolution
-   - Add user preferences for sync behavior
-   - Create admin tools for monitoring and troubleshooting
+4. **Account Management Features**
+   - Change handle (custodial accounts)
+   - Delete PDS account (GDPR compliance)
+   - Email sync (background job syncs email changes to PDS)
 
-5. **Event Sync Strategy Improvements**
-   - Add unit tests for EventSyncService and BlueskyEventSyncStrategy
-   - Add metrics for sync operations (success rate, time to sync)
-   - Implement exponential backoff for sync failures
-   - Implement sync status tracking in admin interface
+5. **Conflict Resolution**
+   - Field-specific conflict resolution policies
+   - Reconciliation process for out-of-sync events
+   - Admin tools for manual conflict resolution
 
 6. **Group Integration (AT Protocol)**
    - Group DID creation and management
-   - `community.lexicon.group.*` lexicon adoption
-   - Membership sync (user PDS ↔ OpenMeet cache)
+   - `community.lexicon.group.*` lexicon adoption (propose to lexicon-community)
+   - Membership sync (user PDS ↔ OpenMeet index)
    - Group-owned events model (events in group's PDS)
    - Leadership and governance tracking
    - Firehose subscription for group-related collections
-   - UI for enabling AT Protocol on existing groups
 
-7. **Bluesky User Migration to userAtprotoIdentities**
+7. **Future: Threshold Signing for Groups**
+   - FROST threshold signature integration for group key management
+   - M-of-N leader approval for group operations
+   - True decentralized group ownership
 
-   Existing Bluesky users have their AT identity stored in `user.socialId` and `user.preferences.bluesky.did`, but they don't have records in the `userAtprotoIdentities` table. This needs to be addressed for consistency and to enable the unified AT Protocol identity display in the UI.
-
-   **Migration script** (one-time backfill):
-   - Find all users where `provider = 'bluesky'` and `socialId` is set
-   - For each user, resolve their PDS URL from their DID (via `com.atproto.repo.describeRepo`)
-   - Create `userAtprotoIdentities` record:
-     - `did`: from `user.socialId`
-     - `handle`: from `user.preferences.bluesky.handle` (or resolve from DID)
-     - `pdsUrl`: resolved PDS URL
-     - `isCustodial`: `false` (user owns their PDS)
-     - `pdsCredentials`: `null` (we don't have their credentials)
-   - Skip users who already have a record (idempotent)
+8. **Future: OpenMeet Profile Lexicon**
+   - `net.openmeet.actor.profile` for OpenMeet-specific profile data
+   - Separate from `app.bsky.actor.profile` (different context)
+   - Migrate profiles from PostgreSQL to user PDSes
 
    **Login-time creation** (for new Bluesky users):
    - In `auth-bluesky.service.ts`, after successful login/registration
