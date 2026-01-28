@@ -1,7 +1,10 @@
 services:
   # Config renderer - generates Matrix configs from templates
+  # Uses pre-built image with gomplate and openssl to avoid downloading on every CI run
   config-renderer:
-    image: alpine:3.19
+    build:
+      context: .
+      dockerfile: Dockerfile.config-renderer
     volumes:
       - ./matrix-config:/templates:ro
       - matrix-configs:/rendered-config
@@ -10,12 +13,7 @@ services:
     restart: "no"
     command: >
       sh -c "
-        echo 'Installing gomplate and openssl...' &&
-        apk add --no-cache openssl curl &&
-        curl -o /usr/local/bin/gomplate -sSL https://github.com/hairyhenderson/gomplate/releases/latest/download/gomplate_linux-amd64 &&
-        chmod +x /usr/local/bin/gomplate &&
         echo 'Generating signing keys for CI...' &&
-        mkdir -p /tmp/keys &&
         openssl genrsa -out /tmp/keys/rsa-key.pem 2048 &&
         openssl ecparam -genkey -name prime256v1 -noout -out /tmp/keys/ec-key.pem &&
         export MAS_RSA_PRIVATE_KEY=\"\$(cat /tmp/keys/rsa-key.pem)\" &&
