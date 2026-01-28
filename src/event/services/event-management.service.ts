@@ -981,7 +981,7 @@ export class EventManagementService {
 
     const event = await this.eventRepository.findOne({
       where: { slug },
-      relations: ['series'],
+      relations: ['series', 'user'],
     });
     if (!event) {
       throw new Error(`Event with slug ${slug} not found`);
@@ -1076,14 +1076,28 @@ export class EventManagementService {
     // Delete from AT Protocol (user's PDS) if the event was published there
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     if (!event.sourceType && event.atprotoUri) {
-      const deleteResult = await this.atprotoPublisherService.deleteEvent(
-        event,
-        this.request.tenantId,
-      );
+      try {
+        const deleteResult = await this.atprotoPublisherService.deleteEvent(
+          event,
+          this.request.tenantId,
+        );
 
-      if (deleteResult.action === 'deleted') {
-        this.logger.debug(
-          `Deleted event ${event.slug} from AT Protocol: ${event.atprotoUri}`,
+        if (deleteResult.action === 'deleted') {
+          this.logger.debug(
+            `Deleted event ${event.slug} from AT Protocol: ${event.atprotoUri}`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          'Error during AT Protocol event deletion:',
+          {
+            error: error.message,
+            eventSlug: event.slug,
+            atprotoUri: event.atprotoUri,
+          },
+        );
+        this.logger.warn(
+          'Proceeding with local event deletion despite AT Protocol error',
         );
       }
     }

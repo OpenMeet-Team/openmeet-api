@@ -73,10 +73,10 @@ echo "Waiting for API to be ready..."
 /opt/wait-for-it.sh api:3000 -t 30
 
 echo "Waiting for MAS service to be ready..."
-/opt/wait-for-it.sh matrix-auth-service:8080 -t 60
+/opt/wait-for-it.sh matrix-auth-service:8080 -t 60 || echo "WARNING: MAS did not become ready, matrix tests may fail"
 
 echo "Waiting for Matrix service to be ready..."
-/opt/wait-for-it.sh matrix:8448 -t 60
+/opt/wait-for-it.sh matrix:8448 -t 60 || echo "WARNING: Matrix did not become ready, matrix tests may fail"
 
 # Wait for nginx to be ready
 echo "Waiting for Nginx to be ready..."

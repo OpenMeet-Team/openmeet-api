@@ -581,9 +581,12 @@ export class BlueskyService {
     did: string,
     tenantId: string,
   ): Promise<{ success: boolean; message: string }> {
-    const rkey = event.sourceData?.rkey as string | undefined;
+    const rkey =
+      (event.sourceData?.rkey as string | undefined) || event.atprotoRkey;
     if (!rkey) {
-      throw new Error('No Bluesky record key found in event sourceData');
+      throw new Error(
+        'No record key found in event sourceData.rkey or atprotoRkey',
+      );
     }
 
     const agent = await this.resumeSession(tenantId, did);

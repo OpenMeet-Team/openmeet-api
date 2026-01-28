@@ -76,6 +76,8 @@ services:
       - 3000
     env_file:
       - env-example-relational-ci
+    environment:
+      - TEST_PATH_PATTERN=${TEST_PATH_PATTERN:-}
     volumes:
       - ./matrix-config:/matrix-config
     depends_on:
