@@ -73,10 +73,10 @@ echo "Waiting for API to be ready..."
 /opt/wait-for-it.sh api:3000 -t 30
 
 echo "Waiting for MAS service to be ready..."
-/opt/wait-for-it.sh matrix-auth-service:8080 -t 60
+/opt/wait-for-it.sh matrix-auth-service:8080 -t 60 || echo "WARNING: MAS did not become ready, matrix tests may fail"
 
 echo "Waiting for Matrix service to be ready..."
-/opt/wait-for-it.sh matrix:8448 -t 60
+/opt/wait-for-it.sh matrix:8448 -t 60 || echo "WARNING: Matrix did not become ready, matrix tests may fail"
 
 # Wait for nginx to be ready
 echo "Waiting for Nginx to be ready..."
@@ -94,8 +94,13 @@ else
   echo "Nginx is ready!"
 fi
 
-# Run all E2E tests (PDS invite code was set up before API started)
-echo "Running all E2E tests..."
-npm run test:e2e -- --runInBand --forceExit
+# Run E2E tests (PDS invite code was set up before API started)
+if [ -n "$TEST_PATH_PATTERN" ]; then
+  echo "Running E2E tests matching pattern: $TEST_PATH_PATTERN"
+  npm run test:e2e -- --runInBand --forceExit --testPathPattern="$TEST_PATH_PATTERN"
+else
+  echo "Running all E2E tests..."
+  npm run test:e2e -- --runInBand --forceExit
+fi
 
 

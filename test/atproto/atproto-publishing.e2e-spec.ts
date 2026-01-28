@@ -414,11 +414,11 @@ describe('AT Protocol Publishing (e2e)', () => {
 
       // Verify RSVP was published by querying user2's PDS directly
       // This is more reliable than checking the attendees list (which may not include atproto fields)
-      const hostPdsUrl = process.env.PDS_HOST_URL || 'http://localhost:3101';
+      const pdsUrl = process.env.PDS_URL || 'http://localhost:3101';
       const user2Did = identityResponse.body.did;
 
       try {
-        const pdsResponse = await request(hostPdsUrl)
+        const pdsResponse = await request(pdsUrl)
           .get(
             `/xrpc/com.atproto.repo.listRecords?repo=${user2Did}&collection=community.lexicon.calendar.rsvp&limit=10`,
           )
@@ -456,7 +456,7 @@ describe('AT Protocol Publishing (e2e)', () => {
         }
       } catch (error) {
         console.log(
-          `PDS direct query skipped (${hostPdsUrl} not accessible): ${error.message}`,
+          `PDS direct query skipped (${pdsUrl} not accessible): ${error.message}`,
         );
       }
     });
@@ -476,11 +476,10 @@ describe('AT Protocol Publishing (e2e)', () => {
 
       // Query the PDS directly to verify records exist
       // This uses the com.atproto.repo.listRecords endpoint
-      // Note: TESTING_PDS_URL may be Docker-internal (openmeet_pds:3000), so use localhost:3101
-      const hostPdsUrl = process.env.PDS_HOST_URL || 'http://localhost:3101';
+      const pdsUrl = process.env.PDS_URL || 'http://localhost:3101';
 
       try {
-        const pdsResponse = await request(hostPdsUrl)
+        const pdsResponse = await request(pdsUrl)
           .get(
             `/xrpc/com.atproto.repo.listRecords?repo=${identity.did}&collection=community.lexicon.calendar.event&limit=10`,
           )
@@ -504,7 +503,7 @@ describe('AT Protocol Publishing (e2e)', () => {
       } catch (error) {
         // This is expected if PDS isn't running or not accessible from host
         console.log(
-          `PDS direct query skipped (${hostPdsUrl} not accessible): ${error.message}`,
+          `PDS direct query skipped (${pdsUrl} not accessible): ${error.message}`,
         );
       }
     });

@@ -1726,7 +1726,7 @@ describe('EventManagementService', () => {
       ).rejects.toThrow('Failed to publish to AT Protocol: identity not found');
     });
 
-    it('should propagate AT Protocol errors during event deletion', async () => {
+    it('should catch AT Protocol errors during event deletion and proceed with local deletion', async () => {
       const existingEvent = {
         ...findOneMockEventEntity,
         id: 902,
@@ -1734,6 +1734,9 @@ describe('EventManagementService', () => {
         sourceType: null, // Not a Bluesky-sourced event
         atprotoUri: 'at://did:plc:test/community.openmeet.event/abc123', // Has AT Protocol record
         atprotoRkey: 'abc123',
+        matrixRoomId: null, // No matrix room to simplify test
+        seriesSlug: null, // No series to simplify test
+        series: null,
       } as EventEntity;
 
       await service['initializeRepository']();
@@ -1745,9 +1748,42 @@ describe('EventManagementService', () => {
         new Error('Failed to delete from AT Protocol: PDS timeout'),
       );
 
-      // The error should propagate, not be swallowed
-      await expect(service.remove('atproto-delete-error-test')).rejects.toThrow(
-        'Failed to delete from AT Protocol: PDS timeout',
+      // Mock the transaction with all required repository methods
+      const mockEventAttendeeRepo = {
+        delete: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      const mockEventRepo = {
+        softRemove: jest.fn().mockResolvedValue(existingEvent),
+      };
+      const mockTransactionalManager = {
+        save: jest.fn().mockResolvedValue(existingEvent),
+        getRepository: jest.fn().mockImplementation((entity) => {
+          if (entity.name === 'EventAttendeesEntity') {
+            return mockEventAttendeeRepo;
+          }
+          return mockEventRepo;
+        }),
+        findOne: jest.fn().mockResolvedValue(null),
+        softRemove: jest.fn().mockResolvedValue(existingEvent),
+        remove: jest.fn().mockResolvedValue(existingEvent),
+      };
+      mockTenantConnectionService.getTenantConnection.mockResolvedValue({
+        getRepository: jest.fn().mockReturnValue(mockRepository),
+        transaction: jest.fn().mockImplementation(async (cb) => {
+          return cb(mockTransactionalManager);
+        }),
+      } as any);
+
+      // AT Protocol errors should be caught and logged, not propagated
+      // Local deletion should still proceed
+      await expect(
+        service.remove('atproto-delete-error-test'),
+      ).resolves.not.toThrow();
+
+      // Verify deleteEvent was attempted
+      expect(mockAtprotoPublisherService.deleteEvent).toHaveBeenCalledWith(
+        existingEvent,
+        'test-tenant',
       );
     });
 

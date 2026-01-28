@@ -949,5 +949,74 @@ describe('BlueskyService', () => {
       expect(record.endsAt).toBe('2023-12-01T14:00:00.000Z');
       expect(record.createdAt).toBe('2023-11-01T00:00:00.000Z');
     });
+
+    it('should generate TID-based rkey for new events (not slug-based)', async () => {
+      // Arrange - event with a long slug that would cause issues with old approach
+      const event = {
+        name: 'Test Event with Very Long Name',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'this-is-a-very-long-slug-that-would-exceed-fifty-characters-limit',
+        // No sourceData.rkey - this is a new event
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      const result = await service.createEventRecord(
+        event,
+        did,
+        handle,
+        tenantId,
+      );
+
+      // Assert - rkey should be a TID (approximately 13 chars, base32-sortable format)
+      expect(result.rkey).toBeDefined();
+      // TID format: 13 characters, base32-sortable (lowercase letters and digits 2-7)
+      expect(result.rkey).toMatch(/^[a-z2-7]{13}$/);
+      // Should NOT be the slug
+      expect(result.rkey).not.toBe(event.slug);
+      // Should NOT contain the slug
+      expect(result.rkey).not.toContain('this-is-a-very-long');
+    });
+
+    it('should preserve existing rkey when updating events', async () => {
+      // Arrange - event with existing rkey in sourceData
+      const existingRkey = 'existing-rkey-123';
+      const event = {
+        name: 'Test Event Update',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-update',
+        sourceData: {
+          rkey: existingRkey,
+        },
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      const result = await service.createEventRecord(
+        event,
+        did,
+        handle,
+        tenantId,
+      );
+
+      // Assert - should use the existing rkey, not generate a new one
+      expect(result.rkey).toBe(existingRkey);
+    });
   });
 });

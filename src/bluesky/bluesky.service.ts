@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { Agent } from '@atproto/api';
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
+import { TID } from '@atproto/common-web';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { delay } from '../utils/delay';
@@ -25,7 +26,6 @@ export class BlueskyService {
   private readonly logger = new Logger(BlueskyService.name);
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000; // 1 second
-  private readonly MAX_RKEY_ATTEMPTS = 100; // Maximum number of attempts for generating unique rkey
 
   constructor(
     private readonly configService: ConfigService,
@@ -101,92 +101,6 @@ export class BlueskyService {
       }
     }
     throw new Error('Failed to resume session');
-  }
-
-  private generateBaseName(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '') // Remove special characters
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-      .substring(0, 640); // AT Protocol has a max length for rkeys
-  }
-
-  private async generateUniqueRkey(
-    agent: Agent,
-    did: string,
-    baseName: string,
-  ): Promise<string> {
-    let attempt = 0;
-    let rkey = baseName;
-
-    while (attempt < this.MAX_RKEY_ATTEMPTS) {
-      try {
-        this.logger.debug('generateUniqueRKey: Checking rkey availability:', {
-          rkey,
-          attempt,
-          did,
-        });
-
-        // We no longer need to apply collection suffix
-
-        // Check if record exists - use standard collection name
-        await agent.com.atproto.repo.getRecord({
-          repo: did,
-          collection: BLUESKY_COLLECTIONS.EVENT,
-          rkey,
-        });
-
-        // Record exists, try next number
-        attempt++;
-        rkey = `${baseName}-${attempt}`;
-        this.logger.debug(
-          'generateUniqueRKey: Record exists, trying next rkey:',
-          {
-            newRkey: rkey,
-            attempt,
-          },
-        );
-      } catch (error: any) {
-        // Check various 404 error formats from AT Protocol
-        const is404 =
-          error.error?.statusCode === 404 ||
-          error.status === 404 ||
-          error.message?.includes('Could not locate record');
-
-        if (is404) {
-          this.logger.debug('generateUniqueRKey: Found available rkey:', {
-            rkey,
-            attempt,
-          });
-          return rkey;
-        }
-
-        // Log unexpected errors
-        this.logger.error(
-          'generateUniqueRKey: Error checking rkey availability:',
-          {
-            error: error.message,
-            errorObject: error,
-            rkey,
-            attempt,
-          },
-        );
-        throw error;
-      }
-    }
-
-    const error = new Error(
-      `Could not generate unique rkey after ${this.MAX_RKEY_ATTEMPTS} attempts. Base name: ${baseName}`,
-    );
-    this.logger.error('Max rkey attempts exceeded:', {
-      error: error.message,
-      baseName,
-      lastAttempt: attempt,
-      lastRkey: rkey,
-    });
-    throw error;
   }
 
   async connectAccount(user: UserEntity, tenantId: string) {
@@ -407,12 +321,10 @@ export class BlueskyService {
         rkey = event.sourceData.rkey as string;
         this.logger.debug(`Using existing rkey for update: ${rkey}`);
       }
-      // For new events, generate a unique rkey based on the slug (not name)
+      // For new events, generate a TID-based rkey (AT Protocol best practice)
       else {
-        // Use slug instead of name to generate rkey (slugs don't change on rename)
-        const baseValue = event.slug || this.generateBaseName(event.name);
-        rkey = await this.generateUniqueRkey(agent, did, baseValue);
-        this.logger.debug(`Generated new rkey for create: ${rkey}`);
+        rkey = TID.nextStr();
+        this.logger.debug(`Generated new TID-based rkey for create: ${rkey}`);
       }
 
       // Prepare uris array with image if it exists
@@ -581,9 +493,12 @@ export class BlueskyService {
     did: string,
     tenantId: string,
   ): Promise<{ success: boolean; message: string }> {
-    const rkey = event.sourceData?.rkey as string | undefined;
+    const rkey =
+      (event.sourceData?.rkey as string | undefined) || event.atprotoRkey;
     if (!rkey) {
-      throw new Error('No Bluesky record key found in event sourceData');
+      throw new Error(
+        'No record key found in event sourceData.rkey or atprotoRkey',
+      );
     }
 
     const agent = await this.resumeSession(tenantId, did);
