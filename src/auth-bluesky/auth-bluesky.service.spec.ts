@@ -1351,7 +1351,7 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
         ulid: mockLinkData.userUlid,
         preferences: { bluesky: { autoPost: true } },
       };
-      mockUserService.findByIdentifier.mockResolvedValue(existingUser);
+      mockUserService.findByUlid.mockResolvedValue(existingUser);
 
       // Act
       await service.handleLinkCallback(

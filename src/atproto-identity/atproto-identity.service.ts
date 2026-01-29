@@ -192,9 +192,7 @@ export class AtprotoIdentityService {
         'Cannot update handle: no stored credentials for this identity',
       );
     }
-    const password = this.pdsCredentialService.decrypt(
-      identity.pdsCredentials,
-    );
+    const password = this.pdsCredentialService.decrypt(identity.pdsCredentials);
     const session = await this.pdsAccountService.createSession(
       identity.did,
       password,

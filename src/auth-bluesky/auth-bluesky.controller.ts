@@ -66,7 +66,8 @@ export class AuthBlueskyController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
-    description: 'Returns OAuth authorization URL for AT Protocol identity linking',
+    description:
+      'Returns OAuth authorization URL for AT Protocol identity linking',
   })
   async linkAtprotoIdentity(
     @Body() dto: LinkAtprotoDto,

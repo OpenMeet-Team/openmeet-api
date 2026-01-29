@@ -688,7 +688,9 @@ describe('AtprotoIdentityController', () => {
         .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
       jest
         .spyOn(pdsAccountService, 'resetPassword')
-        .mockRejectedValue(new PdsApiError('Token has expired', 400, 'ExpiredToken'));
+        .mockRejectedValue(
+          new PdsApiError('Token has expired', 400, 'ExpiredToken'),
+        );
 
       // Act & Assert
       await expect(
@@ -936,9 +938,7 @@ describe('AtprotoIdentityController', () => {
       // Arrange
       jest
         .spyOn(atprotoIdentityService, 'updateHandle')
-        .mockResolvedValue(
-          updatedIdentityEntity as UserAtprotoIdentityEntity,
-        );
+        .mockResolvedValue(updatedIdentityEntity as UserAtprotoIdentityEntity);
 
       // Act
       const result = await controller.updateHandle(
@@ -964,10 +964,7 @@ describe('AtprotoIdentityController', () => {
 
       // Act & Assert
       await expect(
-        controller.updateHandle(
-          { handle: 'new-handle.opnmt.me' },
-          mockRequest,
-        ),
+        controller.updateHandle({ handle: 'new-handle.opnmt.me' }, mockRequest),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -975,16 +972,11 @@ describe('AtprotoIdentityController', () => {
       // Arrange
       jest
         .spyOn(atprotoIdentityService, 'updateHandle')
-        .mockRejectedValue(
-          new ConflictException('Handle is already taken'),
-        );
+        .mockRejectedValue(new ConflictException('Handle is already taken'));
 
       // Act & Assert
       await expect(
-        controller.updateHandle(
-          { handle: 'taken.opnmt.me' },
-          mockRequest,
-        ),
+        controller.updateHandle({ handle: 'taken.opnmt.me' }, mockRequest),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -1000,10 +992,7 @@ describe('AtprotoIdentityController', () => {
 
       // Act & Assert
       await expect(
-        controller.updateHandle(
-          { handle: 'new-handle.opnmt.me' },
-          mockRequest,
-        ),
+        controller.updateHandle({ handle: 'new-handle.opnmt.me' }, mockRequest),
       ).rejects.toThrow(BadRequestException);
     });
   });

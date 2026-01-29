@@ -1088,14 +1088,11 @@ export class EventManagementService {
           );
         }
       } catch (error) {
-        this.logger.error(
-          'Error during AT Protocol event deletion:',
-          {
-            error: error.message,
-            eventSlug: event.slug,
-            atprotoUri: event.atprotoUri,
-          },
-        );
+        this.logger.error('Error during AT Protocol event deletion:', {
+          error: error.message,
+          eventSlug: event.slug,
+          atprotoUri: event.atprotoUri,
+        });
         this.logger.warn(
           'Proceeding with local event deletion despite AT Protocol error',
         );

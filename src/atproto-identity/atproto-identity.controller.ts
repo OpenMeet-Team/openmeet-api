@@ -172,7 +172,12 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('recover-as-custodial')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 100,
+      ttl: 3600000,
+    },
+  })
   @ApiOperation({ summary: 'Recover existing PDS account as custodial' })
   @ApiCreatedResponse({
     type: AtprotoIdentityDto,
@@ -211,7 +216,12 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('take-ownership/initiate')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 100,
+      ttl: 3600000,
+    },
+  })
   @ApiOperation({
     summary: 'Initiate take ownership - sends PDS password reset email',
   })
@@ -276,7 +286,12 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('reset-pds-password')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 100,
+      ttl: 3600000,
+    },
+  })
   @ApiOperation({
     summary: 'Reset PDS password using token from email',
   })
@@ -381,14 +396,25 @@ export class AtprotoIdentityController {
     if (identity.isCustodial && identity.pdsCredentials) {
       // Custodial with credentials can always create a session
       hasActiveSession = true;
+      this.logger.debug('hasActiveSession: custodial with credentials', {
+        did: identity.did,
+      });
     } else if (!identity.isCustodial) {
       // Non-custodial: check if OAuth session exists in Redis
+      this.logger.debug('Checking OAuth session for non-custodial identity', {
+        did: identity.did,
+        tenantId,
+      });
       try {
         const session = await this.blueskyService.tryResumeSession(
           tenantId,
           identity.did,
         );
         hasActiveSession = !!session;
+        this.logger.debug('hasActiveSession check result', {
+          did: identity.did,
+          hasActiveSession,
+        });
       } catch (error) {
         this.logger.warn('Failed to check OAuth session for hasActiveSession', {
           did: identity.did,
@@ -397,6 +423,12 @@ export class AtprotoIdentityController {
         });
         hasActiveSession = false;
       }
+    } else {
+      this.logger.debug('hasActiveSession: custodial without credentials', {
+        did: identity.did,
+        isCustodial: identity.isCustodial,
+        hasCredentials: !!identity.pdsCredentials,
+      });
     }
     // Note: custodial WITHOUT credentials (post-ownership) = false
 

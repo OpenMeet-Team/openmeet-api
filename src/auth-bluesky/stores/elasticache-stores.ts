@@ -32,14 +32,18 @@ export class ElastiCacheStateStore implements NodeSavedStateStore {
 export class ElastiCacheSessionStore implements NodeSavedSessionStore {
   constructor(private elasticache: ElastiCacheService) {}
 
-  async set(state: string, data: NodeSavedSession) {
+  async set(sub: string, data: NodeSavedSession) {
+    const key = `bluesky:session:${sub}`;
+    console.log('Setting session in Redis:', { key, sub });
     // Set session with 24 hour TTL
-    await this.elasticache.set(`bluesky:session:${state}`, data, 86400);
+    await this.elasticache.set(key, data, 86400);
   }
 
-  async get(state: string): Promise<NodeSavedSession | undefined> {
-    const key = `bluesky:session:${state}`;
+  async get(sub: string): Promise<NodeSavedSession | undefined> {
+    const key = `bluesky:session:${sub}`;
+    console.log('Getting session from Redis:', key);
     const result = await this.elasticache.get<NodeSavedSession>(key);
+    console.log('Retrieved session:', { key, found: !!result });
     if (result) {
       // Refresh TTL by setting the value again
       await this.elasticache.set(key, result, 86400);
@@ -47,7 +51,9 @@ export class ElastiCacheSessionStore implements NodeSavedSessionStore {
     return result ?? undefined;
   }
 
-  async del(state: string) {
-    await this.elasticache.del(`bluesky:session:${state}`);
+  async del(sub: string) {
+    const key = `bluesky:session:${sub}`;
+    console.log('Deleting session from Redis:', key);
+    await this.elasticache.del(key);
   }
 }

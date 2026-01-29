@@ -214,9 +214,7 @@ export class AuthBlueskyService {
     this.logger.debug('Restored session with tokens');
 
     // Check if this is a link callback
-    const linkData = appState
-      ? await this.getStoredLinkData(appState)
-      : null;
+    const linkData = appState ? await this.getStoredLinkData(appState) : null;
 
     const agent = new Agent(restoredSession);
 
@@ -556,7 +554,14 @@ export class AuthBlueskyService {
     appState: string,
     tenantId: string,
     linkData: { userUlid: string; tenantId: string },
-    profile: { data: { did: string; handle: string; displayName?: string; avatar?: string } },
+    profile: {
+      data: {
+        did: string;
+        handle: string;
+        displayName?: string;
+        avatar?: string;
+      };
+    },
   ): Promise<{ redirectUrl: string; sessionId: string | undefined }> {
     const did = oauthSession.did;
     const handle = profile.data.handle;
@@ -570,8 +575,10 @@ export class AuthBlueskyService {
     });
 
     // Check if this DID is already linked to a DIFFERENT user
-    const existingDidIdentity =
-      await this.userAtprotoIdentityService.findByDid(tenantId, did);
+    const existingDidIdentity = await this.userAtprotoIdentityService.findByDid(
+      tenantId,
+      did,
+    );
     if (
       existingDidIdentity &&
       existingDidIdentity.userUlid !== linkData.userUlid
@@ -675,10 +682,7 @@ export class AuthBlueskyService {
     }
 
     // Update user preferences
-    const userByUlid = await this.findUserByUlid(
-      tenantId,
-      linkData.userUlid,
-    );
+    const userByUlid = await this.findUserByUlid(tenantId, linkData.userUlid);
 
     if (userByUlid) {
       const userService = await this.getUserService();
@@ -731,11 +735,8 @@ export class AuthBlueskyService {
     userUlid: string,
   ): Promise<any | null> {
     const userService = await this.getUserService();
-    // UserService doesn't have findByUlid directly, but we can use
-    // the user entity which has a ulid field. Let's use findByIdentifier
-    // which supports ULID lookup.
     try {
-      return await userService.findByIdentifier(userUlid, tenantId);
+      return await userService.findByUlid(userUlid, tenantId);
     } catch {
       this.logger.warn('Could not find user by ULID', { userUlid, tenantId });
       return null;
