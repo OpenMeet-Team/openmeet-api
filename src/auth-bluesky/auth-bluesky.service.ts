@@ -213,9 +213,29 @@ export class AuthBlueskyService {
     const restoredSession = await client.restore(oauthSession.did);
     this.logger.debug('Restored session with tokens');
 
+    // Check if this is a link callback
+    const linkData = appState
+      ? await this.getStoredLinkData(appState)
+      : null;
+
     const agent = new Agent(restoredSession);
 
     const profile = await agent.getProfile({ actor: oauthSession.did });
+
+    if (linkData) {
+      this.logger.debug('Detected link callback flow', {
+        appState,
+        userUlid: linkData.userUlid,
+      });
+      return this.handleLinkCallback(
+        oauthSession,
+        restoredSession,
+        appState!,
+        tenantId,
+        linkData,
+        profile,
+      );
+    }
 
     // Get email from session using transition:email scope
     let email: string | undefined;
@@ -429,6 +449,266 @@ export class AuthBlueskyService {
       throw new BadRequestException(
         `Unable to start Bluesky authentication. Please try again or contact support if the problem persists.`,
       );
+    }
+  }
+
+  /**
+   * Create an OAuth authorization URL for linking an AT Protocol identity
+   * to an existing user account.
+   *
+   * Similar to createAuthUrl but stores link-specific data in Redis
+   * so the callback can identify this as a link flow.
+   */
+  async createLinkAuthUrl(
+    handle: string,
+    tenantId: string,
+    userUlid: string,
+    platform?: OAuthPlatform,
+  ): Promise<string> {
+    try {
+      this.logger.debug('Creating link auth URL for AT Protocol', {
+        handle,
+        tenantId,
+        userUlid,
+        platform,
+      });
+
+      const client = await this.initializeClient(tenantId);
+      const appState = crypto.randomBytes(16).toString('base64url');
+
+      // Store link data in Redis so the callback knows this is a link flow
+      await this.elasticacheService.set(
+        `auth:bluesky:link:${appState}`,
+        JSON.stringify({ userUlid, tenantId }),
+        600, // 10 minute TTL
+      );
+
+      // Store platform for mobile apps (same as login flow)
+      const isMobilePlatform = platform === 'android' || platform === 'ios';
+      if (platform && isMobilePlatform) {
+        await this.elasticacheService.set(
+          `auth:bluesky:platform:${appState}`,
+          platform,
+          600,
+        );
+      }
+
+      const url = await client.authorize(handle, { state: appState });
+
+      if (!url) {
+        throw new Error('Failed to create authorization URL');
+      }
+
+      return url.toString();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to create link auth URL: ${errorMessage}`,
+        error,
+      );
+      throw new BadRequestException(
+        'Unable to start AT Protocol identity linking. Please try again.',
+      );
+    }
+  }
+
+  /**
+   * Retrieve stored link data for a given OAuth state.
+   * Single-use: deletes the data after retrieval.
+   */
+  async getStoredLinkData(
+    appState: string,
+  ): Promise<{ userUlid: string; tenantId: string } | null> {
+    const data = await this.elasticacheService.get<string>(
+      `auth:bluesky:link:${appState}`,
+    );
+
+    if (!data) {
+      return null;
+    }
+
+    // Clean up after retrieval (single-use)
+    await this.elasticacheService.del(`auth:bluesky:link:${appState}`);
+
+    return JSON.parse(data);
+  }
+
+  /**
+   * Handle the OAuth callback for an identity link flow.
+   * Links or replaces the user's AT Protocol identity.
+   */
+  async handleLinkCallback(
+    oauthSession: any,
+    restoredSession: any,
+    appState: string,
+    tenantId: string,
+    linkData: { userUlid: string; tenantId: string },
+    profile: { data: { did: string; handle: string; displayName?: string; avatar?: string } },
+  ): Promise<{ redirectUrl: string; sessionId: string | undefined }> {
+    const did = oauthSession.did;
+    const handle = profile.data.handle;
+    const avatar = profile.data.avatar;
+
+    this.logger.debug('Handling link callback', {
+      did,
+      handle,
+      userUlid: linkData.userUlid,
+      tenantId,
+    });
+
+    // Check if this DID is already linked to a DIFFERENT user
+    const existingDidIdentity =
+      await this.userAtprotoIdentityService.findByDid(tenantId, did);
+    if (
+      existingDidIdentity &&
+      existingDidIdentity.userUlid !== linkData.userUlid
+    ) {
+      this.logger.warn('DID already linked to a different user', {
+        did,
+        existingUserUlid: existingDidIdentity.userUlid,
+        requestingUserUlid: linkData.userUlid,
+      });
+      return {
+        redirectUrl: this.buildLinkRedirectUrl(
+          tenantId,
+          false,
+          'DID already linked to another account',
+        ),
+        sessionId: undefined,
+      };
+    }
+
+    // Get existing identity for this user
+    const existingIdentity =
+      await this.userAtprotoIdentityService.findByUserUlid(
+        tenantId,
+        linkData.userUlid,
+      );
+
+    // Resolve PDS URL
+    const pdsUrl =
+      (restoredSession as any).pdsUrl ||
+      (restoredSession as any).serviceUrl?.toString() ||
+      (await this.resolvePdsUrlFromDid(did));
+
+    if (existingIdentity) {
+      if (existingIdentity.did === did) {
+        // Same DID - update to non-custodial
+        this.logger.debug('Updating existing identity to non-custodial', {
+          identityId: existingIdentity.id,
+          did,
+        });
+        await this.userAtprotoIdentityService.update(
+          tenantId,
+          existingIdentity.id,
+          {
+            isCustodial: false,
+            pdsCredentials: null,
+            pdsUrl,
+            handle,
+          },
+        );
+      } else {
+        // Different DID - delete old and create new
+        this.logger.debug('Replacing identity with new DID', {
+          oldDid: existingIdentity.did,
+          newDid: did,
+        });
+        await this.userAtprotoIdentityService.deleteByUserUlid(
+          tenantId,
+          linkData.userUlid,
+        );
+        await this.userAtprotoIdentityService.create(tenantId, {
+          userUlid: linkData.userUlid,
+          did,
+          handle,
+          pdsUrl,
+          isCustodial: false,
+          pdsCredentials: null,
+        });
+      }
+    } else {
+      // No existing identity - create new
+      this.logger.debug('Creating new non-custodial identity', {
+        userUlid: linkData.userUlid,
+        did,
+      });
+      await this.userAtprotoIdentityService.create(tenantId, {
+        userUlid: linkData.userUlid,
+        did,
+        handle,
+        pdsUrl,
+        isCustodial: false,
+        pdsCredentials: null,
+      });
+    }
+
+    // Update user preferences
+    const userByUlid = await this.findUserByUlid(
+      tenantId,
+      linkData.userUlid,
+    );
+
+    if (userByUlid) {
+      const userService = await this.getUserService();
+      await userService.update(
+        userByUlid.id,
+        {
+          preferences: {
+            ...(userByUlid.preferences || {}),
+            bluesky: {
+              ...(userByUlid.preferences?.bluesky || {}),
+              did,
+              avatar,
+              connected: true,
+              connectedAt: new Date(),
+            },
+          },
+        },
+        tenantId,
+      );
+    }
+
+    return {
+      redirectUrl: this.buildLinkRedirectUrl(tenantId, true),
+      sessionId: undefined,
+    };
+  }
+
+  /**
+   * Build a redirect URL for the link flow result.
+   */
+  public buildLinkRedirectUrl(
+    tenantId: string,
+    success: boolean,
+    error?: string,
+  ): string {
+    const tenantConfig = this.tenantConnectionService.getTenantConfig(tenantId);
+    const baseUrl = `${tenantConfig.frontendDomain}/dashboard/profile`;
+
+    if (success) {
+      return `${baseUrl}?linkSuccess=true`;
+    }
+    return `${baseUrl}?linkError=${encodeURIComponent(error || 'Unknown error')}`;
+  }
+
+  /**
+   * Find a user by their ULID using UserService.
+   */
+  private async findUserByUlid(
+    tenantId: string,
+    userUlid: string,
+  ): Promise<any | null> {
+    const userService = await this.getUserService();
+    // UserService doesn't have findByUlid directly, but we can use
+    // the user entity which has a ulid field. Let's use findByIdentifier
+    // which supports ULID lookup.
+    try {
+      return await userService.findByIdentifier(userUlid, tenantId);
+    } catch {
+      this.logger.warn('Could not find user by ULID', { userUlid, tenantId });
+      return null;
     }
   }
 

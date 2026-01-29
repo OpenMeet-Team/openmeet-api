@@ -1,8 +1,8 @@
 import {
+  Body,
   Controller,
   Get,
   Post,
-  Body,
   HttpCode,
   HttpStatus,
   Request,
@@ -28,13 +28,16 @@ import {
   RecoveryStatus,
 } from './atproto-identity-recovery.service';
 import { UserService } from '../user/user.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
 import { ConfigService } from '@nestjs/config';
 import { AtprotoIdentityDto } from './dto/atproto-identity.dto';
 import { ResetPdsPasswordDto } from './dto/reset-pds-password.dto';
+import { UpdateHandleDto } from './dto/update-handle.dto';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsApiError } from '../pds/pds.errors';
 import { NullableType } from '../utils/types/nullable.type';
 import { AllConfigType } from '../config/config.type';
+import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 
 @ApiTags('AT Protocol Identity')
 @Controller({
@@ -47,6 +50,7 @@ export class AtprotoIdentityController {
     private readonly recoveryService: AtprotoIdentityRecoveryService,
     private readonly pdsAccountService: PdsAccountService,
     private readonly userService: UserService,
+    private readonly blueskyService: BlueskyService,
     private readonly configService: ConfigService<AllConfigType>,
   ) {}
 
@@ -86,7 +90,7 @@ export class AtprotoIdentityController {
       return null;
     }
 
-    return this.mapToDto(identity);
+    return this.mapToDto(identity, tenantId);
   }
 
   /**
@@ -126,7 +130,7 @@ export class AtprotoIdentityController {
       },
     );
 
-    return this.mapToDto(identity);
+    return this.mapToDto(identity, tenantId);
   }
 
   /**
@@ -192,7 +196,7 @@ export class AtprotoIdentityController {
       user.ulid,
     );
 
-    return this.mapToDto(identity);
+    return this.mapToDto(identity, tenantId);
   }
 
   /**
@@ -325,17 +329,68 @@ export class AtprotoIdentityController {
   }
 
   /**
-   * Map entity to DTO, explicitly excluding pdsCredentials.
+   * Update the AT Protocol handle for the authenticated user.
+   *
+   * Only supported for identities hosted on OpenMeet's PDS.
+   * The new handle must be within the allowed domain (e.g., .opnmt.me).
    */
-  private mapToDto(identity: {
-    did: string;
-    handle: string | null;
-    pdsUrl: string;
-    isCustodial: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  }): AtprotoIdentityDto {
+  @ApiBearerAuth()
+  @Post('update-handle')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Update AT Protocol handle (OpenMeet PDS only)' })
+  @ApiOkResponse({
+    type: AtprotoIdentityDto,
+    description: 'Handle updated successfully',
+  })
+  @HttpCode(HttpStatus.OK)
+  async updateHandle(
+    @Body() dto: UpdateHandleDto,
+    @Request() request: any,
+  ): Promise<AtprotoIdentityDto> {
+    const tenantId = request.tenantId;
+    const userId = request.user.id;
+
+    const user = await this.userService.findById(userId, tenantId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const identity = await this.atprotoIdentityService.updateHandle(
+      tenantId,
+      user.ulid,
+      dto.handle,
+    );
+
+    return this.mapToDto(identity, tenantId);
+  }
+
+  /**
+   * Map entity to DTO, explicitly excluding pdsCredentials.
+   * Determines hasActiveSession based on identity type and session state.
+   */
+  private async mapToDto(
+    identity: UserAtprotoIdentityEntity,
+    tenantId: string,
+  ): Promise<AtprotoIdentityDto> {
     const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+
+    let hasActiveSession = false;
+    if (identity.isCustodial && identity.pdsCredentials) {
+      // Custodial with credentials can always create a session
+      hasActiveSession = true;
+    } else if (!identity.isCustodial) {
+      // Non-custodial: check if OAuth session exists in Redis
+      try {
+        const session = await this.blueskyService.tryResumeSession(
+          tenantId,
+          identity.did,
+        );
+        hasActiveSession = !!session;
+      } catch {
+        hasActiveSession = false;
+      }
+    }
+    // Note: custodial WITHOUT credentials (post-ownership) = false
 
     return {
       did: identity.did,
@@ -343,6 +398,7 @@ export class AtprotoIdentityController {
       pdsUrl: identity.pdsUrl,
       isCustodial: identity.isCustodial,
       isOurPds: identity.pdsUrl === ourPdsUrl,
+      hasActiveSession,
       createdAt: identity.createdAt,
       updatedAt: identity.updatedAt,
     };

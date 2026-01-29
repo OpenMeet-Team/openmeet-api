@@ -640,6 +640,8 @@ export class AuthService {
             pdsUrl: identity.pdsUrl,
             isCustodial: identity.isCustodial,
             isOurPds: identity.pdsUrl === ourPdsUrl,
+            hasActiveSession:
+              identity.isCustodial && !!identity.pdsCredentials,
             createdAt: identity.createdAt,
             updatedAt: identity.updatedAt,
           };

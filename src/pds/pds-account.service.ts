@@ -346,6 +346,35 @@ export class PdsAccountService {
   }
 
   /**
+   * Update the handle for an authenticated account.
+   *
+   * Calls com.atproto.identity.updateHandle on the PDS using the
+   * user's access token (not admin auth).
+   *
+   * @param accessJwt - The user's access JWT from createSession
+   * @param handle - The new handle to set
+   * @throws PdsApiError if the request fails
+   */
+  async updateHandle(accessJwt: string, handle: string): Promise<void> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.identity.updateHandle`;
+
+    return this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          { handle },
+          {
+            headers: {
+              Authorization: `Bearer ${accessJwt}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+    });
+  }
+
+  /**
    * Request a password reset email for an account.
    * This is a public endpoint and does not require admin authentication.
    *
