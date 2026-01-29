@@ -1,10 +1,11 @@
 import {
+  Body,
   Controller,
   Get,
   Post,
-  Body,
   HttpCode,
   HttpStatus,
+  Logger,
   Request,
   UseGuards,
   NotFoundException,
@@ -28,25 +29,31 @@ import {
   RecoveryStatus,
 } from './atproto-identity-recovery.service';
 import { UserService } from '../user/user.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
 import { ConfigService } from '@nestjs/config';
 import { AtprotoIdentityDto } from './dto/atproto-identity.dto';
 import { ResetPdsPasswordDto } from './dto/reset-pds-password.dto';
+import { UpdateHandleDto } from './dto/update-handle.dto';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsApiError } from '../pds/pds.errors';
 import { NullableType } from '../utils/types/nullable.type';
 import { AllConfigType } from '../config/config.type';
+import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 
 @ApiTags('AT Protocol Identity')
 @Controller({
   path: 'atproto/identity',
 })
 export class AtprotoIdentityController {
+  private readonly logger = new Logger(AtprotoIdentityController.name);
+
   constructor(
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
     private readonly atprotoIdentityService: AtprotoIdentityService,
     private readonly recoveryService: AtprotoIdentityRecoveryService,
     private readonly pdsAccountService: PdsAccountService,
     private readonly userService: UserService,
+    private readonly blueskyService: BlueskyService,
     private readonly configService: ConfigService<AllConfigType>,
   ) {}
 
@@ -86,7 +93,7 @@ export class AtprotoIdentityController {
       return null;
     }
 
-    return this.mapToDto(identity);
+    return this.mapToDto(identity, tenantId);
   }
 
   /**
@@ -126,7 +133,7 @@ export class AtprotoIdentityController {
       },
     );
 
-    return this.mapToDto(identity);
+    return this.mapToDto(identity, tenantId);
   }
 
   /**
@@ -165,7 +172,12 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('recover-as-custodial')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 100,
+      ttl: 3600000,
+    },
+  })
   @ApiOperation({ summary: 'Recover existing PDS account as custodial' })
   @ApiCreatedResponse({
     type: AtprotoIdentityDto,
@@ -192,7 +204,7 @@ export class AtprotoIdentityController {
       user.ulid,
     );
 
-    return this.mapToDto(identity);
+    return this.mapToDto(identity, tenantId);
   }
 
   /**
@@ -204,7 +216,12 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('take-ownership/initiate')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 100,
+      ttl: 3600000,
+    },
+  })
   @ApiOperation({
     summary: 'Initiate take ownership - sends PDS password reset email',
   })
@@ -269,7 +286,12 @@ export class AtprotoIdentityController {
   @ApiBearerAuth()
   @Post('reset-pds-password')
   @UseGuards(AuthGuard('jwt'))
-  @Throttle({ default: { limit: process.env.NODE_ENV === 'production' ? 3 : 100, ttl: 3600000 } })
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 100,
+      ttl: 3600000,
+    },
+  })
   @ApiOperation({
     summary: 'Reset PDS password using token from email',
   })
@@ -325,17 +347,90 @@ export class AtprotoIdentityController {
   }
 
   /**
-   * Map entity to DTO, explicitly excluding pdsCredentials.
+   * Update the AT Protocol handle for the authenticated user.
+   *
+   * Only supported for identities hosted on OpenMeet's PDS.
+   * The new handle must be within the allowed domain (e.g., .opnmt.me).
    */
-  private mapToDto(identity: {
-    did: string;
-    handle: string | null;
-    pdsUrl: string;
-    isCustodial: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  }): AtprotoIdentityDto {
+  @ApiBearerAuth()
+  @Post('update-handle')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Update AT Protocol handle (OpenMeet PDS only)' })
+  @ApiOkResponse({
+    type: AtprotoIdentityDto,
+    description: 'Handle updated successfully',
+  })
+  @HttpCode(HttpStatus.OK)
+  async updateHandle(
+    @Body() dto: UpdateHandleDto,
+    @Request() request: any,
+  ): Promise<AtprotoIdentityDto> {
+    const tenantId = request.tenantId;
+    const userId = request.user.id;
+
+    const user = await this.userService.findById(userId, tenantId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const identity = await this.atprotoIdentityService.updateHandle(
+      tenantId,
+      user.ulid,
+      dto.handle,
+    );
+
+    return this.mapToDto(identity, tenantId);
+  }
+
+  /**
+   * Map entity to DTO, explicitly excluding pdsCredentials.
+   * Determines hasActiveSession based on identity type and session state.
+   */
+  private async mapToDto(
+    identity: UserAtprotoIdentityEntity,
+    tenantId: string,
+  ): Promise<AtprotoIdentityDto> {
     const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+
+    let hasActiveSession = false;
+    if (identity.isCustodial && identity.pdsCredentials) {
+      // Custodial with credentials can always create a session
+      hasActiveSession = true;
+      this.logger.debug('hasActiveSession: custodial with credentials', {
+        did: identity.did,
+      });
+    } else if (!identity.isCustodial) {
+      // Non-custodial: check if OAuth session exists in Redis
+      this.logger.debug('Checking OAuth session for non-custodial identity', {
+        did: identity.did,
+        tenantId,
+      });
+      try {
+        const session = await this.blueskyService.tryResumeSession(
+          tenantId,
+          identity.did,
+        );
+        hasActiveSession = !!session;
+        this.logger.debug('hasActiveSession check result', {
+          did: identity.did,
+          hasActiveSession,
+        });
+      } catch (error) {
+        this.logger.warn('Failed to check OAuth session for hasActiveSession', {
+          did: identity.did,
+          tenantId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        hasActiveSession = false;
+      }
+    } else {
+      this.logger.debug('hasActiveSession: custodial without credentials', {
+        did: identity.did,
+        isCustodial: identity.isCustodial,
+        hasCredentials: !!identity.pdsCredentials,
+      });
+    }
+    // Note: custodial WITHOUT credentials (post-ownership) = false
 
     return {
       did: identity.did,
@@ -343,6 +438,7 @@ export class AtprotoIdentityController {
       pdsUrl: identity.pdsUrl,
       isCustodial: identity.isCustodial,
       isOurPds: identity.pdsUrl === ourPdsUrl,
+      hasActiveSession,
       createdAt: identity.createdAt,
       updatedAt: identity.updatedAt,
     };

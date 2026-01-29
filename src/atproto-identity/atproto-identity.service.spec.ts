@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { AtprotoIdentityService } from './atproto-identity.service';
@@ -38,15 +42,19 @@ describe('AtprotoIdentityService', () => {
     const mockUserAtprotoIdentityService = {
       findByUserUlid: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
     };
 
     const mockPdsAccountService = {
       createAccount: jest.fn(),
+      createSession: jest.fn(),
       isHandleAvailable: jest.fn(),
+      updateHandle: jest.fn(),
     };
 
     const mockPdsCredentialService = {
       encrypt: jest.fn(),
+      decrypt: jest.fn(),
     };
 
     const mockConfigService = {
@@ -462,6 +470,249 @@ describe('AtprotoIdentityService', () => {
 
       // Assert
       expect(result).toBeNull();
+    });
+  });
+
+  describe('updateHandle', () => {
+    const mockIdentityOnOurPds = {
+      ...mockIdentityEntity,
+      pdsUrl: 'https://pds.openmeet.net',
+      pdsCredentials: 'encrypted-credentials',
+      isCustodial: true,
+    } as UserAtprotoIdentityEntity;
+
+    const updatedIdentity = {
+      ...mockIdentityOnOurPds,
+      handle: 'new-handle.opnmt.me',
+      updatedAt: new Date('2025-01-02T00:00:00Z'),
+    } as UserAtprotoIdentityEntity;
+
+    it('should update handle successfully for identity on our PDS', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityOnOurPds);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(pdsCredentialService, 'decrypt')
+        .mockReturnValue('decrypted-password');
+      jest.spyOn(pdsAccountService, 'createSession').mockResolvedValue({
+        did: 'did:plc:abc123xyz789',
+        handle: 'test-user.opnmt.me',
+        accessJwt: 'access-jwt',
+        refreshJwt: 'refresh-jwt',
+      });
+      jest
+        .spyOn(userAtprotoIdentityService, 'update')
+        .mockResolvedValue(updatedIdentity);
+
+      // Act
+      const result = await service.updateHandle(
+        'test-tenant',
+        mockUser.ulid,
+        'new-handle.opnmt.me',
+      );
+
+      // Assert
+      expect(userAtprotoIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        'test-tenant',
+        mockUser.ulid,
+      );
+      expect(pdsAccountService.isHandleAvailable).toHaveBeenCalledWith(
+        'new-handle.opnmt.me',
+      );
+      expect(userAtprotoIdentityService.update).toHaveBeenCalledWith(
+        'test-tenant',
+        mockIdentityOnOurPds.id,
+        { handle: 'new-handle.opnmt.me' },
+      );
+      expect(result).toEqual(updatedIdentity);
+    });
+
+    it('should throw NotFoundException when no identity exists', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when identity is on external PDS', async () => {
+      // Arrange
+      const externalIdentity = {
+        ...mockIdentityOnOurPds,
+        pdsUrl: 'https://bsky.social',
+      } as UserAtprotoIdentityEntity;
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(externalIdentity);
+
+      // Act & Assert
+      await expect(
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
+      ).rejects.toThrow(
+        'Handle changes are only supported for identities hosted on OpenMeet PDS',
+      );
+    });
+
+    it('should throw BadRequestException when handle does not end with allowed domain', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityOnOurPds);
+
+      // Act & Assert
+      await expect(
+        service.updateHandle('test-tenant', mockUser.ulid, 'alice.bsky.social'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.updateHandle('test-tenant', mockUser.ulid, 'alice.bsky.social'),
+      ).rejects.toThrow(/Handle must end with one of/);
+    });
+
+    it('should throw ConflictException when handle is already taken', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityOnOurPds);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(false);
+
+      // Act & Assert
+      await expect(
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'taken-handle.opnmt.me',
+        ),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should decrypt credentials and create session for custodial identity', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityOnOurPds);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(pdsCredentialService, 'decrypt')
+        .mockReturnValue('decrypted-password');
+      jest.spyOn(pdsAccountService, 'createSession').mockResolvedValue({
+        did: 'did:plc:abc123xyz789',
+        handle: 'test-user.opnmt.me',
+        accessJwt: 'access-jwt',
+        refreshJwt: 'refresh-jwt',
+      });
+      jest
+        .spyOn(userAtprotoIdentityService, 'update')
+        .mockResolvedValue(updatedIdentity);
+
+      // Act
+      await service.updateHandle(
+        'test-tenant',
+        mockUser.ulid,
+        'new-handle.opnmt.me',
+      );
+
+      // Assert
+      expect(pdsCredentialService.decrypt).toHaveBeenCalledWith(
+        'encrypted-credentials',
+      );
+      expect(pdsAccountService.createSession).toHaveBeenCalledWith(
+        'did:plc:abc123xyz789',
+        'decrypted-password',
+      );
+    });
+
+    it('should not update database when PDS updateHandle fails (atomicity)', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityOnOurPds);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(pdsCredentialService, 'decrypt')
+        .mockReturnValue('decrypted-password');
+      jest.spyOn(pdsAccountService, 'createSession').mockResolvedValue({
+        did: 'did:plc:abc123xyz789',
+        handle: 'test-user.opnmt.me',
+        accessJwt: 'access-jwt',
+        refreshJwt: 'refresh-jwt',
+      });
+      jest
+        .spyOn(pdsAccountService, 'updateHandle')
+        .mockRejectedValue(new PdsApiError('PDS handle update failed', 500));
+      const updateSpy = jest.spyOn(userAtprotoIdentityService, 'update');
+
+      // Act & Assert
+      await expect(
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
+      ).rejects.toThrow(PdsApiError);
+
+      // Database update should NOT have been called
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('should throw when session creation fails with invalid credentials', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityOnOurPds);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(pdsCredentialService, 'decrypt')
+        .mockReturnValue('decrypted-password');
+      jest
+        .spyOn(pdsAccountService, 'createSession')
+        .mockRejectedValue(
+          new PdsApiError('Invalid credentials', 401, 'AuthenticationRequired'),
+        );
+      const updateSpy = jest.spyOn(userAtprotoIdentityService, 'update');
+
+      // Act & Assert
+      await expect(
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
+      ).rejects.toThrow(PdsApiError);
+
+      // Neither PDS update nor database update should have been called
+      expect(pdsAccountService.updateHandle).not.toHaveBeenCalled();
+      expect(updateSpy).not.toHaveBeenCalled();
     });
   });
 });

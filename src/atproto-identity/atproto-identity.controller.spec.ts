@@ -13,6 +13,7 @@ import {
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { UserService } from '../user/user.service';
 import { ConfigService } from '@nestjs/config';
+import { BlueskyService } from '../bluesky/bluesky.service';
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsApiError } from '../pds/pds.errors';
@@ -26,6 +27,7 @@ describe('AtprotoIdentityController', () => {
   let userService: UserService;
   let configService: ConfigService;
   let pdsAccountService: PdsAccountService;
+  let blueskyService: BlueskyService;
 
   const mockIdentityEntity: Partial<UserAtprotoIdentityEntity> = {
     id: 1,
@@ -75,6 +77,7 @@ describe('AtprotoIdentityController', () => {
 
     const mockAtprotoIdentityService = {
       createIdentity: jest.fn(),
+      updateHandle: jest.fn(),
     };
 
     const mockRecoveryService = {
@@ -97,6 +100,10 @@ describe('AtprotoIdentityController', () => {
         if (key === 'pds.url') return 'https://pds.openmeet.net';
         return null;
       }),
+    };
+
+    const mockBlueskyService = {
+      tryResumeSession: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -126,6 +133,10 @@ describe('AtprotoIdentityController', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: BlueskyService,
+          useValue: mockBlueskyService,
+        },
       ],
     }).compile();
 
@@ -144,6 +155,7 @@ describe('AtprotoIdentityController', () => {
     userService = module.get<UserService>(UserService);
     configService = module.get<ConfigService>(ConfigService);
     pdsAccountService = module.get<PdsAccountService>(PdsAccountService);
+    blueskyService = module.get<BlueskyService>(BlueskyService);
   });
 
   it('should be defined', () => {
@@ -172,6 +184,7 @@ describe('AtprotoIdentityController', () => {
         pdsUrl: 'https://pds.openmeet.net',
         isCustodial: true,
         isOurPds: true,
+        hasActiveSession: true,
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
       });
@@ -309,6 +322,7 @@ describe('AtprotoIdentityController', () => {
         pdsUrl: 'https://pds.openmeet.net',
         isCustodial: true,
         isOurPds: true,
+        hasActiveSession: true,
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
       });
@@ -674,7 +688,9 @@ describe('AtprotoIdentityController', () => {
         .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
       jest
         .spyOn(pdsAccountService, 'resetPassword')
-        .mockRejectedValue(new PdsApiError('Token has expired', 400, 'ExpiredToken'));
+        .mockRejectedValue(
+          new PdsApiError('Token has expired', 400, 'ExpiredToken'),
+        );
 
       // Act & Assert
       await expect(
@@ -683,6 +699,159 @@ describe('AtprotoIdentityController', () => {
           password: 'new-secure-password-123',
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('hasActiveSession', () => {
+    it('should be true for custodial identity with credentials', async () => {
+      // Arrange - custodial identity with pdsCredentials set
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
+
+      // Act
+      const result = await controller.getIdentity(mockRequest);
+
+      // Assert
+      expect(result).not.toBeNull();
+      expect(result!.hasActiveSession).toBe(true);
+      // Should NOT call tryResumeSession for custodial with credentials
+      expect(blueskyService.tryResumeSession).not.toHaveBeenCalled();
+    });
+
+    it('should be false for custodial identity without credentials (post-ownership)', async () => {
+      // Arrange - custodial identity with null pdsCredentials (user took ownership)
+      const postOwnershipIdentity = {
+        ...mockIdentityEntity,
+        pdsCredentials: null,
+      };
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(postOwnershipIdentity as UserAtprotoIdentityEntity);
+
+      // Act
+      const result = await controller.getIdentity(mockRequest);
+
+      // Assert
+      expect(result).not.toBeNull();
+      expect(result!.hasActiveSession).toBe(false);
+    });
+
+    it('should be true for non-custodial identity with active OAuth session', async () => {
+      // Arrange - non-custodial identity where tryResumeSession succeeds
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(
+          mockNonCustodialIdentity as UserAtprotoIdentityEntity,
+        );
+      const externalUser = {
+        id: 2,
+        ulid: '01234567890123456789012346',
+        slug: 'external-user',
+        email: 'external@example.com',
+      };
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(externalUser);
+      jest
+        .spyOn(blueskyService, 'tryResumeSession')
+        .mockResolvedValue({} as any); // truthy Agent object
+
+      // Act
+      const result = await controller.getIdentity({
+        user: { id: 2 },
+        tenantId: 'test-tenant',
+      });
+
+      // Assert
+      expect(result).not.toBeNull();
+      expect(result!.hasActiveSession).toBe(true);
+      expect(blueskyService.tryResumeSession).toHaveBeenCalledWith(
+        'test-tenant',
+        'did:plc:external789',
+      );
+    });
+
+    it('should be false for non-custodial identity without active session', async () => {
+      // Arrange - non-custodial identity where tryResumeSession returns falsy
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(
+          mockNonCustodialIdentity as UserAtprotoIdentityEntity,
+        );
+      const externalUser = {
+        id: 2,
+        ulid: '01234567890123456789012346',
+        slug: 'external-user',
+        email: 'external@example.com',
+      };
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(externalUser);
+      jest
+        .spyOn(blueskyService, 'tryResumeSession')
+        .mockResolvedValue(null as any);
+
+      // Act
+      const result = await controller.getIdentity({
+        user: { id: 2 },
+        tenantId: 'test-tenant',
+      });
+
+      // Assert
+      expect(result).not.toBeNull();
+      expect(result!.hasActiveSession).toBe(false);
+    });
+
+    it('should be false when tryResumeSession throws an error and log warning', async () => {
+      // Arrange - non-custodial identity where tryResumeSession throws
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(
+          mockNonCustodialIdentity as UserAtprotoIdentityEntity,
+        );
+      const externalUser = {
+        id: 2,
+        ulid: '01234567890123456789012346',
+        slug: 'external-user',
+        email: 'external@example.com',
+      };
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(externalUser);
+      jest
+        .spyOn(blueskyService, 'tryResumeSession')
+        .mockRejectedValue(new Error('Session expired'));
+
+      // Spy on the controller's logger
+      const loggerSpy = jest.spyOn(controller['logger'], 'warn');
+
+      // Act
+      const result = await controller.getIdentity({
+        user: { id: 2 },
+        tenantId: 'test-tenant',
+      });
+
+      // Assert - should gracefully handle the error and log warning
+      expect(result).not.toBeNull();
+      expect(result!.hasActiveSession).toBe(false);
+      expect(loggerSpy).toHaveBeenCalledWith(
+        'Failed to check OAuth session for hasActiveSession',
+        expect.objectContaining({
+          did: 'did:plc:external789',
+          tenantId: 'test-tenant',
+          error: 'Session expired',
+        }),
+      );
+    });
+
+    it('should include hasActiveSession field in DTO response', async () => {
+      // Arrange
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
+
+      // Act
+      const result = await controller.getIdentity(mockRequest);
+
+      // Assert
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty('hasActiveSession');
+      expect(typeof result!.hasActiveSession).toBe('boolean');
     });
   });
 
@@ -755,6 +924,76 @@ describe('AtprotoIdentityController', () => {
       expect(ttl).toBeDefined();
       // TTL should be at least 1 hour (3600000 ms)
       expect(ttl).toBeGreaterThanOrEqual(3600000);
+    });
+  });
+
+  describe('updateHandle', () => {
+    const updatedIdentityEntity: Partial<UserAtprotoIdentityEntity> = {
+      ...mockIdentityEntity,
+      handle: 'new-handle.opnmt.me',
+      updatedAt: new Date('2025-01-02T00:00:00Z'),
+    };
+
+    it('should update handle and return DTO', async () => {
+      // Arrange
+      jest
+        .spyOn(atprotoIdentityService, 'updateHandle')
+        .mockResolvedValue(updatedIdentityEntity as UserAtprotoIdentityEntity);
+
+      // Act
+      const result = await controller.updateHandle(
+        { handle: 'new-handle.opnmt.me' },
+        mockRequest,
+      );
+
+      // Assert
+      expect(userService.findById).toHaveBeenCalledWith(1, 'test-tenant');
+      expect(atprotoIdentityService.updateHandle).toHaveBeenCalledWith(
+        'test-tenant',
+        '01234567890123456789012345',
+        'new-handle.opnmt.me',
+      );
+      expect(result.handle).toBe('new-handle.opnmt.me');
+      expect(result.did).toBe('did:plc:abc123xyz789');
+      expect(result).not.toHaveProperty('pdsCredentials');
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      // Arrange
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        controller.updateHandle({ handle: 'new-handle.opnmt.me' }, mockRequest),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should propagate ConflictException when handle is taken', async () => {
+      // Arrange
+      jest
+        .spyOn(atprotoIdentityService, 'updateHandle')
+        .mockRejectedValue(new ConflictException('Handle is already taken'));
+
+      // Act & Assert
+      await expect(
+        controller.updateHandle({ handle: 'taken.opnmt.me' }, mockRequest),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should propagate BadRequestException when identity is on external PDS', async () => {
+      // Arrange
+      jest
+        .spyOn(atprotoIdentityService, 'updateHandle')
+        .mockRejectedValue(
+          new BadRequestException(
+            'Handle changes are only supported for identities hosted on OpenMeet PDS',
+          ),
+        );
+
+      // Act & Assert
+      await expect(
+        controller.updateHandle({ handle: 'new-handle.opnmt.me' }, mockRequest),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

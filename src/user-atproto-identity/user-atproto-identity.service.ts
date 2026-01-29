@@ -92,6 +92,17 @@ export class UserAtprotoIdentityService {
   }
 
   /**
+   * Delete an AT Protocol identity by user ULID.
+   *
+   * @param tenantId - The tenant ID
+   * @param userUlid - The user's ULID
+   */
+  async deleteByUserUlid(tenantId: string, userUlid: string): Promise<void> {
+    await this.getTenantRepository(tenantId);
+    await this.repository.delete({ userUlid });
+  }
+
+  /**
    * Update an existing AT Protocol identity.
    *
    * @param tenantId - The tenant ID

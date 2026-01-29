@@ -23,6 +23,7 @@ import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
 import { PdsApiError } from '../pds/pds.errors';
 
 // Mock bcryptjs for password validation tests
@@ -131,6 +132,10 @@ describe('AuthService', () => {
     extractHandleFromDid: jest.fn(),
   };
 
+  const mockBlueskyService = {
+    tryResumeSession: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -167,6 +172,10 @@ describe('AuthService', () => {
         {
           provide: BlueskyIdentityService,
           useValue: mockBlueskyIdentityService,
+        },
+        {
+          provide: BlueskyService,
+          useValue: mockBlueskyService,
         },
         { provide: REQUEST, useValue: mockRequest },
       ],
@@ -782,6 +791,7 @@ describe('AuthService', () => {
         pdsUrl: 'https://pds.openmeet.net',
         isCustodial: true,
         isOurPds: true,
+        hasActiveSession: false,
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
       });

@@ -54,6 +54,7 @@ import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
 import { PdsApiError } from '../pds/pds.errors';
 import { MeResponse } from './dto/me-response.dto';
 import { AtprotoIdentityDto } from '../atproto-identity/dto/atproto-identity.dto';
@@ -79,6 +80,7 @@ export class AuthService {
     private pdsCredentialService: PdsCredentialService,
     private userAtprotoIdentityService: UserAtprotoIdentityService,
     private blueskyIdentityService: BlueskyIdentityService,
+    private blueskyService: BlueskyService,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
@@ -634,12 +636,33 @@ export class AuthService {
         if (identity) {
           // Map to DTO, explicitly excluding pdsCredentials
           const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+
+          // Determine hasActiveSession based on identity type
+          let hasActiveSession = false;
+          if (identity.isCustodial && identity.pdsCredentials) {
+            // Custodial with credentials can always create a session
+            hasActiveSession = true;
+          } else if (!identity.isCustodial) {
+            // Non-custodial: check if OAuth session exists in Redis
+            try {
+              const session = await this.blueskyService.tryResumeSession(
+                tenantId,
+                identity.did,
+              );
+              hasActiveSession = !!session;
+            } catch {
+              // Session check failed, assume no active session
+              hasActiveSession = false;
+            }
+          }
+
           atprotoIdentity = {
             did: identity.did,
             handle: identity.handle,
             pdsUrl: identity.pdsUrl,
             isCustodial: identity.isCustodial,
             isOurPds: identity.pdsUrl === ourPdsUrl,
+            hasActiveSession,
             createdAt: identity.createdAt,
             updatedAt: identity.updatedAt,
           };

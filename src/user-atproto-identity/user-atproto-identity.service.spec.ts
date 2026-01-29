@@ -186,6 +186,29 @@ describe('UserAtprotoIdentityService', () => {
     });
   });
 
+  describe('deleteByUserUlid()', () => {
+    it('should delete identity record by userUlid', async () => {
+      repository.delete = jest.fn().mockResolvedValue({ affected: 1 });
+
+      await service.deleteByUserUlid(
+        TESTING_TENANT_ID,
+        '01hqvxz6j8k9m0n1p2q3r4s5t6',
+      );
+
+      expect(repository.delete).toHaveBeenCalledWith({
+        userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+      });
+    });
+
+    it('should not throw when no record exists to delete', async () => {
+      repository.delete = jest.fn().mockResolvedValue({ affected: 0 });
+
+      await expect(
+        service.deleteByUserUlid(TESTING_TENANT_ID, 'nonexistent-ulid'),
+      ).resolves.not.toThrow();
+    });
+  });
+
   describe('update()', () => {
     it('should update an existing identity', async () => {
       const updateData = {

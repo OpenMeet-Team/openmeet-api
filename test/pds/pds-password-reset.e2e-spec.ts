@@ -1,8 +1,5 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { mailDevService } from '../utils/maildev-service';
 import { EmailVerificationTestHelpers } from '../utils/email-verification-helpers';
 
@@ -62,14 +59,12 @@ describeIfPds('PDS Password Reset (e2e)', () => {
     const resetEmail = await EmailVerificationTestHelpers.waitForEmail(
       () => mailDevService.getEmailsSince(timestampBefore),
       (e) =>
-        e.to?.some(
-          (to) => to.address.toLowerCase() === email.toLowerCase(),
-        ) && e.subject?.includes('Password Reset'),
+        e.to?.some((to) => to.address.toLowerCase() === email.toLowerCase()) &&
+        e.subject?.includes('Password Reset'),
       30000,
     );
 
-    const token =
-      EmailVerificationTestHelpers.extractPdsResetToken(resetEmail);
+    const token = EmailVerificationTestHelpers.extractPdsResetToken(resetEmail);
     if (!token) {
       throw new Error(
         `Could not extract PDS reset token from email. Subject: "${resetEmail.subject}"`,
@@ -106,9 +101,7 @@ describeIfPds('PDS Password Reset (e2e)', () => {
       );
 
       const verificationCode =
-        EmailVerificationTestHelpers.extractVerificationCode(
-          verificationEmail,
-        );
+        EmailVerificationTestHelpers.extractVerificationCode(verificationEmail);
       expect(verificationCode).toBeDefined();
 
       await serverApp
@@ -134,10 +127,7 @@ describeIfPds('PDS Password Reset (e2e)', () => {
           .get('/api/atproto/identity')
           .set('Authorization', `Bearer ${authToken}`);
 
-        if (
-          identityResponse.status === 200 &&
-          identityResponse.body?.did
-        ) {
+        if (identityResponse.status === 200 && identityResponse.body?.did) {
           identity = identityResponse.body;
           break;
         }
@@ -145,7 +135,7 @@ describeIfPds('PDS Password Reset (e2e)', () => {
         if (attempt === maxAttempts) {
           throw new Error(
             `Identity not created after ${maxAttempts} attempts. ` +
-            `Last response: ${identityResponse.status} ${JSON.stringify(identityResponse.body)}`,
+              `Last response: ${identityResponse.status} ${JSON.stringify(identityResponse.body)}`,
           );
         }
       }

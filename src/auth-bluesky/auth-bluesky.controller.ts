@@ -1,20 +1,29 @@
 import {
   Controller,
   Get,
+  Post,
   Query,
+  Body,
   Res,
+  Request,
   Header,
   HttpStatus,
   HttpCode,
   Logger,
+  UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
-import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Public } from '../core/decorators/public.decorator';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { getOidcCookieOptions } from '../utils/cookie-config';
 import { OAuthPlatform } from '../auth/types/oauth.types';
+import { LinkAtprotoDto } from './dto/link-atproto.dto';
+import { UserService } from '../user/user.service';
+import { ModuleRef } from '@nestjs/core';
 
 @ApiTags('Auth')
 @Controller({
@@ -24,7 +33,16 @@ import { OAuthPlatform } from '../auth/types/oauth.types';
 export class AuthBlueskyController {
   private readonly logger = new Logger(AuthBlueskyController.name);
 
-  constructor(private readonly authBlueskyService: AuthBlueskyService) {}
+  constructor(
+    private readonly authBlueskyService: AuthBlueskyService,
+    private readonly moduleRef: ModuleRef,
+  ) {}
+
+  private async getUserService(): Promise<UserService> {
+    return await this.moduleRef.resolve(UserService, undefined, {
+      strict: false,
+    });
+  }
 
   @Get('authorize')
   @Public()
@@ -41,6 +59,43 @@ export class AuthBlueskyController {
       tenantId,
       platform,
     );
+  }
+
+  @Post('link')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({
+    description:
+      'Returns OAuth authorization URL for AT Protocol identity linking',
+  })
+  async linkAtprotoIdentity(
+    @Body() dto: LinkAtprotoDto,
+    @Request() request: any,
+  ): Promise<{ authUrl: string }> {
+    const tenantId = request.tenantId;
+    const userId = request.user?.id;
+
+    this.logger.debug('Link AT Protocol identity request', {
+      handle: dto.handle,
+      tenantId,
+      userId,
+    });
+
+    const userService = await this.getUserService();
+    const user = await userService.findById(userId, tenantId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const authUrl = await this.authBlueskyService.createLinkAuthUrl(
+      dto.handle,
+      tenantId,
+      user.ulid,
+      dto.platform,
+    );
+
+    return { authUrl };
   }
 
   @Public()
