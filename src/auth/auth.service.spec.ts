@@ -774,6 +774,7 @@ describe('AuthService', () => {
       );
       mockConfigService.get.mockImplementation((key: string) => {
         if (key === 'pds.url') return 'https://pds.openmeet.net';
+        if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
         return null;
       });
 
@@ -792,6 +793,7 @@ describe('AuthService', () => {
         isCustodial: true,
         isOurPds: true,
         hasActiveSession: false,
+        validHandleDomains: ['.opnmt.me'],
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
       });
@@ -832,6 +834,7 @@ describe('AuthService', () => {
       );
       mockConfigService.get.mockImplementation((key: string) => {
         if (key === 'pds.url') return 'https://pds.openmeet.net';
+        if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
         return null;
       });
 

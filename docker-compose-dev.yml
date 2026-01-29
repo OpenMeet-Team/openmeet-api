@@ -383,17 +383,17 @@ services:
     ports:
       - "3101:3000"
     environment:
-      PDS_HOSTNAME: pds.test
+      PDS_HOSTNAME: ${PDS_HOSTNAME:-pds.test}
       PDS_PORT: 3000
       PDS_DATA_DIRECTORY: /pds
       PDS_BLOBSTORE_DISK_LOCATION: /pds/blocks
       PDS_DID_PLC_URL: http://plc:2582
-      PDS_SERVICE_HANDLE_DOMAINS: .pds.test
+      PDS_SERVICE_HANDLE_DOMAINS: ${PDS_SERVICE_HANDLE_DOMAINS:-.pds.test}
       PDS_JWT_SECRET: local-dev-jwt-secret-not-for-production
-      PDS_ADMIN_PASSWORD: local-dev-admin-password
+      PDS_ADMIN_PASSWORD: ${PDS_ADMIN_PASSWORD:-local-dev-admin-password}
       PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       PDS_EMAIL_SMTP_URL: smtp://maildev:1025
-      PDS_EMAIL_FROM_ADDRESS: noreply@pds.test
+      PDS_EMAIL_FROM_ADDRESS: noreply@${PDS_HOSTNAME:-pds.test}
       PDS_DEV_MODE: "true"
       PDS_INVITE_REQUIRED: "true"
       LOG_ENABLED: "true"

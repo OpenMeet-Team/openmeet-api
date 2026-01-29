@@ -636,6 +636,12 @@ export class AuthService {
         if (identity) {
           // Map to DTO, explicitly excluding pdsCredentials
           const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+          const serviceHandleDomains =
+            this.configService.get('pds.serviceHandleDomains', { infer: true }) || '';
+          const validHandleDomains = serviceHandleDomains
+            .split(',')
+            .map((d: string) => d.trim())
+            .filter((d: string) => d.length > 0);
 
           // Determine hasActiveSession based on identity type
           let hasActiveSession = false;
@@ -663,6 +669,7 @@ export class AuthService {
             isCustodial: identity.isCustodial,
             isOurPds: identity.pdsUrl === ourPdsUrl,
             hasActiveSession,
+            validHandleDomains,
             createdAt: identity.createdAt,
             updatedAt: identity.updatedAt,
           };
