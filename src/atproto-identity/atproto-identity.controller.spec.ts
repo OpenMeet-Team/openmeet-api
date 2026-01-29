@@ -98,6 +98,7 @@ describe('AtprotoIdentityController', () => {
     const mockConfigService = {
       get: jest.fn().mockImplementation((key: string) => {
         if (key === 'pds.url') return 'https://pds.openmeet.net';
+        if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
         return null;
       }),
     };
@@ -185,6 +186,7 @@ describe('AtprotoIdentityController', () => {
         isCustodial: true,
         isOurPds: true,
         hasActiveSession: true,
+        validHandleDomains: ['.opnmt.me'],
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
       });
@@ -323,6 +325,7 @@ describe('AtprotoIdentityController', () => {
         isCustodial: true,
         isOurPds: true,
         hasActiveSession: true,
+        validHandleDomains: ['.opnmt.me'],
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
       });

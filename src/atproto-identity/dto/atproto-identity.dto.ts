@@ -45,6 +45,13 @@ export class AtprotoIdentityDto {
   hasActiveSession: boolean;
 
   @ApiProperty({
+    description: 'Valid handle domains for this PDS (e.g., [".bsky.dev.openmeet.net"])',
+    example: ['.bsky.dev.openmeet.net'],
+    type: [String],
+  })
+  validHandleDomains: string[];
+
+  @ApiProperty({
     description: 'When the identity was created',
   })
   createdAt: Date;
