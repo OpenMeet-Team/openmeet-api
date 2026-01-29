@@ -16,6 +16,8 @@ import {
 import { EventSourceType } from '../core/constants/source-type.constant';
 import { Logger } from '@nestjs/common';
 import { Agent } from '@atproto/api';
+import { SessionUnavailableError } from '../pds/pds.errors';
+import { PublishResult } from './interfaces/publish-result.interface';
 
 // Mock Agent
 const mockAgent = {
@@ -414,6 +416,65 @@ describe('AtprotoPublisherService', () => {
       );
     });
 
+    describe('orphan state handling', () => {
+      it('should return error result with actionable message when SessionUnavailableError is thrown', async () => {
+        const event = createMockEvent();
+        const mockIdentity = {
+          id: 1,
+          userUlid: 'user-ulid-123',
+          did: 'did:plc:testuser123',
+        } as UserAtprotoIdentityEntity;
+
+        atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+          mockIdentity,
+        );
+        pdsSessionService.getSessionForUser.mockRejectedValue(
+          new SessionUnavailableError(
+            'OAuth session expired - please re-link your AT Protocol account',
+            true,
+          ),
+        );
+
+        const result = await service.publishEvent(event, tenantId);
+
+        expect(result.action).toBe('error');
+        expect((result as PublishResult & { error: string }).error).toContain(
+          'Link your AT Protocol account',
+        );
+        expect(
+          (result as PublishResult & { needsOAuthLink: boolean }).needsOAuthLink,
+        ).toBe(true);
+      });
+
+      it('should include actionable message in error result for RSVP publishing', async () => {
+        const event = createMockEvent({
+          atprotoUri:
+            'at://did:plc:organizer/community.lexicon.calendar.event/event-rkey',
+        });
+        const attendee = createMockAttendee({
+          status: EventAttendeeStatus.Confirmed,
+          event,
+        });
+
+        pdsSessionService.getSessionForUser.mockRejectedValue(
+          new SessionUnavailableError(
+            'OAuth session expired',
+            true,
+          ),
+        );
+
+        const result = await service.publishRsvp(attendee, tenantId);
+
+        expect(result.action).toBe('error');
+        expect((result as PublishResult & { error: string }).error).toContain(
+          'Link your AT Protocol account',
+        );
+        expect(
+          (result as PublishResult & { needsOAuthLink: boolean }).needsOAuthLink,
+        ).toBe(true);
+      });
+    });
+
     describe('lazy identity creation', () => {
       it('should call ensureIdentityForUser before getting session', async () => {
         const event = createMockEvent();
@@ -800,6 +861,30 @@ describe('AtprotoPublisherService', () => {
         testUser,
       );
 
+      expect(result).toBeNull();
+    });
+
+    it('should return null when SessionUnavailableError is thrown (orphan state)', async () => {
+      const mockIdentity = {
+        id: 1,
+        userUlid: testUser.ulid,
+        did: 'did:plc:test',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockRejectedValue(
+        new SessionUnavailableError('OAuth session expired', true),
+      );
+
+      const result = await service.ensurePublishingCapability(
+        tenantId,
+        testUser,
+      );
+
+      // Pre-flight check catches the error and returns null
+      // (the actual error will be surfaced during publish)
       expect(result).toBeNull();
     });
   });

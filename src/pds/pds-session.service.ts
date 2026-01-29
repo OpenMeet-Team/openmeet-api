@@ -9,6 +9,7 @@ import {
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { SessionUnavailableError } from './pds.errors';
 
 /**
  * Result of a successful session retrieval.
@@ -167,11 +168,13 @@ export class PdsSessionService {
 
   /**
    * Handle OAuth session restoration via BlueskyService.
+   *
+   * @throws SessionUnavailableError if OAuth session cannot be restored
    */
   private async handleOAuthSession(
     tenantId: string,
     did: string,
-  ): Promise<SessionResult | null> {
+  ): Promise<SessionResult> {
     try {
       const agent = await this.blueskyService.resumeSession(tenantId, did);
 
@@ -185,7 +188,11 @@ export class PdsSessionService {
       this.logger.warn(
         `OAuth session restoration failed for DID ${did}: ${error.message}`,
       );
-      return null;
+      throw new SessionUnavailableError(
+        'Your AT Protocol session has expired. Please link your AT Protocol account again to continue publishing.',
+        true,
+        did,
+      );
     }
   }
 

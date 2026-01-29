@@ -47,3 +47,25 @@ export class PdsSessionError extends Error {
     this.name = 'PdsSessionError';
   }
 }
+
+/**
+ * Error thrown when a session cannot be obtained for an AT Protocol identity.
+ *
+ * This specifically indicates that the user needs to re-link their account
+ * via OAuth. Common scenarios:
+ * - Orphan account: User took ownership of custodial account but no OAuth session exists
+ * - OAuth session expired: User's OAuth session in Redis has expired and needs refresh
+ *
+ * The `needsOAuthLink` flag indicates the user should be prompted to
+ * re-authenticate via the AT Protocol OAuth flow.
+ */
+export class SessionUnavailableError extends Error {
+  constructor(
+    message: string,
+    public readonly needsOAuthLink: boolean = true,
+    public readonly did?: string,
+  ) {
+    super(message);
+    this.name = 'SessionUnavailableError';
+  }
+}

@@ -9,6 +9,7 @@ import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructu
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { Agent } from '@atproto/api';
+import { SessionUnavailableError } from './pds.errors';
 
 // Mock the @atproto/api Agent and CredentialSession
 const mockResumeSession = jest.fn().mockResolvedValue(undefined);
@@ -153,18 +154,31 @@ describe('PdsSessionService', () => {
     });
 
     describe('when identity is orphan (custodial but no credentials)', () => {
-      it('should return null for orphan accounts', async () => {
+      it('should throw SessionUnavailableError with needsOAuthLink=true for orphan accounts', async () => {
         const orphanIdentity = createMockIdentity({
-          isCustodial: true,
-          pdsCredentials: null,
+          isCustodial: false, // Non-custodial (took ownership)
+          pdsCredentials: null, // But no credentials
         });
         mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
           orphanIdentity,
         );
 
-        const result = await service.getSessionForUser(tenantId, userUlid);
+        // OAuth restoration will also fail (no session in Redis)
+        mockBlueskyService.resumeSession.mockRejectedValue(
+          new Error('No OAuth session found'),
+        );
 
-        expect(result).toBeNull();
+        await expect(service.getSessionForUser(tenantId, userUlid)).rejects.toThrow(
+          SessionUnavailableError,
+        );
+
+        try {
+          await service.getSessionForUser(tenantId, userUlid);
+        } catch (error) {
+          expect(error).toBeInstanceOf(SessionUnavailableError);
+          expect((error as SessionUnavailableError).needsOAuthLink).toBe(true);
+          expect((error as SessionUnavailableError).message).toContain('link');
+        }
       });
     });
 
@@ -194,7 +208,7 @@ describe('PdsSessionService', () => {
         );
       });
 
-      it('should return null when OAuth session restoration fails', async () => {
+      it('should throw SessionUnavailableError with needsOAuthLink=true when OAuth session restoration fails', async () => {
         const oauthIdentity = createMockIdentity({
           isCustodial: false,
           pdsCredentials: null,
@@ -207,9 +221,17 @@ describe('PdsSessionService', () => {
           new Error('Session expired'),
         );
 
-        const result = await service.getSessionForUser(tenantId, userUlid);
+        await expect(service.getSessionForUser(tenantId, userUlid)).rejects.toThrow(
+          SessionUnavailableError,
+        );
 
-        expect(result).toBeNull();
+        try {
+          await service.getSessionForUser(tenantId, userUlid);
+        } catch (error) {
+          expect(error).toBeInstanceOf(SessionUnavailableError);
+          expect((error as SessionUnavailableError).needsOAuthLink).toBe(true);
+          expect((error as SessionUnavailableError).message).toContain('link');
+        }
       });
     });
 

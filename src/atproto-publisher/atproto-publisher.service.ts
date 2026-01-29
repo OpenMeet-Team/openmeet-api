@@ -11,6 +11,7 @@ import {
   EventAttendeeStatus,
 } from '../core/constants/constant';
 import { PublishResult } from './interfaces/publish-result.interface';
+import { SessionUnavailableError } from '../pds/pds.errors';
 
 // AT Protocol RSVP status mapping
 type RsvpStatusShort = 'going' | 'interested' | 'notgoing';
@@ -282,10 +283,26 @@ export class AtprotoPublisherService {
       return { action: 'skipped' };
     }
 
-    const session = await this.pdsSessionService.getSessionForUser(
-      tenantId,
-      userUlid,
-    );
+    let session;
+    try {
+      session = await this.pdsSessionService.getSessionForUser(
+        tenantId,
+        userUlid,
+      );
+    } catch (error) {
+      if (error instanceof SessionUnavailableError) {
+        this.logger.warn(
+          `Session unavailable for event ${event.slug}: ${error.message}`,
+        );
+        return {
+          action: 'error',
+          error:
+            'Link your AT Protocol account to publish events. Go to Settings > Connected Accounts to connect.',
+          needsOAuthLink: error.needsOAuthLink,
+        };
+      }
+      throw error;
+    }
 
     if (!session) {
       this.logger.debug(
@@ -430,10 +447,26 @@ export class AtprotoPublisherService {
       throw new Error(`RSVP ${attendee.id} has no user`);
     }
 
-    const session = await this.pdsSessionService.getSessionForUser(
-      tenantId,
-      userUlid,
-    );
+    let session;
+    try {
+      session = await this.pdsSessionService.getSessionForUser(
+        tenantId,
+        userUlid,
+      );
+    } catch (error) {
+      if (error instanceof SessionUnavailableError) {
+        this.logger.warn(
+          `Session unavailable for RSVP ${attendee.id}: ${error.message}`,
+        );
+        return {
+          action: 'error',
+          error:
+            'Link your AT Protocol account to publish RSVPs. Go to Settings > Connected Accounts to connect.',
+          needsOAuthLink: error.needsOAuthLink,
+        };
+      }
+      throw error;
+    }
 
     if (!session) {
       this.logger.debug(
