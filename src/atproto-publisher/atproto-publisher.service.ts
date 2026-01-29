@@ -364,7 +364,12 @@ export class AtprotoPublisherService {
       );
     }
 
-    await this.blueskyService.deleteEventRecord(event, session.did, tenantId);
+    await this.blueskyService.deleteEventRecord(
+      event,
+      session.did,
+      tenantId,
+      session.agent, // Use PDS session agent instead of legacy Bluesky OAuth
+    );
 
     this.logger.debug(`Successfully deleted event ${event.slug} from PDS`);
 

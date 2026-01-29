@@ -492,6 +492,7 @@ export class BlueskyService {
     event: EventEntity,
     did: string,
     tenantId: string,
+    providedAgent?: Agent,
   ): Promise<{ success: boolean; message: string }> {
     const rkey =
       (event.sourceData?.rkey as string | undefined) || event.atprotoRkey;
@@ -501,7 +502,8 @@ export class BlueskyService {
       );
     }
 
-    const agent = await this.resumeSession(tenantId, did);
+    // Use provided agent (from PDS session) or fall back to legacy Bluesky OAuth
+    const agent = providedAgent || (await this.resumeSession(tenantId, did));
 
     try {
       // When deleting a record, ensure that the repo information is included
