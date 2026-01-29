@@ -157,6 +157,7 @@ describe('AT Protocol Publishing (e2e)', () => {
       if (identity.did) {
         expect(identity.did).toMatch(/^did:(plc|web):/);
         expect(identity.isCustodial).toBe(true);
+        expect(identity.hasActiveSession).toBe(true); // Custodial with credentials can always create session
         console.log(`User has AT Protocol identity: ${identity.did}`);
       } else {
         console.warn(
