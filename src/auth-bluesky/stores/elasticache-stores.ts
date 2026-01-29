@@ -35,8 +35,8 @@ export class ElastiCacheSessionStore implements NodeSavedSessionStore {
   async set(sub: string, data: NodeSavedSession) {
     const key = `bluesky:session:${sub}`;
     console.log('Setting session in Redis:', { key, sub });
-    // Set session with 24 hour TTL
-    await this.elasticache.set(key, data, 86400);
+    // No TTL - let AT Protocol's native token expiry be the limit
+    await this.elasticache.set(key, data);
   }
 
   async get(sub: string): Promise<NodeSavedSession | undefined> {
@@ -44,10 +44,6 @@ export class ElastiCacheSessionStore implements NodeSavedSessionStore {
     console.log('Getting session from Redis:', key);
     const result = await this.elasticache.get<NodeSavedSession>(key);
     console.log('Retrieved session:', { key, found: !!result });
-    if (result) {
-      // Refresh TTL by setting the value again
-      await this.elasticache.set(key, result, 86400);
-    }
     return result ?? undefined;
   }
 
