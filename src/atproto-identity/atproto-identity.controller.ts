@@ -5,6 +5,7 @@ import {
   Post,
   HttpCode,
   HttpStatus,
+  Logger,
   Request,
   UseGuards,
   NotFoundException,
@@ -44,6 +45,8 @@ import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructu
   path: 'atproto/identity',
 })
 export class AtprotoIdentityController {
+  private readonly logger = new Logger(AtprotoIdentityController.name);
+
   constructor(
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
     private readonly atprotoIdentityService: AtprotoIdentityService,
@@ -386,7 +389,12 @@ export class AtprotoIdentityController {
           identity.did,
         );
         hasActiveSession = !!session;
-      } catch {
+      } catch (error) {
+        this.logger.warn('Failed to check OAuth session for hasActiveSession', {
+          did: identity.did,
+          tenantId,
+          error: error instanceof Error ? error.message : String(error),
+        });
         hasActiveSession = false;
       }
     }

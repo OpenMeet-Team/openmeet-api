@@ -477,11 +477,23 @@ export class AuthBlueskyService {
       const appState = crypto.randomBytes(16).toString('base64url');
 
       // Store link data in Redis so the callback knows this is a link flow
+      const linkKey = `auth:bluesky:link:${appState}`;
       await this.elasticacheService.set(
-        `auth:bluesky:link:${appState}`,
+        linkKey,
         JSON.stringify({ userUlid, tenantId }),
         600, // 10 minute TTL
       );
+
+      // Verify the link data was stored (ElastiCacheService swallows errors)
+      const verification = await this.elasticacheService.get<string>(linkKey);
+      if (!verification) {
+        this.logger.error('Failed to store link data in Redis', {
+          appState,
+          userUlid,
+          tenantId,
+        });
+        throw new Error('Failed to store authentication state');
+      }
 
       // Store platform for mobile apps (same as login flow)
       const isMobilePlatform = platform === 'android' || platform === 'ios';
@@ -592,33 +604,50 @@ export class AuthBlueskyService {
       (restoredSession as any).serviceUrl?.toString() ||
       (await this.resolvePdsUrlFromDid(did));
 
-    if (existingIdentity) {
-      if (existingIdentity.did === did) {
-        // Same DID - update to non-custodial
-        this.logger.debug('Updating existing identity to non-custodial', {
-          identityId: existingIdentity.id,
-          did,
-        });
-        await this.userAtprotoIdentityService.update(
-          tenantId,
-          existingIdentity.id,
-          {
+    // Perform identity operations with error handling
+    try {
+      if (existingIdentity) {
+        if (existingIdentity.did === did) {
+          // Same DID - update to non-custodial
+          this.logger.debug('Updating existing identity to non-custodial', {
+            identityId: existingIdentity.id,
+            did,
+          });
+          await this.userAtprotoIdentityService.update(
+            tenantId,
+            existingIdentity.id,
+            {
+              isCustodial: false,
+              pdsCredentials: null,
+              pdsUrl,
+              handle,
+            },
+          );
+        } else {
+          // Different DID - delete old and create new
+          this.logger.debug('Replacing identity with new DID', {
+            oldDid: existingIdentity.did,
+            newDid: did,
+          });
+          await this.userAtprotoIdentityService.deleteByUserUlid(
+            tenantId,
+            linkData.userUlid,
+          );
+          await this.userAtprotoIdentityService.create(tenantId, {
+            userUlid: linkData.userUlid,
+            did,
+            handle,
+            pdsUrl,
             isCustodial: false,
             pdsCredentials: null,
-            pdsUrl,
-            handle,
-          },
-        );
+          });
+        }
       } else {
-        // Different DID - delete old and create new
-        this.logger.debug('Replacing identity with new DID', {
-          oldDid: existingIdentity.did,
-          newDid: did,
+        // No existing identity - create new
+        this.logger.debug('Creating new non-custodial identity', {
+          userUlid: linkData.userUlid,
+          did,
         });
-        await this.userAtprotoIdentityService.deleteByUserUlid(
-          tenantId,
-          linkData.userUlid,
-        );
         await this.userAtprotoIdentityService.create(tenantId, {
           userUlid: linkData.userUlid,
           did,
@@ -628,20 +657,21 @@ export class AuthBlueskyService {
           pdsCredentials: null,
         });
       }
-    } else {
-      // No existing identity - create new
-      this.logger.debug('Creating new non-custodial identity', {
+    } catch (error) {
+      this.logger.error('Failed to update identity during link callback', {
         userUlid: linkData.userUlid,
         did,
+        tenantId,
+        error: error instanceof Error ? error.message : String(error),
       });
-      await this.userAtprotoIdentityService.create(tenantId, {
-        userUlid: linkData.userUlid,
-        did,
-        handle,
-        pdsUrl,
-        isCustodial: false,
-        pdsCredentials: null,
-      });
+      return {
+        redirectUrl: this.buildLinkRedirectUrl(
+          tenantId,
+          false,
+          'Failed to save identity. Please try again.',
+        ),
+        sessionId: undefined,
+      };
     }
 
     // Update user preferences

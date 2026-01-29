@@ -539,7 +539,11 @@ describe('AtprotoIdentityService', () => {
 
       // Act & Assert
       await expect(
-        service.updateHandle('test-tenant', mockUser.ulid, 'new-handle.opnmt.me'),
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -555,10 +559,18 @@ describe('AtprotoIdentityService', () => {
 
       // Act & Assert
       await expect(
-        service.updateHandle('test-tenant', mockUser.ulid, 'new-handle.opnmt.me'),
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.updateHandle('test-tenant', mockUser.ulid, 'new-handle.opnmt.me'),
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
       ).rejects.toThrow(
         'Handle changes are only supported for identities hosted on OpenMeet PDS',
       );
@@ -572,18 +584,10 @@ describe('AtprotoIdentityService', () => {
 
       // Act & Assert
       await expect(
-        service.updateHandle(
-          'test-tenant',
-          mockUser.ulid,
-          'alice.bsky.social',
-        ),
+        service.updateHandle('test-tenant', mockUser.ulid, 'alice.bsky.social'),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.updateHandle(
-          'test-tenant',
-          mockUser.ulid,
-          'alice.bsky.social',
-        ),
+        service.updateHandle('test-tenant', mockUser.ulid, 'alice.bsky.social'),
       ).rejects.toThrow(/Handle must end with one of/);
     });
 
@@ -642,6 +646,73 @@ describe('AtprotoIdentityService', () => {
         'did:plc:abc123xyz789',
         'decrypted-password',
       );
+    });
+
+    it('should not update database when PDS updateHandle fails (atomicity)', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityOnOurPds);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(pdsCredentialService, 'decrypt')
+        .mockReturnValue('decrypted-password');
+      jest.spyOn(pdsAccountService, 'createSession').mockResolvedValue({
+        did: 'did:plc:abc123xyz789',
+        handle: 'test-user.opnmt.me',
+        accessJwt: 'access-jwt',
+        refreshJwt: 'refresh-jwt',
+      });
+      jest
+        .spyOn(pdsAccountService, 'updateHandle')
+        .mockRejectedValue(new PdsApiError('PDS handle update failed', 500));
+      const updateSpy = jest.spyOn(userAtprotoIdentityService, 'update');
+
+      // Act & Assert
+      await expect(
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
+      ).rejects.toThrow(PdsApiError);
+
+      // Database update should NOT have been called
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('should throw when session creation fails with invalid credentials', async () => {
+      // Arrange
+      jest
+        .spyOn(userAtprotoIdentityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityOnOurPds);
+      jest
+        .spyOn(pdsAccountService, 'isHandleAvailable')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(pdsCredentialService, 'decrypt')
+        .mockReturnValue('decrypted-password');
+      jest
+        .spyOn(pdsAccountService, 'createSession')
+        .mockRejectedValue(
+          new PdsApiError('Invalid credentials', 401, 'AuthenticationRequired'),
+        );
+      const updateSpy = jest.spyOn(userAtprotoIdentityService, 'update');
+
+      // Act & Assert
+      await expect(
+        service.updateHandle(
+          'test-tenant',
+          mockUser.ulid,
+          'new-handle.opnmt.me',
+        ),
+      ).rejects.toThrow(PdsApiError);
+
+      // Neither PDS update nor database update should have been called
+      expect(pdsAccountService.updateHandle).not.toHaveBeenCalled();
+      expect(updateSpy).not.toHaveBeenCalled();
     });
   });
 });

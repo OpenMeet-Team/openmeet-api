@@ -611,7 +611,7 @@ describe('AtprotoIdentityController', () => {
     });
   });
 
-describe('resetPdsPassword', () => {
+  describe('resetPdsPassword', () => {
     it('should reset password when user has custodial identity', async () => {
       // Arrange
       jest
@@ -797,7 +797,7 @@ describe('resetPdsPassword', () => {
       expect(result!.hasActiveSession).toBe(false);
     });
 
-    it('should be false when tryResumeSession throws an error', async () => {
+    it('should be false when tryResumeSession throws an error and log warning', async () => {
       // Arrange - non-custodial identity where tryResumeSession throws
       jest
         .spyOn(identityService, 'findByUserUlid')
@@ -815,15 +815,26 @@ describe('resetPdsPassword', () => {
         .spyOn(blueskyService, 'tryResumeSession')
         .mockRejectedValue(new Error('Session expired'));
 
+      // Spy on the controller's logger
+      const loggerSpy = jest.spyOn(controller['logger'], 'warn');
+
       // Act
       const result = await controller.getIdentity({
         user: { id: 2 },
         tenantId: 'test-tenant',
       });
 
-      // Assert - should gracefully handle the error
+      // Assert - should gracefully handle the error and log warning
       expect(result).not.toBeNull();
       expect(result!.hasActiveSession).toBe(false);
+      expect(loggerSpy).toHaveBeenCalledWith(
+        'Failed to check OAuth session for hasActiveSession',
+        expect.objectContaining({
+          did: 'did:plc:external789',
+          tenantId: 'test-tenant',
+          error: 'Session expired',
+        }),
+      );
     });
 
     it('should include hasActiveSession field in DTO response', async () => {

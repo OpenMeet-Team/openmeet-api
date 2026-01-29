@@ -1006,6 +1006,13 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
       jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+      // Mock successful verification read
+      mockElastiCacheService.get.mockResolvedValueOnce(
+        JSON.stringify({
+          userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+          tenantId: 'tenant-123',
+        }),
+      );
 
       // Act
       const result = await service.createLinkAuthUrl(
@@ -1024,6 +1031,10 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
         }),
         600,
       );
+      // Verify verification read was called
+      expect(mockElastiCacheService.get).toHaveBeenCalledWith(
+        expect.stringMatching(/^auth:bluesky:link:.+$/),
+      );
       expect(mockClient.authorize).toHaveBeenCalledWith(
         'alice.bsky.social',
         expect.objectContaining({ state: expect.any(String) }),
@@ -1037,6 +1048,13 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
       jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+      // Mock successful verification read
+      mockElastiCacheService.get.mockResolvedValueOnce(
+        JSON.stringify({
+          userUlid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+          tenantId: 'tenant-123',
+        }),
+      );
 
       // Act
       await service.createLinkAuthUrl(
@@ -1057,6 +1075,26 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
         'android',
         600,
       );
+    });
+
+    it('should throw BadRequestException when Redis write verification fails', async () => {
+      // Arrange
+      const mockUrl = new URL('https://bsky.social/oauth/authorize');
+      const mockClient = {
+        authorize: jest.fn().mockResolvedValue(mockUrl),
+      };
+      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+      // Mock failed verification - Redis set succeeded but get returns null
+      mockElastiCacheService.get.mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        service.createLinkAuthUrl(
+          'alice.bsky.social',
+          'tenant-123',
+          '01hqvxz6j8k9m0n1p2q3r4s5t6',
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -1341,6 +1379,63 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
         }),
         'tenant-123',
       );
+    });
+
+    it('should return error redirect when database operation fails', async () => {
+      // Arrange: Database create fails
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.create.mockRejectedValue(
+        new Error('Database connection lost'),
+      );
+
+      // Act
+      const result = await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        mockProfile as any,
+      );
+
+      // Assert: Should return error redirect, not throw
+      expect(result.redirectUrl).toContain('linkError=');
+      expect(result.redirectUrl).toContain('Failed%20to%20save%20identity');
+      expect(result.sessionId).toBeUndefined();
+    });
+
+    it('should return error redirect when deleteByUserUlid fails during DID replacement', async () => {
+      // Arrange: Existing identity with different DID, delete fails
+      const existingIdentity = {
+        id: 5,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:olddid999', // Different DID
+        handle: 'alice.dev.opnmt.me',
+        pdsUrl: 'https://pds-dev.openmeet.net',
+        isCustodial: true,
+      };
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        existingIdentity,
+      );
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.deleteByUserUlid.mockRejectedValue(
+        new Error('Foreign key constraint violation'),
+      );
+
+      // Act
+      const result = await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        mockProfile as any,
+      );
+
+      // Assert: Should return error redirect, not throw
+      expect(result.redirectUrl).toContain('linkError=');
+      expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
     });
   });
 
