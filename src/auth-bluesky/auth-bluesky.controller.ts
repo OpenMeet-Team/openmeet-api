@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Query,
+  Param,
   Body,
   Res,
   Request,
@@ -98,6 +99,9 @@ export class AuthBlueskyController {
     return { authUrl };
   }
 
+  /**
+   * OAuth callback - query parameter version (legacy, kept for backwards compatibility)
+   */
   @Public()
   @TenantPublic()
   @Get('callback')
@@ -108,31 +112,60 @@ export class AuthBlueskyController {
       throw new Error('Tenant ID is required in query parameters');
     }
 
-    // Platform is determined inside handleAuthCallback using our appState
-    // (which is returned by client.callback(), not from query.state)
+    return this.handleCallback(query, effectiveTenantId, res);
+  }
+
+  /**
+   * OAuth callback - path parameter version (required for PDS compatibility).
+   * The PDS strips query parameters from redirect URIs, so tenantId must be in the path.
+   */
+  @Public()
+  @TenantPublic()
+  @Get('t/:tenantId/callback')
+  async callbackWithPathTenant(
+    @Param('tenantId') tenantId: string,
+    @Query() query: any,
+    @Res() res: Response,
+  ) {
+    if (!tenantId) {
+      this.logger.error('Missing tenant ID in callback path');
+      throw new Error('Tenant ID is required in path');
+    }
+
+    return this.handleCallback(query, tenantId, res);
+  }
+
+  /**
+   * Shared callback handler for both query and path parameter versions.
+   */
+  private async handleCallback(
+    query: any,
+    tenantId: string,
+    res: Response,
+  ): Promise<void> {
     this.logger.debug('Handling Bluesky callback:', {
-      tenantId: effectiveTenantId,
+      tenantId,
       state: query.state,
       code: query.code,
     });
 
     const { redirectUrl, sessionId } =
-      await this.authBlueskyService.handleAuthCallback(
-        query,
-        effectiveTenantId,
-      );
+      await this.authBlueskyService.handleAuthCallback(query, tenantId);
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (sessionId) {
       const cookieOptions = getOidcCookieOptions();
 
       res.cookie('oidc_session', sessionId, cookieOptions);
-      res.cookie('oidc_tenant', effectiveTenantId, cookieOptions);
+      res.cookie('oidc_tenant', tenantId, cookieOptions);
     }
 
     res.redirect(redirectUrl);
   }
 
+  /**
+   * Client metadata - query parameter version (legacy)
+   */
   @Public()
   @TenantPublic()
   @Get('client-metadata.json')
@@ -142,11 +175,44 @@ export class AuthBlueskyController {
     return client.clientMetadata;
   }
 
+  /**
+   * Client metadata - path parameter version (required for PDS compatibility).
+   * The PDS strips query parameters when fetching client metadata,
+   * so tenantId must be in the path.
+   */
+  @Public()
+  @TenantPublic()
+  @Get('t/:tenantId/client-metadata.json')
+  @Header('Content-Type', 'application/json')
+  async getClientMetadataWithPathTenant(@Param('tenantId') tenantId: string) {
+    this.logger.debug('Client metadata request with path tenant', { tenantId });
+    const client = await this.authBlueskyService.initializeClient(tenantId);
+    return client.clientMetadata;
+  }
+
+  /**
+   * JWKS - query parameter version (legacy)
+   */
   @Public()
   @TenantPublic()
   @Get('jwks.json')
   @Header('Content-Type', 'application/json')
   async getJwks(@Query('tenantId') tenantId: string) {
+    const client = await this.authBlueskyService.initializeClient(tenantId);
+    return client.jwks;
+  }
+
+  /**
+   * JWKS - path parameter version (required for PDS compatibility).
+   * The PDS strips query parameters when fetching JWKS,
+   * so tenantId must be in the path.
+   */
+  @Public()
+  @TenantPublic()
+  @Get('t/:tenantId/jwks.json')
+  @Header('Content-Type', 'application/json')
+  async getJwksWithPathTenant(@Param('tenantId') tenantId: string) {
+    this.logger.debug('JWKS request with path tenant', { tenantId });
     const client = await this.authBlueskyService.initializeClient(tenantId);
     return client.jwks;
   }
