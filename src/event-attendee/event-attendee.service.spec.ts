@@ -621,6 +621,51 @@ describe('EventAttendeeService', () => {
     });
   });
 
+  describe('showEventAttendees', () => {
+    it('should select atprotoUri field for attendees', async () => {
+      // Clear mocks to ensure clean state
+      jest.clearAllMocks();
+
+      // Track the addSelect calls
+      const addSelectCalls: any[] = [];
+      mockQueryBuilder.addSelect = jest.fn().mockImplementation((fields) => {
+        addSelectCalls.push(fields);
+        return mockQueryBuilder;
+      });
+
+      // Mock pagination to avoid the mainAlias error
+      mockQueryBuilder.getCount = jest.fn().mockResolvedValue(0);
+      mockQueryBuilder.skip = jest.fn().mockReturnThis();
+      mockQueryBuilder.take = jest.fn().mockReturnThis();
+      mockQueryBuilder.getMany = jest.fn().mockResolvedValue([]);
+      mockQueryBuilder.getManyAndCount = jest.fn().mockResolvedValue([[], 0]);
+      mockQueryBuilder.getQuery = jest.fn().mockReturnValue('SELECT ...');
+      mockQueryBuilder.getParameters = jest.fn().mockReturnValue({});
+
+      // Add expressionMap mock for paginate function
+      const mockMetadata = { name: 'EventAttendeesEntity' };
+      Object.defineProperty(mockQueryBuilder, 'expressionMap', {
+        get: () => ({
+          mainAlias: { metadata: mockMetadata },
+        }),
+        configurable: true,
+      });
+
+      // Call the method
+      await service.showEventAttendees(1, { page: 1, limit: 10 });
+
+      // Verify the query builder was called
+      expect(mockRepository.createQueryBuilder).toHaveBeenCalledWith(
+        'eventAttendee',
+      );
+
+      // Verify that atprotoUri is included in the addSelect call
+      // The addSelect is called with an array of fields
+      const allSelectedFields = addSelectCalls.flat();
+      expect(allSelectedFields).toContain('eventAttendee.atprotoUri');
+    });
+  });
+
   describe('Calendar invite integration', () => {
     it('should emit event.rsvp.added event when confirmed attendee is created', async () => {
       const mockEventRole: Partial<EventRoleEntity> = {
