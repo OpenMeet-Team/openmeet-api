@@ -235,7 +235,7 @@ export class AuthBlueskyService {
       );
     }
 
-    // Get email from session using transition:email scope
+    // Get email from session using account:email scope
     let email: string | undefined;
     let emailConfirmed: boolean = false;
 
