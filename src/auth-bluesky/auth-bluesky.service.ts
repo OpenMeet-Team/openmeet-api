@@ -218,20 +218,38 @@ export class AuthBlueskyService {
 
     const agent = new Agent(restoredSession);
 
-    const profile = await agent.getProfile({ actor: oauthSession.did });
+    // Fetch profile - optional, continue with minimal data if scope not granted
+    let profile: Awaited<ReturnType<typeof agent.getProfile>> | null = null;
+    try {
+      profile = await agent.getProfile({ actor: oauthSession.did });
+    } catch (error) {
+      this.logger.warn(
+        'Failed to fetch Bluesky profile (scope may not be granted):',
+        error,
+      );
+    }
 
     if (linkData) {
       this.logger.debug('Detected link callback flow', {
         appState,
         userUlid: linkData.userUlid,
       });
+      // Build profile object with fallbacks if getProfile failed
+      const linkProfile = profile || {
+        data: {
+          did: oauthSession.did,
+          handle: oauthSession.did, // Fallback to DID as handle
+          displayName: undefined,
+          avatar: undefined,
+        },
+      };
       return this.handleLinkCallback(
         oauthSession,
         restoredSession,
         appState!,
         tenantId,
         linkData,
-        profile,
+        linkProfile,
       );
     }
 
@@ -254,10 +272,10 @@ export class AuthBlueskyService {
     }
 
     const profileData = {
-      did: profile.data.did, // Important: This will be stored as socialId
-      handle: profile.data.handle,
-      displayName: profile.data.displayName,
-      avatar: profile.data.avatar,
+      did: profile?.data.did || oauthSession.did, // Fallback to session DID
+      handle: profile?.data.handle || oauthSession.did, // Fallback to DID as handle
+      displayName: profile?.data.displayName,
+      avatar: profile?.data.avatar,
       email: email,
       emailConfirmed: emailConfirmed,
     };
