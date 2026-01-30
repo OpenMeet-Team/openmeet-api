@@ -65,7 +65,7 @@ export async function initializeOAuthClient(
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       scope:
-        'atproto account:email repo:community.lexicon.calendar.event repo:community.lexicon.calendar.rsvp',
+        'atproto account:email rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app#bsky_appview repo:community.lexicon.calendar.event repo:community.lexicon.calendar.rsvp',
       application_type: 'web',
       token_endpoint_auth_method: 'private_key_jwt',
       token_endpoint_auth_signing_alg: 'ES256',
