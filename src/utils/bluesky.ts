@@ -50,17 +50,18 @@ export async function initializeOAuthClient(
     throw new Error('No valid keys found in environment variables');
   }
 
+  // Use path-based tenant routing for OAuth metadata URLs.
+  // The PDS strips query parameters when fetching client metadata,
+  // so we must embed tenantId in the URL path instead.
   const clientConfig: NodeOAuthClientOptions = {
     clientMetadata: {
-      client_id: `${baseUrl}/api/v1/auth/bluesky/client-metadata.json?tenantId=${tenantId}`,
+      client_id: `${baseUrl}/api/v1/auth/bluesky/t/${tenantId}/client-metadata.json`,
       client_name: 'OpenMeet',
       client_uri: baseUrl,
       logo_uri: `${baseUrl}/logo.png`,
       tos_uri: `${baseUrl}/terms`,
       policy_uri: `${baseUrl}/policy`,
-      redirect_uris: [
-        `${baseUrl}/api/v1/auth/bluesky/callback?tenantId=${tenantId}`,
-      ],
+      redirect_uris: [`${baseUrl}/api/v1/auth/bluesky/t/${tenantId}/callback`],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       scope: 'atproto transition:generic transition:email',
@@ -68,7 +69,7 @@ export async function initializeOAuthClient(
       token_endpoint_auth_method: 'private_key_jwt',
       token_endpoint_auth_signing_alg: 'ES256',
       dpop_bound_access_tokens: true,
-      jwks_uri: `${baseUrl}/api/v1/auth/bluesky/jwks.json?tenantId=${tenantId}`,
+      jwks_uri: `${baseUrl}/api/v1/auth/bluesky/t/${tenantId}/jwks.json`,
     },
     keyset,
     stateStore: new ElastiCacheStateStore(elasticacheService),
