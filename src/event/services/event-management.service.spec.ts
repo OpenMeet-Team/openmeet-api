@@ -1182,7 +1182,9 @@ describe('EventManagementService', () => {
         ...findOneMockEventEntity,
         id: 999,
       } as EventEntity;
-      jest.spyOn(service, 'create').mockResolvedValue(createdEvent);
+      jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({ event: createdEvent });
 
       mockRepository.update.mockResolvedValue({ affected: 1 } as any);
       mockRepository.findOne.mockResolvedValue(createdEvent);
@@ -1249,8 +1251,10 @@ describe('EventManagementService', () => {
         templateEvent: eventWithSeries,
       };
 
-      // First create returns event without series
-      jest.spyOn(service, 'create').mockResolvedValueOnce(eventWithoutSeries);
+      // First create returns event without series (wrapped in EventMutationResult)
+      jest
+        .spyOn(service, 'create')
+        .mockResolvedValueOnce({ event: eventWithoutSeries });
 
       // Mock the eventSeriesService.create to return a series with the template event
       mockEventSeriesService.create = jest.fn().mockResolvedValue(mockSeries);
@@ -1448,8 +1452,8 @@ describe('EventManagementService', () => {
 
       // Verify the result
       expect(result).toBeDefined();
-      expect(result.name).toBe('Now a Recurring Event');
-      expect(result.seriesSlug).toBe('new-series-slug');
+      expect(result.event.name).toBe('Now a Recurring Event');
+      expect(result.event.seriesSlug).toBe('new-series-slug');
 
       // Verify findOne was called with the correct slug
       expect(mockRepository.findOne).toHaveBeenCalledWith(
@@ -1856,6 +1860,252 @@ describe('EventManagementService', () => {
           atprotoRkey: 'xyz789',
         }),
       );
+    });
+  });
+
+  describe('needsOAuthLink in event responses (Issue om-p71n)', () => {
+    let mockAtprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
+
+    beforeEach(async () => {
+      // Reset mocks before each test
+      mockRepository.findOne.mockReset();
+      mockRepository.save.mockReset();
+      mockRepository.create.mockReset();
+      mockRepository.update.mockReset();
+
+      // Get the mock service instance
+      mockAtprotoPublisherService = service[
+        'atprotoPublisherService'
+      ] as jest.Mocked<AtprotoPublisherService>;
+
+      // Setup common mock responses
+      jest.spyOn(service['categoryService'], 'findByIds').mockResolvedValue([]);
+      jest
+        .spyOn(eventAttendeeService, 'create')
+        .mockResolvedValue({} as EventAttendeesEntity);
+    });
+
+    it('should include needsOAuthLink: true in create response when AT Protocol needs OAuth', async () => {
+      const createdEvent = {
+        ...findOneMockEventEntity,
+        id: 905,
+        slug: 'needs-oauth-create-test',
+        sourceType: null,
+      } as EventEntity;
+
+      mockRepository.create.mockReturnValue(createdEvent);
+      mockRepository.save.mockResolvedValue(createdEvent);
+      mockRepository.findOne.mockResolvedValue(createdEvent);
+
+      // Mock AT Protocol publisher to return needsOAuthLink
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'error',
+        error:
+          'Link your AT Protocol account to publish events. Go to Settings > Connected Accounts to connect.',
+        needsOAuthLink: true,
+      });
+
+      const createEventDto: CreateEventDto = {
+        name: 'Event Needing OAuth',
+        description: 'Test Event Description',
+        startDate: new Date(),
+        type: EventType.InPerson,
+        location: 'Test Location',
+        locationOnline: '',
+        maxAttendees: 100,
+        categories: [],
+        lat: 1,
+        lon: 1,
+        timeZone: 'UTC',
+      };
+
+      const result = await service.create(createEventDto, mockUser.id);
+
+      // The result should include needsOAuthLink
+      expect(result).toBeDefined();
+      expect(result.event).toBeDefined();
+      expect(result.event.slug).toBe('needs-oauth-create-test');
+      expect(result.needsOAuthLink).toBe(true);
+    });
+
+    it('should not include needsOAuthLink in create response when AT Protocol publishes successfully', async () => {
+      const createdEvent = {
+        ...findOneMockEventEntity,
+        id: 906,
+        slug: 'no-oauth-needed-create-test',
+        sourceType: null,
+      } as EventEntity;
+
+      mockRepository.create.mockReturnValue(createdEvent);
+      mockRepository.save.mockResolvedValue(createdEvent);
+      mockRepository.findOne.mockResolvedValue(createdEvent);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock successful AT Protocol publishing
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'published',
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/abc123',
+        atprotoRkey: 'abc123',
+      });
+
+      const createEventDto: CreateEventDto = {
+        name: 'Event Without OAuth Issue',
+        description: 'Test Event Description',
+        startDate: new Date(),
+        type: EventType.InPerson,
+        location: 'Test Location',
+        locationOnline: '',
+        maxAttendees: 100,
+        categories: [],
+        lat: 1,
+        lon: 1,
+        timeZone: 'UTC',
+      };
+
+      const result = await service.create(createEventDto, mockUser.id);
+
+      // The result should have the event and needsOAuthLink should be false or undefined
+      expect(result).toBeDefined();
+      expect(result.event).toBeDefined();
+      expect(result.needsOAuthLink).toBeFalsy();
+    });
+
+    it('should include needsOAuthLink: true in update response when AT Protocol needs OAuth', async () => {
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 907,
+        slug: 'needs-oauth-update-test',
+        sourceType: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...existingEvent,
+        name: 'Updated Event Name',
+        updatedAt: new Date('2024-01-02'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+
+      // First call returns existing event, second returns updated
+      let callCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve(existingEvent);
+        return Promise.resolve(updatedEvent);
+      });
+      mockRepository.save.mockResolvedValue(updatedEvent);
+
+      // Mock AT Protocol publisher to return needsOAuthLink
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'error',
+        error:
+          'Link your AT Protocol account to publish events. Go to Settings > Connected Accounts to connect.',
+        needsOAuthLink: true,
+      });
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Event Name',
+      };
+
+      const result = await service.update('needs-oauth-update-test', updateDto);
+
+      // The result should include needsOAuthLink
+      expect(result).toBeDefined();
+      expect(result.event).toBeDefined();
+      expect(result.event.name).toBe('Updated Event Name');
+      expect(result.needsOAuthLink).toBe(true);
+    });
+
+    it('should not include needsOAuthLink in update response when AT Protocol publishes successfully', async () => {
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 908,
+        slug: 'no-oauth-needed-update-test',
+        sourceType: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...existingEvent,
+        name: 'Updated Event Name',
+        updatedAt: new Date('2024-01-02'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+
+      let callCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve(existingEvent);
+        return Promise.resolve(updatedEvent);
+      });
+      mockRepository.save.mockResolvedValue(updatedEvent);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock successful AT Protocol publishing
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'updated',
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/def456',
+        atprotoRkey: 'def456',
+      });
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Event Name',
+      };
+
+      const result = await service.update(
+        'no-oauth-needed-update-test',
+        updateDto,
+      );
+
+      // The result should have the event and needsOAuthLink should be false or undefined
+      expect(result).toBeDefined();
+      expect(result.event).toBeDefined();
+      expect(result.needsOAuthLink).toBeFalsy();
+    });
+
+    it('should not include needsOAuthLink when AT Protocol publishing is skipped', async () => {
+      const createdEvent = {
+        ...findOneMockEventEntity,
+        id: 909,
+        slug: 'skipped-publish-test',
+        sourceType: null,
+      } as EventEntity;
+
+      mockRepository.create.mockReturnValue(createdEvent);
+      mockRepository.save.mockResolvedValue(createdEvent);
+      mockRepository.findOne.mockResolvedValue(createdEvent);
+
+      // Mock AT Protocol publisher to skip (e.g., user has no AT Protocol identity)
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'skipped',
+      });
+
+      const createEventDto: CreateEventDto = {
+        name: 'Event With Skipped Publish',
+        description: 'Test Event Description',
+        startDate: new Date(),
+        type: EventType.InPerson,
+        location: 'Test Location',
+        locationOnline: '',
+        maxAttendees: 100,
+        categories: [],
+        lat: 1,
+        lon: 1,
+        timeZone: 'UTC',
+      };
+
+      const result = await service.create(createEventDto, mockUser.id);
+
+      // The result should have the event and needsOAuthLink should be false or undefined
+      expect(result).toBeDefined();
+      expect(result.event).toBeDefined();
+      expect(result.needsOAuthLink).toBeFalsy();
     });
   });
 

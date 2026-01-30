@@ -183,12 +183,14 @@ describe('Occurrence Date Offset Bug (#421)', () => {
         .mockImplementation((dto: any) => {
           capturedDto = dto;
           return Promise.resolve({
-            ...templateEvent,
-            ...dto,
-            id: 2,
-            slug: 'crmc-monthly-meeting-march',
-            seriesSlug: dto.seriesSlug,
-          } as any);
+            event: {
+              ...templateEvent,
+              ...dto,
+              id: 2,
+              slug: 'crmc-monthly-meeting-march',
+              seriesSlug: dto.seriesSlug,
+            } as any,
+          });
         });
 
       await service.materializeOccurrence(
@@ -244,11 +246,13 @@ describe('Occurrence Date Offset Bug (#421)', () => {
         .mockImplementation((dto: any) => {
           capturedDto = dto;
           return Promise.resolve({
-            ...templateEvent,
-            ...dto,
-            id: 2,
-            slug: 'crmc-monthly-meeting-march',
-          } as any);
+            event: {
+              ...templateEvent,
+              ...dto,
+              id: 2,
+              slug: 'crmc-monthly-meeting-march',
+            } as any,
+          });
         });
 
       await service.materializeOccurrence(
@@ -341,10 +345,12 @@ describe('Occurrence Date Offset Bug (#421)', () => {
       jest.spyOn(evtMgmt, 'create').mockImplementation((dto: any) => {
         capturedDto = dto;
         return Promise.resolve({
-          ...updatedTemplateEvent,
-          ...dto,
-          id: 2,
-        } as any);
+          event: {
+            ...updatedTemplateEvent,
+            ...dto,
+            id: 2,
+          } as any,
+        });
       });
 
       // Use UTC ISO string for March occurrence

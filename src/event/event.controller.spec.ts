@@ -213,7 +213,7 @@ describe('EventController', () => {
     it('should create a new event with all the data', async () => {
       jest
         .spyOn(eventManagementService, 'create')
-        .mockResolvedValue(mockEvent as EventEntity);
+        .mockResolvedValue({ event: mockEvent as EventEntity });
 
       const result = await controller.create(createEventDto, mockUser, {
         user: mockUser,
@@ -221,7 +221,7 @@ describe('EventController', () => {
         body: { ...createEventDto, timeZone: 'UTC' },
       } as unknown as Request);
 
-      expect(result).toEqual(mockEvent);
+      expect(result).toEqual({ event: mockEvent });
       expect(eventManagementService.create).toHaveBeenCalledWith(
         createEventDto,
         mockUser.id,
@@ -274,13 +274,14 @@ describe('EventController', () => {
   describe('update', () => {
     it('should update an event', async () => {
       const updateEventDto: UpdateEventDto = { name: 'Updated Event' };
+      const updatedEvent = { ...mockEvent, ...updateEventDto } as EventEntity;
       jest
         .spyOn(eventManagementService, 'update')
-        .mockResolvedValue({ ...mockEvent, ...updateEventDto } as EventEntity);
+        .mockResolvedValue({ event: updatedEvent });
       const result = await controller.update(mockEvent.slug, updateEventDto, {
         user: mockUser,
       } as unknown as Request);
-      expect(result).toEqual({ ...mockEvent, ...updateEventDto });
+      expect(result).toEqual(updatedEvent);
       expect(eventManagementService.update).toHaveBeenCalledWith(
         mockEvent.slug,
         updateEventDto,
@@ -480,7 +481,7 @@ describe('EventController', () => {
       // Mock the eventManagementService.update method
       jest
         .spyOn(eventManagementService, 'update')
-        .mockResolvedValue(expectedResult);
+        .mockResolvedValue({ event: expectedResult });
 
       // Mock the eventQueryService.findEventBySlug method
       jest

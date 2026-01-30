@@ -163,12 +163,14 @@ describe('DST Materialization Bug', () => {
       .mockImplementation((dto: any) => {
         capturedDto = dto;
         return Promise.resolve({
-          ...templateEvent,
-          ...dto,
-          id: 2,
-          slug: 'materialized-event',
-          seriesSlug: dto.seriesSlug,
-        } as any);
+          event: {
+            ...templateEvent,
+            ...dto,
+            id: 2,
+            slug: 'materialized-event',
+            seriesSlug: dto.seriesSlug,
+          } as any,
+        });
       });
 
     // Materialize occurrence for November 12 (after DST ended on Nov 2)
@@ -225,11 +227,13 @@ describe('DST Materialization Bug', () => {
       .mockImplementation((dto: any) => {
         capturedDto = dto;
         return Promise.resolve({
-          ...templateEvent,
-          ...dto,
-          id: 2,
-          slug: 'materialized-event',
-        } as any);
+          event: {
+            ...templateEvent,
+            ...dto,
+            id: 2,
+            slug: 'materialized-event',
+          } as any,
+        });
       });
 
     await service.materializeOccurrence(

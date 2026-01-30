@@ -55,6 +55,7 @@ import {
 import { ContactOrganizersDto } from './dto/contact-organizers.dto';
 import { EventMailService } from '../event-mail/event-mail.service';
 import { AdminMessageResult } from './interfaces/admin-message-result.interface';
+import { EventMutationResult } from './interfaces/event-mutation-result.interface';
 
 @ApiTags('Events')
 @Controller('events')
@@ -132,7 +133,7 @@ export class EventController {
     @Body() createEventDto: CreateEventDto,
     @AuthUser() user: User,
     @Req() req: Request,
-  ): Promise<EventEntity> {
+  ): Promise<EventMutationResult> {
     // Log the raw request for debugging
     this.logger.debug(
       `EVENT CREATE REQUEST [${createEventDto.name}]:
@@ -201,7 +202,7 @@ export class EventController {
       `Updating event with DTO: ${JSON.stringify(updateEventDto)}`,
     );
 
-    const updatedEvent = await this.eventManagementService.update(
+    const { event: updatedEvent } = await this.eventManagementService.update(
       slug,
       updateEventDto,
       userId,

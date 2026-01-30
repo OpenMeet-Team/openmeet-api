@@ -1404,7 +1404,7 @@ export class EventSeriesService {
     }
 
     // Create the event with materialized and seriesSlug set
-    const event = await this.eventManagementService.create(
+    const { event } = await this.eventManagementService.create(
       {
         ...eventData,
         startDate: occurrenceDate,
@@ -1481,7 +1481,7 @@ export class EventSeriesService {
       event.seriesSlug = series.slug;
 
       // Save the updated event
-      const updatedEvent = await this.eventManagementService.update(
+      const { event: updatedEvent } = await this.eventManagementService.update(
         event.slug,
         {
           seriesSlug: series.slug,

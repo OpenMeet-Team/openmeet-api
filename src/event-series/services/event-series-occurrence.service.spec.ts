@@ -426,7 +426,7 @@ describe('EventSeriesOccurrenceService', () => {
       };
 
       // Mock create and response lookup
-      eventManagementService.create.mockResolvedValue(newOccurrence);
+      eventManagementService.create.mockResolvedValue({ event: newOccurrence });
       eventQueryService.findEventBySlug.mockResolvedValueOnce(newOccurrence);
 
       // Execute test
@@ -566,7 +566,7 @@ describe('EventSeriesOccurrenceService', () => {
         seriesSlug: seriesSlug,
       };
 
-      eventManagementService.create.mockResolvedValue(newOccurrence);
+      eventManagementService.create.mockResolvedValue({ event: newOccurrence });
 
       // Execute
       const result = await service.materializeOccurrence(
@@ -655,9 +655,9 @@ describe('EventSeriesOccurrenceService', () => {
         },
       };
 
-      eventManagementService.create.mockResolvedValue(
-        createdOccurrenceWithBluesky,
-      );
+      eventManagementService.create.mockResolvedValue({
+        event: createdOccurrenceWithBluesky,
+      });
 
       // Execute test
       const result = await service.materializeOccurrence(
@@ -727,7 +727,7 @@ describe('EventSeriesOccurrenceService', () => {
         seriesSlug: seriesSlug,
       };
 
-      eventManagementService.create.mockResolvedValue(newOccurrence);
+      eventManagementService.create.mockResolvedValue({ event: newOccurrence });
 
       // Execute test
       await service.materializeOccurrence(seriesSlug, occurrenceDate, userId);
@@ -847,7 +847,7 @@ describe('EventSeriesOccurrenceService', () => {
         sourceData: null,
       };
 
-      eventManagementService.create.mockResolvedValue(newOccurrence);
+      eventManagementService.create.mockResolvedValue({ event: newOccurrence });
 
       // Execute test
       const result = await service.materializeOccurrence(
