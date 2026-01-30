@@ -373,6 +373,7 @@ export class EventAttendeeService {
       .leftJoin('eventAttendee.user', 'user')
       .leftJoin('user.photo', 'photo')
       .addSelect([
+        'eventAttendee.atprotoUri',
         'user.name',
         'user.slug',
         'user.provider',
