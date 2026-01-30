@@ -64,7 +64,8 @@ export async function initializeOAuthClient(
       redirect_uris: [`${baseUrl}/api/v1/auth/bluesky/t/${tenantId}/callback`],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      scope: 'atproto transition:generic transition:email',
+      scope:
+        'atproto account:email repo:community.lexicon.calendar.event repo:community.lexicon.calendar.rsvp',
       application_type: 'web',
       token_endpoint_auth_method: 'private_key_jwt',
       token_endpoint_auth_signing_alg: 'ES256',
