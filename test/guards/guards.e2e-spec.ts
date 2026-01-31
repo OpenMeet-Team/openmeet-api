@@ -459,7 +459,7 @@ describe('Guards (e2e)', () => {
         .send({ name: 'Updated Event Name' });
 
       expect(response.status).toBe(200);
-      expect(response.body.name).toBe('Updated Event Name');
+      expect(response.body.event.name).toBe('Updated Event Name');
     });
 
     it('should deny event editing to non-creator', async () => {

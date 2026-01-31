@@ -158,7 +158,7 @@ describe('Event Location Validation (e2e)', () => {
         'NaN in priority was handled (likely converted to null or 0)',
       );
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${response.body.slug}`)
+        .delete(`/api/events/${response.body.event?.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -239,7 +239,7 @@ describe('Event Location Validation (e2e)', () => {
 
     // Clean up the created event
     if (createResponse.status === 201) {
-      const eventSlug = createResponse.body.slug;
+      const eventSlug = createResponse.body.event?.slug;
       await request(TESTING_APP_URL)
         .delete(`/api/events/${eventSlug}`)
         .set('Authorization', `Bearer ${token}`)
@@ -348,7 +348,7 @@ describe('Event Location Validation (e2e)', () => {
 
     // If it somehow created the event, clean it up
     if (response.status === 201) {
-      const eventSlug = response.body.slug;
+      const eventSlug = response.body.event?.slug;
       await request(TESTING_APP_URL)
         .delete(`/api/events/${eventSlug}`)
         .set('Authorization', `Bearer ${token}`)
@@ -428,7 +428,7 @@ describe('Event Location Validation (e2e)', () => {
       );
       // Clean up the created event
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${response.body.slug}`)
+        .delete(`/api/events/${response.body.event?.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     } else {

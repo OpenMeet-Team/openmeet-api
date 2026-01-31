@@ -270,7 +270,8 @@ describe('Create Series From Event Tests (e2e)', () => {
       .send(recurrenceUpdateData);
 
     expect(updateResponse.status).toBe(200);
-    const updatedEvent = updateResponse.body as EventEntity;
+    // API returns EventMutationResult { event, needsOAuthLink? }, extract the event
+    const updatedEvent = updateResponse.body.event as EventEntity;
 
     // Verify the event is now connected to a series
     console.log('updatedEvent', updatedEvent);

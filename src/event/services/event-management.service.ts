@@ -50,6 +50,7 @@ import { assert } from 'console';
 import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
 import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
+import { EventMutationResult } from '../interfaces/event-mutation-result.interface';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -97,13 +98,15 @@ export class EventManagementService {
 
   /**
    * Creates a new event
+   *
+   * @returns EventMutationResult containing the event and optional publishing metadata
    */
   @Trace('event-management.create')
   async create(
     createEventDto: CreateEventDto,
     userId: number,
     _options: Record<string, unknown> = {},
-  ): Promise<EventEntity> {
+  ): Promise<EventMutationResult> {
     this.logger.debug(
       `Creating event with dto: ${JSON.stringify(createEventDto)}`,
     );
@@ -481,6 +484,8 @@ export class EventManagementService {
     // Publish to AT Protocol (user's PDS) if eligible
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     const eventToPublish = event || createdEvent;
+    let needsOAuthLink: boolean | undefined;
+
     if (eventToPublish && !createEventDto.sourceType) {
       const publishResult = await this.atprotoPublisherService.publishEvent(
         eventToPublish,
@@ -505,9 +510,19 @@ export class EventManagementService {
           `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
         );
       }
+
+      // Capture needsOAuthLink if the publish result indicates OAuth is needed
+      if (publishResult.needsOAuthLink) {
+        needsOAuthLink = true;
+      }
     }
 
-    return event || createdEvent; // Fallback to createdEvent if findOne returns null
+    const resultEvent = event || createdEvent; // Fallback to createdEvent if findOne returns null
+
+    return {
+      event: resultEvent,
+      ...(needsOAuthLink && { needsOAuthLink }),
+    };
   }
 
   /**
@@ -517,6 +532,8 @@ export class EventManagementService {
    * @param userId The ID of the user performing the update
    * @param sendNotifications Whether to send notification emails to attendees (defaults to false)
    * @param The userId parameter is deprecated and will be removed in a future version
+   *
+   * @returns EventMutationResult containing the event and optional publishing metadata
    */
   @Trace('event-management.update')
   async update(
@@ -524,7 +541,7 @@ export class EventManagementService {
     updateEventDto: UpdateEventDto,
     userId?: number, // deprecated
     sendNotifications?: boolean,
-  ): Promise<EventEntity> {
+  ): Promise<EventMutationResult> {
     await this.initializeRepository();
 
     // Log deprecation warning when userId is explicitly provided
@@ -649,7 +666,7 @@ export class EventManagementService {
           );
         }
 
-        return convertedEvent;
+        return { event: convertedEvent };
       } catch (error) {
         this.logger.error(
           `Error converting event ${slug} to recurring event: ${error.message}`,
@@ -937,6 +954,8 @@ export class EventManagementService {
 
     // Publish to AT Protocol (user's PDS) if eligible
     // This is for user-created events (not Bluesky-sourced events which are handled above)
+    let needsOAuthLink: boolean | undefined;
+
     if (!event.sourceType) {
       const publishResult = await this.atprotoPublisherService.publishEvent(
         updatedEvent,
@@ -961,6 +980,11 @@ export class EventManagementService {
           `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
         );
       }
+
+      // Capture needsOAuthLink if the publish result indicates OAuth is needed
+      if (publishResult.needsOAuthLink) {
+        needsOAuthLink = true;
+      }
     }
 
     // Emit event update event
@@ -972,7 +996,10 @@ export class EventManagementService {
       sendNotifications: sendNotifications ?? false, // Default to false
     });
 
-    return updatedEvent;
+    return {
+      event: updatedEvent,
+      ...(needsOAuthLink && { needsOAuthLink }),
+    };
   }
 
   @Trace('event-management.remove')
@@ -1250,7 +1277,7 @@ export class EventManagementService {
     }
 
     // Create the event with series relationship
-    const event = await this.create(
+    const { event } = await this.create(
       {
         ...eventData,
         startDate: occurrenceDate,
@@ -1327,7 +1354,11 @@ export class EventManagementService {
       }
 
       // Update the event with the new data
-      const updatedEvent = await this.update(slug, updateEventDto, userId);
+      const { event: updatedEvent } = await this.update(
+        slug,
+        updateEventDto,
+        userId,
+      );
 
       // If this is a series occurrence and need to mark as modified, we already have the needed data
       if (event.seriesSlug && markAsModified) {
@@ -2060,7 +2091,7 @@ export class EventManagementService {
     userId: number,
   ): Promise<EventEntity> {
     // First create the template event
-    const templateEvent = await this.create(createEventDto, userId);
+    const { event: templateEvent } = await this.create(createEventDto, userId);
 
     // Create a series with the template event's slug
     const series = await this.eventSeriesService.create(

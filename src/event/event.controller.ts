@@ -55,6 +55,7 @@ import {
 import { ContactOrganizersDto } from './dto/contact-organizers.dto';
 import { EventMailService } from '../event-mail/event-mail.service';
 import { AdminMessageResult } from './interfaces/admin-message-result.interface';
+import { EventMutationResult } from './interfaces/event-mutation-result.interface';
 
 @ApiTags('Events')
 @Controller('events')
@@ -132,7 +133,7 @@ export class EventController {
     @Body() createEventDto: CreateEventDto,
     @AuthUser() user: User,
     @Req() req: Request,
-  ): Promise<EventEntity> {
+  ): Promise<EventMutationResult> {
     // Log the raw request for debugging
     this.logger.debug(
       `EVENT CREATE REQUEST [${createEventDto.name}]:
@@ -193,7 +194,7 @@ export class EventController {
     @Param('slug') slug: string,
     @Body() updateEventDto: UpdateEventDto,
     @Req() req: Request,
-  ): Promise<EventEntity> {
+  ): Promise<EventMutationResult> {
     const user = req.user as UserEntity;
     const userId = user?.id;
 
@@ -201,7 +202,7 @@ export class EventController {
       `Updating event with DTO: ${JSON.stringify(updateEventDto)}`,
     );
 
-    const updatedEvent = await this.eventManagementService.update(
+    const result = await this.eventManagementService.update(
       slug,
       updateEventDto,
       userId,
@@ -211,14 +212,15 @@ export class EventController {
     // Log what we're returning to help debug the test issue
     this.logger.debug(
       `Returning updated event: ${JSON.stringify({
-        id: updatedEvent.id,
-        slug: updatedEvent.slug,
-        seriesSlug: updatedEvent.seriesSlug,
-        series: updatedEvent.series,
+        id: result.event.id,
+        slug: result.event.slug,
+        seriesSlug: result.event.seriesSlug,
+        series: result.event.series,
+        needsOAuthLink: result.needsOAuthLink,
       })}`,
     );
 
-    return updatedEvent;
+    return result;
   }
 
   @Permissions({

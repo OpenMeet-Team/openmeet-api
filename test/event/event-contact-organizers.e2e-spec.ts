@@ -54,7 +54,8 @@ describe('Event Contact Organizers (e2e)', () => {
       })
       .expect(201);
 
-    testEvent = eventResponse.body;
+    // API returns EventMutationResult { event, needsOAuthLink? }, extract the event
+    testEvent = eventResponse.body.event;
 
     // Set up MailDev service helper (gracefully handle if not available)
     mailDevService = {

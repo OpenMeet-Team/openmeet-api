@@ -523,7 +523,7 @@ describe('EventController (e2e)', () => {
       .send(templateEventData)
       .expect(201);
 
-    const templateEventSlug = templateResponse.body.slug;
+    const templateEventSlug = templateResponse.body.event.slug;
 
     // Now create the series with the template event slug
     const seriesResponse = await request(TESTING_APP_URL)
@@ -575,12 +575,12 @@ describe('EventController (e2e)', () => {
       .send(singleEventData)
       .expect(201);
 
-    expect(eventResponse.body.name).toBe(singleEventData.name);
+    expect(eventResponse.body.event.name).toBe(singleEventData.name);
 
     //  now add the event to the series using a one-off event
     const addEventResponse = await request(TESTING_APP_URL)
       .post(
-        `/api/event-series/${seriesSlug}/add-event/${eventResponse.body.slug}`,
+        `/api/event-series/${seriesSlug}/add-event/${eventResponse.body.event.slug}`,
       )
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
@@ -591,7 +591,7 @@ describe('EventController (e2e)', () => {
 
     // Optional: Check the response body of the add event call
     if (addEventResponse.status === 200 || addEventResponse.status === 201) {
-      expect(addEventResponse.body.slug).toBe(eventResponse.body.slug);
+      expect(addEventResponse.body.slug).toBe(eventResponse.body.event.slug);
     }
     // Verify the series exists (association already checked above)
     const seriesGetResponse = await request(TESTING_APP_URL)
@@ -694,7 +694,7 @@ describe('EventController (e2e)', () => {
       .send(templateEventData)
       .expect(201);
 
-    const templateEventSlug = templateResponse.body.slug;
+    const templateEventSlug = templateResponse.body.event.slug;
 
     // 1. Create the series with the template event
     const seriesResponse = await request(TESTING_APP_URL)
@@ -745,9 +745,9 @@ describe('EventController (e2e)', () => {
       .send(independentEventData)
       .expect(201);
 
-    const eventSlug = independentEventResponse.body.slug;
-    expect(independentEventResponse.body.name).toBe('Independent Event to Add');
-    expect(independentEventResponse.body.seriesSlug).toBeNull(); // Verify it's independent
+    const eventSlug = independentEventResponse.body.event.slug;
+    expect(independentEventResponse.body.event.name).toBe('Independent Event to Add');
+    expect(independentEventResponse.body.event.seriesSlug).toBeNull(); // Verify it's independent
 
     // 3. Add the independent event to the series as a one-off
     const addEventResponse = await request(TESTING_APP_URL)

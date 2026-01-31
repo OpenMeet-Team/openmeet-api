@@ -180,7 +180,8 @@ async function createEvent(app: string, authToken: string, eventData: any) {
   }
 
   expect(response.status).toBe(201);
-  return response.body;
+  // API returns EventMutationResult { event, needsOAuthLink? }, extract the event
+  return response.body.event;
 }
 
 async function getRecommendedEvents(
@@ -227,13 +228,15 @@ async function updateEvent(app, token, eventSlug, eventData) {
   }
 
   expect(response.status).toBe(200);
-  expect(eventSlug).toBe(response.body.slug);
+  // API returns EventMutationResult { event, needsOAuthLink? }, extract the event
+  const event = response.body.event;
+  expect(eventSlug).toBe(event.slug);
   if (eventData.name) {
-    expect(eventData.name).toBe(response.body.name);
+    expect(eventData.name).toBe(event.name);
   }
 
-  // console.log('Update event response:', JSON.stringify(response.body, null, 2));
-  return response.body as EventEntity;
+  // console.log('Update event response:', JSON.stringify(event, null, 2));
+  return event as EventEntity;
 }
 
 async function getAllEvents(app, token) {

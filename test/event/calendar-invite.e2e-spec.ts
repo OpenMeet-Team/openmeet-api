@@ -64,7 +64,7 @@ describe('Calendar Invite E2E', () => {
       })
       .expect(201);
 
-    testEvent = eventResponse.body;
+    testEvent = eventResponse.body.event;
 
     // Set up MailDev service helper
     mailDevService = {
@@ -338,7 +338,7 @@ describe('Calendar Invite E2E', () => {
         .send({
           name: 'Pending User',
           email: testEmail,
-          eventSlug: approvalEvent.body.slug,
+          eventSlug: approvalEvent.body.event.slug,
         })
         .expect(201);
 
@@ -445,7 +445,7 @@ describe('Calendar Invite E2E', () => {
         })
         .expect(201);
 
-      console.log('PST Event created:', pstEvent.body.slug);
+      console.log('PST Event created:', pstEvent.body.event.slug);
 
       // Do Quick RSVP to trigger calendar invite
       await serverApp
@@ -453,7 +453,7 @@ describe('Calendar Invite E2E', () => {
         .send({
           name: 'VTIMEZONE Test',
           email: testEmail,
-          eventSlug: pstEvent.body.slug,
+          eventSlug: pstEvent.body.event.slug,
           status: EventAttendeeStatus.Confirmed,
         })
         .expect(201);
@@ -565,7 +565,7 @@ describe('Calendar Invite E2E', () => {
         })
         .expect(201);
 
-      console.log('UTC Event created:', utcEvent.body.slug);
+      console.log('UTC Event created:', utcEvent.body.event.slug);
 
       // Do Quick RSVP
       await serverApp
@@ -573,7 +573,7 @@ describe('Calendar Invite E2E', () => {
         .send({
           name: 'UTC Test',
           email: testEmail,
-          eventSlug: utcEvent.body.slug,
+          eventSlug: utcEvent.body.event.slug,
           status: EventAttendeeStatus.Confirmed,
         })
         .expect(201);

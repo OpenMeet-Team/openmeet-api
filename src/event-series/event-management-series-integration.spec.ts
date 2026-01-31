@@ -341,11 +341,13 @@ describe('EventManagementService Integration with EventSeriesService', () => {
     jest.spyOn(managementService, 'create').mockImplementation(async (dto) => {
       await Promise.resolve();
       return {
-        id: 1,
-        name: dto.name,
-        slug: 'test-event',
-        seriesSlug: dto.seriesSlug ? 'test-series' : undefined,
-      } as any;
+        event: {
+          id: 1,
+          name: dto.name,
+          slug: 'test-event',
+          seriesSlug: dto.seriesSlug ? 'test-series' : undefined,
+        } as any,
+      };
     });
 
     // Create event with series
@@ -365,7 +367,7 @@ describe('EventManagementService Integration with EventSeriesService', () => {
     const result = await managementService.create(eventData, 1);
 
     expect(result).toBeDefined();
-    expect(result.seriesSlug).toBeDefined();
+    expect(result.event.seriesSlug).toBeDefined();
   });
 
   // This test has circular references that can't be easily mocked

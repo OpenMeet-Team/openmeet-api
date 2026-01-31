@@ -268,10 +268,8 @@ export class EventSeriesOccurrenceService {
           categories: [],
         };
 
-        const defaultTemplate = await this.eventManagementService.create(
-          defaultEventDto,
-          userId,
-        );
+        const { event: defaultTemplate } =
+          await this.eventManagementService.create(defaultEventDto, userId);
         updatedTemplateEvent = defaultTemplate;
         this.logger.debug(
           `Created new template event ${updatedTemplateEvent.slug} with seriesSlug: ${updatedTemplateEvent.seriesSlug || 'null'}`,
@@ -390,10 +388,8 @@ export class EventSeriesOccurrenceService {
       );
 
       // Create the occurrence
-      const materializedEvent = await this.eventManagementService.create(
-        createDto,
-        userId,
-      );
+      const { event: materializedEvent } =
+        await this.eventManagementService.create(createDto, userId);
 
       // Verify that the seriesSlug was preserved - but do not attempt to restore it
       if (!materializedEvent.seriesSlug) {
