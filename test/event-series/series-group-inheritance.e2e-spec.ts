@@ -122,10 +122,10 @@ describe('Event Series Group Inheritance (Issue #2)', () => {
 
       // Then: Event should be created
       expect(createResponse.status).toBe(201);
-      expect(createResponse.body.visibility).toBe(EventVisibility.Private);
+      expect(createResponse.body.event.visibility).toBe(EventVisibility.Private);
 
       // Store the series slug if it exists
-      seriesSlug = createResponse.body.seriesSlug;
+      seriesSlug = createResponse.body.event.seriesSlug;
     });
 
     it('should verify all series events have the groupId set', async () => {
@@ -230,10 +230,10 @@ describe('Event Series Group Inheritance (Issue #2)', () => {
 
       // Then: Event should be created successfully
       expect(createResponse.status).toBe(201);
-      expect(createResponse.body.visibility).toBe(EventVisibility.Public);
+      expect(createResponse.body.event.visibility).toBe(EventVisibility.Public);
 
       // Get series events
-      const seriesSlug = createResponse.body.seriesSlug;
+      const seriesSlug = createResponse.body.event.seriesSlug;
       if (seriesSlug) {
         const seriesResponse = await request(TESTING_APP_URL)
           .get(`/api/event-series/${seriesSlug}/occurrences`)
@@ -281,7 +281,7 @@ describe('Event Series Group Inheritance (Issue #2)', () => {
         .send(publicEventData);
 
       expect(createResponse.status).toBe(201);
-      const seriesSlug = createResponse.body.seriesSlug;
+      const seriesSlug = createResponse.body.event.seriesSlug;
 
       // When: Outsider tries to view public series
       const response = await request(TESTING_APP_URL)

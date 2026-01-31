@@ -77,7 +77,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
         })
         .expect(201);
 
-      const eventSlug = eventResponse.body.slug;
+      const eventSlug = eventResponse.body.event.slug;
 
       // Do Quick RSVP (creates shadow account)
       const rsvpResponse = await serverApp
@@ -339,7 +339,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
         .send({
           name: 'Test User',
           email,
-          eventSlug: eventResponse.body.slug,
+          eventSlug: eventResponse.body.event.slug,
         })
         .expect(201);
 

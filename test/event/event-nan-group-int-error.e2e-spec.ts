@@ -66,7 +66,7 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
       if (response.status === 201) {
         // Clean up the created event
         await request(TESTING_APP_URL)
-          .delete(`/api/events/${response.body.slug}`)
+          .delete(`/api/events/${response.body.event?.slug}`)
           .set('Authorization', `Bearer ${token}`)
           .set('x-tenant-id', TESTING_TENANT_ID);
       }
@@ -129,16 +129,16 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
     expect(response.status).toBe(201);
 
     // Verify that the group is null or undefined in the response
-    expect(response.body.group).toBeUndefined(); // Or .toBeUndefined(), adjust based on actual API behavior
+    expect(response.body.event?.group).toBeUndefined(); // Or .toBeUndefined(), adjust based on actual API behavior
 
     console.log(
       'NaN in group.id was handled gracefully, event created with null group.',
     );
 
     // Clean up the created event
-    if (response.body && response.body.slug) {
+    if (response.body && response.body.event?.slug) {
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${response.body.slug}`)
+        .delete(`/api/events/${response.body.event?.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -203,7 +203,7 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
 
         // Clean up the created event
         await request(TESTING_APP_URL)
-          .delete(`/api/events/${response.body.slug}`)
+          .delete(`/api/events/${response.body.event?.slug}`)
           .set('Authorization', `Bearer ${token}`)
           .set('x-tenant-id', TESTING_TENANT_ID);
       }
@@ -247,10 +247,10 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
 
     if (response.body) {
       console.log('Response body:', {
-        priority: response.body.priority,
-        groupId: response.body.group?.id,
-        id: response.body.id,
-        slug: response.body.slug,
+        priority: response.body.event?.priority,
+        groupId: response.body.event?.group?.id,
+        id: response.body.event?.id,
+        slug: response.body.event?.slug,
       });
     }
 
@@ -272,12 +272,12 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
     else if (response.status === 201) {
       console.log('Event was created successfully - NaN priority was handled');
       console.log(
-        `The priority value was converted to: ${response.body.priority}`,
+        `The priority value was converted to: ${response.body.event?.priority}`,
       );
 
       // Clean up the created event
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${response.body.slug}`)
+        .delete(`/api/events/${response.body.event?.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -340,7 +340,7 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
     if (response.status === 201) {
       // Clean up the created event
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${response.body.slug}`)
+        .delete(`/api/events/${response.body.event?.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -460,7 +460,7 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
 
         // Clean up the created event
         await request(TESTING_APP_URL)
-          .delete(`/api/events/${response.body.slug}`)
+          .delete(`/api/events/${response.body.event?.slug}`)
           .set('Authorization', `Bearer ${token}`)
           .set('x-tenant-id', TESTING_TENANT_ID);
       } else {
@@ -524,11 +524,11 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
         console.log(
           'Event was created successfully - string "null" was handled',
         );
-        console.log('Response group value:', response.body.group);
+        console.log('Response group value:', response.body.event?.group);
 
         // Clean up the created event
         await request(TESTING_APP_URL)
-          .delete(`/api/events/${response.body.slug}`)
+          .delete(`/api/events/${response.body.event?.slug}`)
           .set('Authorization', `Bearer ${token}`)
           .set('x-tenant-id', TESTING_TENANT_ID);
       } else {
@@ -579,9 +579,9 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
 
     if (response.body) {
       console.log('Response body:', {
-        group: response.body.group,
-        id: response.body.id,
-        slug: response.body.slug,
+        group: response.body.event?.group,
+        id: response.body.event?.id,
+        slug: response.body.event?.slug,
       });
     }
 
@@ -595,11 +595,11 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
       console.log(
         'Event was created successfully - string "null" group.id was handled',
       );
-      console.log(`The group value in response:`, response.body.group);
+      console.log(`The group value in response:`, response.body.event?.group);
 
       // Clean up the created event
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${response.body.slug}`)
+        .delete(`/api/events/${response.body.event?.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -659,11 +659,11 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
         console.log(
           'Event was created successfully - NaN was handled at service layer',
         );
-        console.log('Response group value:', response.body.group);
+        console.log('Response group value:', response.body.event?.group);
 
         // Clean up the created event
         await request(TESTING_APP_URL)
-          .delete(`/api/events/${response.body.slug}`)
+          .delete(`/api/events/${response.body.event?.slug}`)
           .set('Authorization', `Bearer ${token}`)
           .set('x-tenant-id', TESTING_TENANT_ID);
       } else {
@@ -709,9 +709,9 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
 
     if (response.body) {
       console.log('Response body:', {
-        group: response.body.group,
-        id: response.body.id,
-        slug: response.body.slug,
+        group: response.body.event?.group,
+        id: response.body.event?.id,
+        slug: response.body.event?.slug,
       });
     }
 
@@ -723,11 +723,11 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
     // If we get a 201, the null was handled successfully
     else if (response.status === 201) {
       console.log('Event was created successfully - null group.id was handled');
-      console.log(`The group value in response:`, response.body.group);
+      console.log(`The group value in response:`, response.body.event?.group);
 
       // Clean up the created event
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${response.body.slug}`)
+        .delete(`/api/events/${response.body.event?.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -786,11 +786,11 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
         }
       } else if (response.status === 201) {
         console.log('Event was created successfully - string "2" was handled');
-        console.log('Response group value:', response.body.group);
+        console.log('Response group value:', response.body.event?.group);
 
         // Clean up the created event
         await request(TESTING_APP_URL)
-          .delete(`/api/events/${response.body.slug}`)
+          .delete(`/api/events/${response.body.event?.slug}`)
           .set('Authorization', `Bearer ${token}`)
           .set('x-tenant-id', TESTING_TENANT_ID);
       } else {
@@ -839,15 +839,15 @@ describe('Event Creation with NaN Integer Error (e2e)', () => {
     expect(response.status).toBe(201);
 
     // Verify that the group is null or undefined in the response, as NaN should be handled gracefully
-    expect(response.body.group).toBeUndefined(); // Or .toBeUndefined() depending on API behavior
+    expect(response.body.event?.group).toBeUndefined(); // Or .toBeUndefined() depending on API behavior
 
     // If the test reaches here, it means NaN was handled correctly.
     console.log('NaN in group.id was handled gracefully, event created.');
 
     // Clean up the created event
-    if (response.body && response.body.slug) {
+    if (response.body && response.body.event?.slug) {
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${response.body.slug}`)
+        .delete(`/api/events/${response.body.event?.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }

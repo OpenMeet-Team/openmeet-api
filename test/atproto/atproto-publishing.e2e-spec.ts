@@ -210,7 +210,7 @@ describe('AT Protocol Publishing (e2e)', () => {
         .send(eventData);
 
       expect(createResponse.status).toBe(201);
-      const createdEvent = createResponse.body;
+      const createdEvent = createResponse.body.event;
       createdEventSlug = createdEvent.slug;
       createdEventId = createdEvent.id;
 
@@ -286,7 +286,7 @@ describe('AT Protocol Publishing (e2e)', () => {
         .send(privateEventData);
 
       expect(createResponse.status).toBe(201);
-      const privateEvent = createResponse.body;
+      const privateEvent = createResponse.body.event;
 
       await waitForBackend(2000);
 

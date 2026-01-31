@@ -281,7 +281,7 @@ describe('EventController', () => {
       const result = await controller.update(mockEvent.slug, updateEventDto, {
         user: mockUser,
       } as unknown as Request);
-      expect(result).toEqual(updatedEvent);
+      expect(result).toEqual({ event: updatedEvent });
       expect(eventManagementService.update).toHaveBeenCalledWith(
         mockEvent.slug,
         updateEventDto,

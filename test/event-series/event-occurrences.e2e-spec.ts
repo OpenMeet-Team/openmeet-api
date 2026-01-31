@@ -47,7 +47,7 @@ describe('EventOccurrencesService (e2e)', () => {
       .send(templateEventData)
       .expect(201);
 
-    templateEvent = templateResponse.body;
+    templateEvent = templateResponse.body.event;
 
     // 2. Create a series with the template event
     const seriesResponse = await request(TESTING_APP_URL)

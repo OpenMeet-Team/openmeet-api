@@ -71,7 +71,7 @@ describe('EventSeriesController (e2e)', () => {
       .send(eventData);
 
     expect(createEventResponse.status).toBe(201);
-    const templateEventSlug = createEventResponse.body.slug;
+    const templateEventSlug = createEventResponse.body.event.slug;
 
     // Create a new event series with proper ISO dates
     const seriesData = {
@@ -193,7 +193,7 @@ describe('EventSeriesController (e2e)', () => {
       .send(templateEventData);
 
     expect(templateEventResponse.status).toBe(201);
-    const templateEventSlug = templateEventResponse.body.slug;
+    const templateEventSlug = templateEventResponse.body.event.slug;
 
     // Create a new event series
     const seriesData = {
@@ -316,7 +316,7 @@ describe('EventSeriesController (e2e)', () => {
       .send(templateEventData);
 
     expect(createTemplateResponse.status).toBe(201);
-    const templateEventSlug = createTemplateResponse.body.slug;
+    const templateEventSlug = createTemplateResponse.body.event.slug;
 
     // Step 2: Create the event series using the template event's slug
     const uniqueId = Date.now();
@@ -468,7 +468,7 @@ describe('EventSeriesController (e2e)', () => {
       .send(templateEventData);
 
     expect(templateEventResponse.status).toBe(201);
-    const templateEventSlug = templateEventResponse.body.slug;
+    const templateEventSlug = templateEventResponse.body.event.slug;
 
     // Create an event series in the current tenant
     const seriesData = {
@@ -546,7 +546,7 @@ describe('EventSeriesController (e2e)', () => {
       .send(templateEventData);
 
     expect(templateEventResponse.status).toBe(201);
-    const templateEventSlug = templateEventResponse.body.slug;
+    const templateEventSlug = templateEventResponse.body.event.slug;
 
     // Create a new event series with unique slug
     const uniqueSlug = `series-slug-test-${Date.now()}`;
@@ -658,7 +658,7 @@ describe('EventSeriesController (e2e)', () => {
       .send(eventData);
 
     expect(createEventResponse.status).toBe(201);
-    const templateEventSlug = createEventResponse.body.slug;
+    const templateEventSlug = createEventResponse.body.event.slug;
 
     // Step 2: Create an event series using the event as a template
     const seriesData = {

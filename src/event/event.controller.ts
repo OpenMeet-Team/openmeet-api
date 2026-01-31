@@ -194,7 +194,7 @@ export class EventController {
     @Param('slug') slug: string,
     @Body() updateEventDto: UpdateEventDto,
     @Req() req: Request,
-  ): Promise<EventEntity> {
+  ): Promise<EventMutationResult> {
     const user = req.user as UserEntity;
     const userId = user?.id;
 
@@ -202,7 +202,7 @@ export class EventController {
       `Updating event with DTO: ${JSON.stringify(updateEventDto)}`,
     );
 
-    const { event: updatedEvent } = await this.eventManagementService.update(
+    const result = await this.eventManagementService.update(
       slug,
       updateEventDto,
       userId,
@@ -212,14 +212,15 @@ export class EventController {
     // Log what we're returning to help debug the test issue
     this.logger.debug(
       `Returning updated event: ${JSON.stringify({
-        id: updatedEvent.id,
-        slug: updatedEvent.slug,
-        seriesSlug: updatedEvent.seriesSlug,
-        series: updatedEvent.series,
+        id: result.event.id,
+        slug: result.event.slug,
+        seriesSlug: result.event.seriesSlug,
+        series: result.event.series,
+        needsOAuthLink: result.needsOAuthLink,
       })}`,
     );
 
-    return updatedEvent;
+    return result;
   }
 
   @Permissions({

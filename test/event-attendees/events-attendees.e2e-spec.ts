@@ -57,7 +57,8 @@ describe('EventAttendeeController (e2e)', () => {
       });
 
     expect(eventResponse.status).toBe(201);
-    return eventResponse.body;
+    // API returns EventMutationResult { event, needsOAuthLink? }, extract the event
+    return eventResponse.body.event;
   }
 
   async function attendEvent(token, eventSlug, attendData = {}) {
@@ -103,8 +104,10 @@ describe('EventAttendeeController (e2e)', () => {
     // First attend the event to make sure we have an attendance record
     await attendEvent(token, testEvent.slug);
 
+    // Request a higher limit to ensure we find the event regardless of pagination
     const getMyEventsResponse = await request(TESTING_APP_URL)
       .get('/api/events/dashboard')
+      .query({ limit: 100 })
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
