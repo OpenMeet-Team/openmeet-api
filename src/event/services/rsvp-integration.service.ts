@@ -70,12 +70,23 @@ export class RsvpIntegrationService {
         );
       }
 
-      // Find the event by source attributes using the full AT Protocol URI
-      const events = await this.eventQueryService.findBySourceAttributes(
+      // Find the event by source attributes using the full AT Protocol URI (imported events)
+      let events = await this.eventQueryService.findBySourceAttributes(
         rsvpData.eventSourceId,
         rsvpData.eventSourceType,
         tenantId,
       );
+
+      // If not found, try native events by atprotoUri
+      if (!events.length && rsvpData.eventSourceId.startsWith('at://')) {
+        this.logger.debug(
+          `Event not found by sourceId, trying atprotoUri: ${rsvpData.eventSourceId}`,
+        );
+        events = await this.eventQueryService.findByAtprotoUri(
+          rsvpData.eventSourceId,
+          tenantId,
+        );
+      }
 
       if (!events.length) {
         throw new Error(

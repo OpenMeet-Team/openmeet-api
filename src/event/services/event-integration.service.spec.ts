@@ -914,4 +914,73 @@ describe('EventIntegrationService', () => {
       );
     });
   });
+
+  describe('Native Event Matching by atprotoRkey', () => {
+    it('should find native OpenMeet event by atprotoRkey when it comes back from firehose', async () => {
+      // Arrange - native event that was published to AT Protocol
+      const nativeEvent = {
+        id: 100,
+        name: 'Native OpenMeet Event',
+        description: 'Created in OpenMeet, published to ATProto',
+        startDate: new Date('2024-01-01T10:00:00Z'),
+        endDate: new Date('2024-01-01T11:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+        sourceType: null, // Native event - no sourceType
+        atprotoRkey: 'native123rkey', // Pre-generated TID
+        atprotoUri:
+          'at://did:plc:openmeet/community.lexicon.calendar.event/native123rkey',
+        user: mockUser,
+      } as Partial<EventEntity>;
+
+      // Firehose delivers our own event back to us
+      const firehoseEvent: ExternalEventDto = {
+        name: 'Native OpenMeet Event',
+        description: 'Created in OpenMeet, published to ATProto',
+        startDate: '2024-01-01T10:00:00Z',
+        endDate: '2024-01-01T11:00:00Z',
+        type: EventType.InPerson,
+        source: {
+          type: EventSourceType.BLUESKY,
+          id: 'at://did:plc:openmeet/community.lexicon.calendar.event/native123rkey',
+          handle: 'openmeet.bsky.social',
+          metadata: {
+            rkey: 'native123rkey',
+          },
+        },
+      };
+
+      // Primary source lookup returns empty (this is NOT an imported event)
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      // Secondary URL lookup returns empty
+      eventRepository.find.mockResolvedValue([]);
+      // Tertiary rkey lookup in sourceData returns empty
+      eventRepository.createQueryBuilder.mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      } as any);
+      // Native event lookup by atprotoRkey should find it
+      eventRepository.findOne.mockResolvedValue(
+        nativeEvent as unknown as EventEntity,
+      );
+
+      // Act
+      const result = await service.processExternalEvent(
+        firehoseEvent,
+        'tenant1',
+      );
+
+      // Assert - should find the native event by atprotoRkey
+      expect(result.id).toBe(nativeEvent.id);
+      expect(eventRepository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            atprotoRkey: 'native123rkey',
+          }),
+        }),
+      );
+    });
+  });
 });

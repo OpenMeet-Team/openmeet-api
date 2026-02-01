@@ -51,6 +51,7 @@ import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
 import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
 import { SyncAtprotoResponseDto } from '../dto/sync-atproto-response.dto';
+import { TID } from '@atproto/common-web';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -483,6 +484,21 @@ export class EventManagementService {
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     const eventToPublish = event || createdEvent;
     if (eventToPublish && !createEventDto.sourceType) {
+      // Pre-generate TID only for events eligible for AT Protocol publishing
+      // (public visibility, published/cancelled status)
+      const isEligibleForAtproto =
+        eventToPublish.visibility === EventVisibility.Public &&
+        (eventToPublish.status === EventStatus.Published ||
+          eventToPublish.status === EventStatus.Cancelled);
+
+      if (isEligibleForAtproto && !eventToPublish.atprotoRkey) {
+        eventToPublish.atprotoRkey = TID.nextStr();
+        await this.eventRepository.save(eventToPublish);
+        this.logger.debug(
+          `Pre-generated atprotoRkey: ${eventToPublish.atprotoRkey}`,
+        );
+      }
+
       const publishResult = await this.atprotoPublisherService.publishEvent(
         eventToPublish,
         this.request.tenantId,
@@ -939,6 +955,20 @@ export class EventManagementService {
     // Publish to AT Protocol (user's PDS) if eligible
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     if (!event.sourceType) {
+      // Pre-generate TID only for events eligible for AT Protocol publishing
+      const isEligibleForAtproto =
+        updatedEvent.visibility === EventVisibility.Public &&
+        (updatedEvent.status === EventStatus.Published ||
+          updatedEvent.status === EventStatus.Cancelled);
+
+      if (isEligibleForAtproto && !updatedEvent.atprotoRkey) {
+        updatedEvent.atprotoRkey = TID.nextStr();
+        await this.eventRepository.save(updatedEvent);
+        this.logger.debug(
+          `Pre-generated atprotoRkey: ${updatedEvent.atprotoRkey}`,
+        );
+      }
+
       const publishResult = await this.atprotoPublisherService.publishEvent(
         updatedEvent,
         this.request.tenantId,
@@ -2257,6 +2287,18 @@ export class EventManagementService {
       throw new ForbiddenException(
         'Only the event creator can sync to AT Protocol',
       );
+    }
+
+    // Pre-generate TID only for events eligible for AT Protocol publishing
+    const isEligibleForAtproto =
+      event.visibility === EventVisibility.Public &&
+      (event.status === EventStatus.Published ||
+        event.status === EventStatus.Cancelled);
+
+    if (isEligibleForAtproto && !event.atprotoRkey) {
+      event.atprotoRkey = TID.nextStr();
+      await this.eventRepository.save(event);
+      this.logger.debug(`Pre-generated atprotoRkey: ${event.atprotoRkey}`);
     }
 
     // Call the AT Protocol publisher service

@@ -1513,6 +1513,29 @@ export class EventQueryService {
   }
 
   /**
+   * Find events by atprotoUri (for native OpenMeet events)
+   */
+  @Trace('event-query.findByAtprotoUri')
+  async findByAtprotoUri(
+    atprotoUri: string,
+    tenantId: string,
+  ): Promise<EventEntity[]> {
+    const tenantConnection =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepo = tenantConnection.getRepository(EventEntity);
+
+    this.logger.debug(`Finding events with atprotoUri: ${atprotoUri}`);
+
+    const events = await eventRepo.find({
+      where: { atprotoUri },
+      relations: ['user', 'categories', 'image', 'series'],
+    });
+
+    this.logger.debug(`Found ${events.length} events by atprotoUri`);
+    return events;
+  }
+
+  /**
    * Find all events (occurrences) that belong to a series by the series slug
    */
   @Trace('event-query.findEventsBySeriesSlug')

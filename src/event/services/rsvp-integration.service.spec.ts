@@ -70,7 +70,10 @@ describe('RsvpIntegrationService', () => {
         },
         {
           provide: EventQueryService,
-          useValue: { findBySourceAttributes: jest.fn() },
+          useValue: {
+            findBySourceAttributes: jest.fn(),
+            findByAtprotoUri: jest.fn().mockResolvedValue([]),
+          },
         },
         {
           provide: EventAttendeeService,
@@ -233,6 +236,53 @@ describe('RsvpIntegrationService', () => {
       await expect(
         service.deleteExternalRsvp('some-source-id', 'bluesky', ''),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('processExternalRsvp - native event lookup fallback', () => {
+    beforeEach(() => {
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue(null);
+    });
+
+    it('should fall back to atprotoUri lookup for native OpenMeet events', async () => {
+      // Arrange - native event that was published to AT Protocol
+      const nativeEvent = {
+        id: 100,
+        name: 'Native OpenMeet Event',
+        atprotoUri:
+          'at://did:plc:openmeet/community.lexicon.calendar.event/native123',
+        atprotoRkey: 'native123',
+        sourceType: null, // Native event - no sourceType
+      } as unknown as EventEntity;
+
+      // findBySourceAttributes returns empty (no imported event with this sourceId)
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      // But findByAtprotoUri finds the native event
+      (eventQueryService as any).findByAtprotoUri = jest
+        .fn()
+        .mockResolvedValue([nativeEvent]);
+
+      const nativeEventRsvp: ExternalRsvpDto = {
+        ...mockRsvpDto,
+        eventSourceId:
+          'at://did:plc:openmeet/community.lexicon.calendar.event/native123',
+      };
+
+      const mockAttendee = { id: 1, status: EventAttendeeStatus.Confirmed };
+      eventAttendeeService.create.mockResolvedValue(
+        mockAttendee as unknown as EventAttendeesEntity,
+      );
+
+      // Act
+      await service.processExternalRsvp(nativeEventRsvp, 'test-tenant');
+
+      // Assert - should have tried atprotoUri lookup after sourceAttributes failed
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalled();
+      expect((eventQueryService as any).findByAtprotoUri).toHaveBeenCalledWith(
+        'at://did:plc:openmeet/community.lexicon.calendar.event/native123',
+        'test-tenant',
+      );
+      expect(eventAttendeeService.create).toHaveBeenCalled();
     });
   });
 });

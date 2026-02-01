@@ -523,4 +523,45 @@ describe('EventQueryService', () => {
       expect(plainFirst.testProperty).toBe('Added after serialization');
     });
   });
+
+  describe('findByAtprotoUri', () => {
+    it('should find events by atprotoUri', async () => {
+      // Arrange
+      const atprotoUri =
+        'at://did:plc:test/community.lexicon.calendar.event/abc123';
+      const mockEvent = {
+        ...mockEventEntity,
+        atprotoUri,
+        atprotoRkey: 'abc123',
+      };
+
+      eventRepository.find.mockResolvedValue([mockEvent]);
+
+      // Act
+      const result = await service.findByAtprotoUri(atprotoUri, 'test-tenant');
+
+      // Assert
+      expect(eventRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { atprotoUri },
+        }),
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].atprotoUri).toBe(atprotoUri);
+    });
+
+    it('should return empty array when no events match atprotoUri', async () => {
+      // Arrange
+      eventRepository.find.mockResolvedValue([]);
+
+      // Act
+      const result = await service.findByAtprotoUri(
+        'at://did:plc:unknown/community.lexicon.calendar.event/xyz',
+        'test-tenant',
+      );
+
+      // Assert
+      expect(result).toHaveLength(0);
+    });
+  });
 });

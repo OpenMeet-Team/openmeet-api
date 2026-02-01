@@ -241,7 +241,10 @@ describeIfPds('AT Protocol Identity Linking (e2e)', () => {
       const newPassword = 'UserOwnedPassword789!';
 
       // Get reset token from the email sent by initiate-take-ownership
-      const resetToken = await waitForPdsResetToken(userEmail, initiateTimestamp);
+      const resetToken = await waitForPdsResetToken(
+        userEmail,
+        initiateTimestamp,
+      );
       expect(resetToken).toMatch(/^[A-Z0-9]{5}-[A-Z0-9]{5}$/);
 
       // Reset password via API

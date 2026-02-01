@@ -313,18 +313,23 @@ export class BlueskyService {
         });
       }
 
-      // Determine the rkey to use
+      // Determine the rkey to use - check in order of preference:
+      // 1. event.atprotoRkey (pre-generated TID, prevents duplicates on retry)
+      // 2. event.sourceData.rkey (for updates to existing events)
+      // 3. Generate new TID (for new events without pre-generated rkey)
       let rkey: string;
 
-      // If updating an existing event, use the existing rkey
-      if (event.sourceData?.rkey) {
+      if (event.atprotoRkey) {
+        rkey = event.atprotoRkey;
+        this.logger.debug(`Using pre-generated atprotoRkey: ${rkey}`);
+      } else if (event.sourceData?.rkey) {
         rkey = event.sourceData.rkey as string;
-        this.logger.debug(`Using existing rkey for update: ${rkey}`);
-      }
-      // For new events, generate a TID-based rkey (AT Protocol best practice)
-      else {
+        this.logger.debug(`Using existing sourceData.rkey: ${rkey}`);
+      } else {
         rkey = TID.nextStr();
-        this.logger.debug(`Generated new TID-based rkey for create: ${rkey}`);
+        this.logger.warn(
+          `Generated new TID at publish time: ${rkey}. Consider pre-generating.`,
+        );
       }
 
       // Prepare uris array with image if it exists

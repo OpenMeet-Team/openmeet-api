@@ -1904,7 +1904,8 @@ describe('EventManagementService', () => {
       let findOneCallCount = 0;
       mockRepository.findOne.mockImplementation(() => {
         findOneCallCount++;
-        if (findOneCallCount === 1) return Promise.resolve(eventWithoutAtprotoUri);
+        if (findOneCallCount === 1)
+          return Promise.resolve(eventWithoutAtprotoUri);
         return Promise.resolve(updatedEvent);
       });
       mockRepository.save.mockResolvedValue(updatedEvent);
@@ -1913,7 +1914,8 @@ describe('EventManagementService', () => {
       // Mock successful AT Protocol publishing
       mockAtprotoPublisherService.publishEvent.mockResolvedValue({
         action: 'published',
-        atprotoUri: 'at://did:plc:test/community.lexicon.calendar.event/retry123',
+        atprotoUri:
+          'at://did:plc:test/community.lexicon.calendar.event/retry123',
         atprotoRkey: 'retry123',
       });
 
@@ -1932,7 +1934,8 @@ describe('EventManagementService', () => {
       expect(mockRepository.update).toHaveBeenCalledWith(
         { id: updatedEvent.id },
         expect.objectContaining({
-          atprotoUri: 'at://did:plc:test/community.lexicon.calendar.event/retry123',
+          atprotoUri:
+            'at://did:plc:test/community.lexicon.calendar.event/retry123',
           atprotoRkey: 'retry123',
         }),
       );
@@ -2188,6 +2191,36 @@ describe('EventManagementService', () => {
       const result = await service.syncAtproto('pending-event', mockUser.id);
 
       expect(result.action).toBe('skipped');
+    });
+
+    it('should pre-generate and save atprotoRkey before publishing', async () => {
+      const eventToSync = {
+        ...findOneMockEventEntity,
+        id: 1006,
+        slug: 'event-needs-rkey',
+        user: { id: mockUser.id } as UserEntity,
+        atprotoUri: null,
+        atprotoRkey: null, // No pre-generated rkey
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(eventToSync);
+
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'published',
+        atprotoUri:
+          'at://did:plc:test/community.lexicon.calendar.event/newrkey',
+        atprotoRkey: 'newrkey',
+      });
+
+      await service.syncAtproto('event-needs-rkey', mockUser.id);
+
+      // Should have called save BEFORE publishEvent to persist the pre-generated TID
+      expect(mockRepository.save).toHaveBeenCalled();
+      const savedEvent = mockRepository.save.mock.calls[0][0];
+      // The saved event should have an atprotoRkey set (TID format: 13 chars)
+      expect(savedEvent.atprotoRkey).toBeDefined();
+      expect(savedEvent.atprotoRkey).toMatch(/^[a-z2-7]{13}$/);
     });
   });
 
