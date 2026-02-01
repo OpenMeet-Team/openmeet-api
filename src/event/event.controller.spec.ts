@@ -657,4 +657,77 @@ describe('EventController', () => {
       });
     });
   });
+
+  describe('syncAtproto', () => {
+    it('should sync event to AT Protocol and return created action', async () => {
+      const mockSyncResult = {
+        action: 'created' as const,
+        atprotoUri: 'at://did:plc:test/community.lexicon.calendar.event/abc123',
+      };
+      mockEventManagementService.syncAtproto = jest
+        .fn()
+        .mockResolvedValue(mockSyncResult);
+
+      const result = await controller.syncAtproto(mockEvent.slug, mockUser);
+
+      expect(result).toEqual(mockSyncResult);
+      expect(mockEventManagementService.syncAtproto).toHaveBeenCalledWith(
+        mockEvent.slug,
+        mockUser.id,
+      );
+    });
+
+    it('should return updated action when event already exists on AT Protocol', async () => {
+      const mockSyncResult = {
+        action: 'updated' as const,
+        atprotoUri: 'at://did:plc:test/community.lexicon.calendar.event/abc123',
+      };
+      mockEventManagementService.syncAtproto = jest
+        .fn()
+        .mockResolvedValue(mockSyncResult);
+
+      const result = await controller.syncAtproto(mockEvent.slug, mockUser);
+
+      expect(result).toEqual(mockSyncResult);
+    });
+
+    it('should return skipped action when event is not eligible for publishing', async () => {
+      const mockSyncResult = {
+        action: 'skipped' as const,
+      };
+      mockEventManagementService.syncAtproto = jest
+        .fn()
+        .mockResolvedValue(mockSyncResult);
+
+      const result = await controller.syncAtproto(mockEvent.slug, mockUser);
+
+      expect(result).toEqual(mockSyncResult);
+    });
+
+    it('should return error action with message when publishing fails', async () => {
+      const mockSyncResult = {
+        action: 'error' as const,
+        error:
+          'Link your AT Protocol account to publish events. Go to Settings > Connected Accounts to connect.',
+      };
+      mockEventManagementService.syncAtproto = jest
+        .fn()
+        .mockResolvedValue(mockSyncResult);
+
+      const result = await controller.syncAtproto(mockEvent.slug, mockUser);
+
+      expect(result).toEqual(mockSyncResult);
+      expect(result.error).toBeDefined();
+    });
+
+    it('should propagate service errors', async () => {
+      mockEventManagementService.syncAtproto = jest
+        .fn()
+        .mockRejectedValue(new Error('Event not found'));
+
+      await expect(
+        controller.syncAtproto('non-existent-event', mockUser),
+      ).rejects.toThrow('Event not found');
+    });
+  });
 });
