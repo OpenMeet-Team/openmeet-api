@@ -55,6 +55,7 @@ import {
 import { ContactOrganizersDto } from './dto/contact-organizers.dto';
 import { EventMailService } from '../event-mail/event-mail.service';
 import { AdminMessageResult } from './interfaces/admin-message-result.interface';
+import { SyncAtprotoResponseDto } from './dto/sync-atproto-response.dto';
 
 @ApiTags('Events')
 @Controller('events')
@@ -586,5 +587,24 @@ export class EventController {
       contactOrganizersDto.subject,
       contactOrganizersDto.message,
     );
+  }
+
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageEvent],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Post(':slug/sync-atproto')
+  @ApiOperation({
+    summary: 'Manually sync event to AT Protocol',
+    description:
+      'Publishes or updates the event on the AT Protocol network (user PDS). Only the event creator can call this endpoint.',
+  })
+  @Trace('event.syncAtproto')
+  async syncAtproto(
+    @Param('slug') slug: string,
+    @AuthUser() user: User,
+  ): Promise<SyncAtprotoResponseDto> {
+    return this.eventManagementService.syncAtproto(slug, user.id);
   }
 }

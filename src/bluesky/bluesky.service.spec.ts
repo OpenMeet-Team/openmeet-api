@@ -1018,5 +1018,74 @@ describe('BlueskyService', () => {
       // Assert - should use the existing rkey, not generate a new one
       expect(result.rkey).toBe(existingRkey);
     });
+
+    it('should use event.atprotoRkey first if set (pre-generated TID)', async () => {
+      // Arrange - event with pre-generated atprotoRkey
+      const preGeneratedRkey = '3ktest1234abc';
+      const event = {
+        name: 'Test Event with Pre-generated TID',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-pregen',
+        atprotoRkey: preGeneratedRkey,
+        // Also has sourceData.rkey but atprotoRkey should take precedence
+        sourceData: {
+          rkey: 'other-rkey-should-not-use',
+        },
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      const result = await service.createEventRecord(
+        event,
+        did,
+        handle,
+        tenantId,
+      );
+
+      // Assert - should use the pre-generated atprotoRkey
+      expect(result.rkey).toBe(preGeneratedRkey);
+    });
+
+    it('should use sourceData.rkey when atprotoRkey is not set', async () => {
+      // Arrange - event with only sourceData.rkey
+      const sourceDataRkey = 'source-data-rkey';
+      const event = {
+        name: 'Test Event with Source Data',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-source',
+        atprotoRkey: null, // Not set
+        sourceData: {
+          rkey: sourceDataRkey,
+        },
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      const result = await service.createEventRecord(
+        event,
+        did,
+        handle,
+        tenantId,
+      );
+
+      // Assert - should use sourceData.rkey
+      expect(result.rkey).toBe(sourceDataRkey);
+    });
   });
 });

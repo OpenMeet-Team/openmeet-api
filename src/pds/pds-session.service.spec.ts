@@ -168,9 +168,9 @@ describe('PdsSessionService', () => {
           new Error('No OAuth session found'),
         );
 
-        await expect(service.getSessionForUser(tenantId, userUlid)).rejects.toThrow(
-          SessionUnavailableError,
-        );
+        await expect(
+          service.getSessionForUser(tenantId, userUlid),
+        ).rejects.toThrow(SessionUnavailableError);
 
         try {
           await service.getSessionForUser(tenantId, userUlid);
@@ -221,9 +221,9 @@ describe('PdsSessionService', () => {
           new Error('Session expired'),
         );
 
-        await expect(service.getSessionForUser(tenantId, userUlid)).rejects.toThrow(
-          SessionUnavailableError,
-        );
+        await expect(
+          service.getSessionForUser(tenantId, userUlid),
+        ).rejects.toThrow(SessionUnavailableError);
 
         try {
           await service.getSessionForUser(tenantId, userUlid);

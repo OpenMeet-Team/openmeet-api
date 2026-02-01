@@ -442,7 +442,8 @@ describe('AtprotoPublisherService', () => {
           'Link your AT Protocol account',
         );
         expect(
-          (result as PublishResult & { needsOAuthLink: boolean }).needsOAuthLink,
+          (result as PublishResult & { needsOAuthLink: boolean })
+            .needsOAuthLink,
         ).toBe(true);
       });
 
@@ -457,10 +458,7 @@ describe('AtprotoPublisherService', () => {
         });
 
         pdsSessionService.getSessionForUser.mockRejectedValue(
-          new SessionUnavailableError(
-            'OAuth session expired',
-            true,
-          ),
+          new SessionUnavailableError('OAuth session expired', true),
         );
 
         const result = await service.publishRsvp(attendee, tenantId);
@@ -470,7 +468,8 @@ describe('AtprotoPublisherService', () => {
           'Link your AT Protocol account',
         );
         expect(
-          (result as PublishResult & { needsOAuthLink: boolean }).needsOAuthLink,
+          (result as PublishResult & { needsOAuthLink: boolean })
+            .needsOAuthLink,
         ).toBe(true);
       });
     });

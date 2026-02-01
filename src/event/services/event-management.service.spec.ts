@@ -1859,6 +1859,371 @@ describe('EventManagementService', () => {
     });
   });
 
+  describe('ATProto Auto-Retry on Update', () => {
+    let mockAtprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
+
+    beforeEach(async () => {
+      // Reset mocks before each test
+      mockRepository.findOne.mockReset();
+      mockRepository.save.mockReset();
+      mockRepository.update.mockReset();
+
+      // Get the mock service instance
+      mockAtprotoPublisherService = service[
+        'atprotoPublisherService'
+      ] as jest.Mocked<AtprotoPublisherService>;
+    });
+
+    it('should retry ATProto publish when updating event with null atprotoUri', async () => {
+      // This test verifies that when an event that failed initial ATProto publish
+      // (atprotoUri is null) is later edited, the update method will attempt to
+      // publish it again, and on success, populate the atprotoUri.
+      const eventWithoutAtprotoUri = {
+        ...findOneMockEventEntity,
+        id: 950,
+        slug: 'event-retry-publish',
+        sourceType: null, // Native event (not imported from Bluesky)
+        atprotoUri: null, // Never successfully published to ATProto
+        atprotoRkey: null,
+        atprotoSyncedAt: null,
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...eventWithoutAtprotoUri,
+        name: 'Updated Event Name',
+        updatedAt: new Date('2024-01-02'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+
+      // First call returns existing event (without atprotoUri), second returns updated
+      let findOneCallCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        findOneCallCount++;
+        if (findOneCallCount === 1)
+          return Promise.resolve(eventWithoutAtprotoUri);
+        return Promise.resolve(updatedEvent);
+      });
+      mockRepository.save.mockResolvedValue(updatedEvent);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock successful AT Protocol publishing
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'published',
+        atprotoUri:
+          'at://did:plc:test/community.lexicon.calendar.event/retry123',
+        atprotoRkey: 'retry123',
+      });
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Event Name',
+      };
+
+      const result = await service.update('event-retry-publish', updateDto);
+
+      expect(result).toBeDefined();
+
+      // Verify publishEvent was called with the updated event
+      expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
+
+      // Verify atprotoUri metadata was saved to database
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { id: updatedEvent.id },
+        expect.objectContaining({
+          atprotoUri:
+            'at://did:plc:test/community.lexicon.calendar.event/retry123',
+          atprotoRkey: 'retry123',
+        }),
+      );
+    });
+
+    it('should not attempt ATProto publish for imported Bluesky events', async () => {
+      // Events imported from Bluesky have their own publishing path and
+      // should NOT use AtprotoPublisherService
+      const blueskyImportedEvent = {
+        ...findOneMockEventEntity,
+        id: 951,
+        slug: 'bluesky-imported-event',
+        sourceType: 'bluesky', // Imported from Bluesky
+        atprotoUri: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(blueskyImportedEvent);
+      mockRepository.save.mockResolvedValue(blueskyImportedEvent);
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Imported Event',
+      };
+
+      await service.update('bluesky-imported-event', updateDto);
+
+      // AtprotoPublisherService.publishEvent should NOT have been called
+      expect(mockAtprotoPublisherService.publishEvent).not.toHaveBeenCalled();
+    });
+
+    it('should not update atprotoUri when publish result is skipped', async () => {
+      // When publishEvent returns 'skipped' (e.g., private event), we should
+      // not try to update the atprotoUri metadata
+      const privateEvent = {
+        ...findOneMockEventEntity,
+        id: 952,
+        slug: 'private-event-no-publish',
+        sourceType: null,
+        atprotoUri: null,
+        visibility: EventVisibility.Private, // Private events are not published
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(privateEvent);
+      mockRepository.save.mockResolvedValue(privateEvent);
+
+      // Mock publishEvent returning skipped
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'skipped',
+      });
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Private Event',
+      };
+
+      await service.update('private-event-no-publish', updateDto);
+
+      // publishEvent was called (to check eligibility)
+      expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
+
+      // But update should NOT have been called to save atprotoUri
+      expect(mockRepository.update).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          atprotoUri: expect.anything(),
+        }),
+      );
+    });
+  });
+
+  describe('syncAtproto', () => {
+    let mockAtprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
+
+    beforeEach(() => {
+      // Reset mocks before each test
+      mockRepository.findOne.mockReset();
+      mockRepository.update.mockReset();
+
+      // Get the mock service instance
+      mockAtprotoPublisherService = service[
+        'atprotoPublisherService'
+      ] as jest.Mocked<AtprotoPublisherService>;
+    });
+
+    it('should throw NotFoundException when event does not exist', async () => {
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.syncAtproto('non-existent-event', mockUser.id),
+      ).rejects.toThrow('Event with slug non-existent-event not found');
+    });
+
+    it('should throw ForbiddenException when user is not the event creator', async () => {
+      const eventWithDifferentOwner = {
+        ...findOneMockEventEntity,
+        id: 1000,
+        slug: 'someone-elses-event',
+        user: { id: 999 } as UserEntity, // Different user
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(eventWithDifferentOwner);
+
+      await expect(
+        service.syncAtproto('someone-elses-event', mockUser.id),
+      ).rejects.toThrow('Only the event creator can sync to AT Protocol');
+    });
+
+    it('should return created action when event is published for the first time', async () => {
+      const eventToSync = {
+        ...findOneMockEventEntity,
+        id: 1001,
+        slug: 'new-event-to-sync',
+        user: { id: mockUser.id } as UserEntity,
+        atprotoUri: null,
+        atprotoRkey: null,
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(eventToSync);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'published',
+        atprotoUri: 'at://did:plc:test/community.lexicon.calendar.event/abc123',
+        atprotoRkey: 'abc123',
+      });
+
+      const result = await service.syncAtproto(
+        'new-event-to-sync',
+        mockUser.id,
+      );
+
+      expect(result.action).toBe('created');
+      expect(result.atprotoUri).toBe(
+        'at://did:plc:test/community.lexicon.calendar.event/abc123',
+      );
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { id: eventToSync.id },
+        expect.objectContaining({
+          atprotoUri:
+            'at://did:plc:test/community.lexicon.calendar.event/abc123',
+          atprotoRkey: 'abc123',
+        }),
+      );
+    });
+
+    it('should return updated action when event already exists on AT Protocol', async () => {
+      const eventToSync = {
+        ...findOneMockEventEntity,
+        id: 1002,
+        slug: 'existing-event-to-sync',
+        user: { id: mockUser.id } as UserEntity,
+        atprotoUri:
+          'at://did:plc:test/community.lexicon.calendar.event/existing123',
+        atprotoRkey: 'existing123',
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(eventToSync);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'updated',
+        atprotoUri:
+          'at://did:plc:test/community.lexicon.calendar.event/existing123',
+        atprotoRkey: 'existing123',
+      });
+
+      const result = await service.syncAtproto(
+        'existing-event-to-sync',
+        mockUser.id,
+      );
+
+      expect(result.action).toBe('updated');
+      expect(result.atprotoUri).toBe(
+        'at://did:plc:test/community.lexicon.calendar.event/existing123',
+      );
+    });
+
+    it('should return skipped action when event is not eligible for publishing', async () => {
+      const privateEvent = {
+        ...findOneMockEventEntity,
+        id: 1003,
+        slug: 'private-event',
+        user: { id: mockUser.id } as UserEntity,
+        visibility: EventVisibility.Private, // Private events are not published
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(privateEvent);
+
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'skipped',
+      });
+
+      const result = await service.syncAtproto('private-event', mockUser.id);
+
+      expect(result.action).toBe('skipped');
+      expect(result.atprotoUri).toBeUndefined();
+      // Repository update should NOT be called for skipped events
+      expect(mockRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should return error action with message when publishing fails', async () => {
+      const eventToSync = {
+        ...findOneMockEventEntity,
+        id: 1004,
+        slug: 'event-with-error',
+        user: { id: mockUser.id } as UserEntity,
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(eventToSync);
+
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'error',
+        error:
+          'Link your AT Protocol account to publish events. Go to Settings > Connected Accounts to connect.',
+      });
+
+      const result = await service.syncAtproto('event-with-error', mockUser.id);
+
+      expect(result.action).toBe('error');
+      expect(result.error).toBe(
+        'Link your AT Protocol account to publish events. Go to Settings > Connected Accounts to connect.',
+      );
+      expect(result.atprotoUri).toBeUndefined();
+      // Repository update should NOT be called for error
+      expect(mockRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should map pending action to skipped', async () => {
+      const eventToSync = {
+        ...findOneMockEventEntity,
+        id: 1005,
+        slug: 'pending-event',
+        user: { id: mockUser.id } as UserEntity,
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(eventToSync);
+
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'pending',
+      });
+
+      const result = await service.syncAtproto('pending-event', mockUser.id);
+
+      expect(result.action).toBe('skipped');
+    });
+
+    it('should pre-generate and save atprotoRkey before publishing', async () => {
+      const eventToSync = {
+        ...findOneMockEventEntity,
+        id: 1006,
+        slug: 'event-needs-rkey',
+        user: { id: mockUser.id } as UserEntity,
+        atprotoUri: null,
+        atprotoRkey: null, // No pre-generated rkey
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(eventToSync);
+
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'published',
+        atprotoUri:
+          'at://did:plc:test/community.lexicon.calendar.event/newrkey',
+        atprotoRkey: 'newrkey',
+      });
+
+      await service.syncAtproto('event-needs-rkey', mockUser.id);
+
+      // Should have called save BEFORE publishEvent to persist the pre-generated TID
+      expect(mockRepository.save).toHaveBeenCalled();
+      const savedEvent = mockRepository.save.mock.calls[0][0];
+      // The saved event should have an atprotoRkey set (TID format: 13 chars)
+      expect(savedEvent.atprotoRkey).toBeDefined();
+      expect(savedEvent.atprotoRkey).toMatch(/^[a-z2-7]{13}$/);
+    });
+  });
+
   afterAll(() => {
     stopCleanupInterval();
   });

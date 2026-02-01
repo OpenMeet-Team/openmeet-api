@@ -637,7 +637,9 @@ export class AuthService {
           // Map to DTO, explicitly excluding pdsCredentials
           const ourPdsUrl = this.configService.get('pds.url', { infer: true });
           const serviceHandleDomains =
-            this.configService.get('pds.serviceHandleDomains', { infer: true }) || '';
+            this.configService.get('pds.serviceHandleDomains', {
+              infer: true,
+            }) || '';
           const validHandleDomains = serviceHandleDomains
             .split(',')
             .map((d: string) => d.trim())

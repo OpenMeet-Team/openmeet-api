@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ExternalEventDto } from '../dto/external-event.dto';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { ShadowAccountService } from '../../shadow-account/shadow-account.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventSourceType } from '../../core/constants/source-type.constant';
@@ -268,7 +268,45 @@ export class EventIntegrationService {
         }
       }
 
-      // Tertiary method: For Bluesky events, check by CID/rkey in metadata
+      // Check for native OpenMeet events by atprotoRkey (self-heal from firehose)
+      // This catches our own events coming back through the firehose
+      if (
+        eventData.source.type === EventSourceType.BLUESKY &&
+        eventData.source.metadata
+      ) {
+        const { rkey } = eventData.source.metadata as { rkey?: string };
+
+        if (rkey) {
+          this.logger.debug(
+            `Checking for native event by atprotoRkey: ${rkey}`,
+          );
+
+          const tenantConnection =
+            await this.tenantService.getTenantConnection(tenantId);
+          const eventRepository = tenantConnection.getRepository(EventEntity);
+
+          const nativeEventByRkey = await eventRepository.findOne({
+            where: {
+              atprotoRkey: rkey,
+              sourceType: IsNull(),
+            },
+          });
+
+          if (nativeEventByRkey) {
+            this.logger.debug(
+              `Found native event by atprotoRkey: ${nativeEventByRkey.id}`,
+            );
+            this.deduplicationCounter.inc({
+              tenant: tenantId,
+              source_type: eventData.source.type,
+              method: 'native_atproto_rkey',
+            });
+            return nativeEventByRkey;
+          }
+        }
+      }
+
+      // Tertiary method: For Bluesky events, check by CID/rkey in metadata (for imported events)
       if (
         eventData.source.type === EventSourceType.BLUESKY &&
         eventData.source.metadata
@@ -703,6 +741,17 @@ export class EventIntegrationService {
 
     // Update last synced timestamp
     existingEvent.lastSyncedAt = new Date();
+
+    // Backfill atprotoUri if this is our event echoing back from firehose
+    if (
+      !existingEvent.atprotoUri &&
+      existingEvent.atprotoRkey &&
+      eventData.source.id
+    ) {
+      existingEvent.atprotoUri = eventData.source.id;
+      existingEvent.atprotoSyncedAt = new Date();
+      this.logger.debug(`Backfilled atprotoUri: ${eventData.source.id}`);
+    }
 
     // Remove recurrenceRule reference as it doesn't exist on EventEntity
     if (eventData.isRecurring && eventData.recurrenceRule) {
