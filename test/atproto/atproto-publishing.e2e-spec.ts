@@ -303,6 +303,240 @@ describe('AT Protocol Publishing (e2e)', () => {
       expect(event.atprotoRkey).toBeNull();
       console.log('Private event correctly NOT published to PDS');
     });
+
+    it('should use the same rkey in atprotoUri as atprotoRkey (pre-generated TID)', async () => {
+      // Skip if no AT Protocol identity
+      const identityResponse = await serverApp
+        .get('/api/atproto/identity')
+        .set('Authorization', `Bearer ${userToken}`);
+
+      if (!identityResponse.body?.did) {
+        console.warn(
+          'Skipping TID consistency test - no AT Protocol identity',
+        );
+        return;
+      }
+
+      const eventData = {
+        name: `TID Consistency Test Event ${testRunId}`,
+        description: 'Testing that atprotoRkey matches URI',
+        type: EventType.InPerson,
+        location: 'Test Location',
+        maxAttendees: 50,
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        startDate: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
+        endDate: new Date(
+          Date.now() + 8 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
+        ).toISOString(),
+        categories: [],
+        timeZone: 'America/New_York',
+      };
+
+      const createResponse = await serverApp
+        .post('/api/events')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send(eventData);
+
+      expect(createResponse.status).toBe(201);
+      const event = createResponse.body;
+
+      // Wait for async publishing
+      await waitForBackend(3000);
+
+      // Fetch the event again to get AT Protocol fields
+      const eventResponse = await serverApp
+        .get(`/api/events/${event.slug}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(eventResponse.status).toBe(200);
+      const publishedEvent = eventResponse.body;
+
+      // Verify both fields are set
+      if (!publishedEvent.atprotoUri || !publishedEvent.atprotoRkey) {
+        console.warn(
+          'Event was not published to PDS - skipping TID consistency check',
+        );
+        return;
+      }
+
+      expect(publishedEvent.atprotoRkey).toBeDefined();
+      expect(publishedEvent.atprotoUri).toBeDefined();
+
+      // Extract rkey from URI (format: at://did/collection/rkey)
+      const uriParts = publishedEvent.atprotoUri.split('/');
+      const rkeyFromUri = uriParts[uriParts.length - 1];
+
+      // Verify they match - this proves we used the pre-generated TID
+      expect(publishedEvent.atprotoRkey).toBe(rkeyFromUri);
+      console.log(
+        `TID consistency verified: atprotoRkey=${publishedEvent.atprotoRkey}, URI rkey=${rkeyFromUri}`,
+      );
+    });
+
+    it('should preserve atprotoRkey when updating a published event', async () => {
+      // Skip if no AT Protocol identity
+      const identityResponse = await serverApp
+        .get('/api/atproto/identity')
+        .set('Authorization', `Bearer ${userToken}`);
+
+      if (!identityResponse.body?.did) {
+        console.warn(
+          'Skipping update preservation test - no AT Protocol identity',
+        );
+        return;
+      }
+
+      const eventData = {
+        name: `Event for Update Test ${testRunId}`,
+        description: 'Will be updated',
+        type: EventType.InPerson,
+        location: 'Test Location',
+        maxAttendees: 50,
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        startDate: new Date(Date.now() + 9 * 24 * 60 * 60 * 1000).toISOString(),
+        endDate: new Date(
+          Date.now() + 9 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
+        ).toISOString(),
+        categories: [],
+        timeZone: 'America/New_York',
+      };
+
+      const createResponse = await serverApp
+        .post('/api/events')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send(eventData);
+
+      expect(createResponse.status).toBe(201);
+      const originalEvent = createResponse.body;
+
+      // Wait for async publishing
+      await waitForBackend(3000);
+
+      // Fetch the event to get AT Protocol fields
+      const getOriginalResponse = await serverApp
+        .get(`/api/events/${originalEvent.slug}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(getOriginalResponse.status).toBe(200);
+      const originalRkey = getOriginalResponse.body.atprotoRkey;
+
+      if (!originalRkey) {
+        console.warn(
+          'Event was not published to PDS - skipping update preservation check',
+        );
+        return;
+      }
+
+      console.log(`Original atprotoRkey: ${originalRkey}`);
+
+      // Update the event
+      const updateResponse = await serverApp
+        .patch(`/api/events/${originalEvent.slug}`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          name: `Updated Event Name ${testRunId}`,
+          description: 'Updated description',
+        });
+
+      expect(updateResponse.status).toBe(200);
+
+      // Wait for async publishing of update
+      await waitForBackend(2000);
+
+      // Fetch the event again to verify rkey is preserved
+      const getUpdatedResponse = await serverApp
+        .get(`/api/events/${originalEvent.slug}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(getUpdatedResponse.status).toBe(200);
+      const updatedEvent = getUpdatedResponse.body;
+
+      // Verify rkey is preserved (same TID)
+      expect(updatedEvent.atprotoRkey).toBe(originalRkey);
+      console.log(`Rkey preserved after update: ${originalRkey}`);
+    });
+
+    it('should use existing atprotoRkey when manually syncing', async () => {
+      // Skip if no AT Protocol identity
+      const identityResponse = await serverApp
+        .get('/api/atproto/identity')
+        .set('Authorization', `Bearer ${userToken}`);
+
+      if (!identityResponse.body?.did) {
+        console.warn('Skipping manual sync test - no AT Protocol identity');
+        return;
+      }
+
+      const eventData = {
+        name: `Manual Sync Test Event ${testRunId}`,
+        description: 'Testing manual sync preserves rkey',
+        type: EventType.InPerson,
+        location: 'Test Location',
+        maxAttendees: 50,
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        startDate: new Date(
+          Date.now() + 10 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        endDate: new Date(
+          Date.now() + 10 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
+        ).toISOString(),
+        categories: [],
+        timeZone: 'America/New_York',
+      };
+
+      const createResponse = await serverApp
+        .post('/api/events')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send(eventData);
+
+      expect(createResponse.status).toBe(201);
+      const event = createResponse.body;
+
+      // Wait for async publishing
+      await waitForBackend(3000);
+
+      // Fetch the event to get AT Protocol fields
+      const getOriginalResponse = await serverApp
+        .get(`/api/events/${event.slug}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(getOriginalResponse.status).toBe(200);
+      const originalRkey = getOriginalResponse.body.atprotoRkey;
+      const originalUri = getOriginalResponse.body.atprotoUri;
+
+      if (!originalRkey || !originalUri) {
+        console.warn(
+          'Event was not published to PDS - skipping manual sync test',
+        );
+        return;
+      }
+
+      console.log(`Original atprotoRkey: ${originalRkey}, URI: ${originalUri}`);
+
+      // Manually trigger sync
+      const syncResponse = await serverApp
+        .post(`/api/events/${event.slug}/sync-atproto`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(syncResponse.status).toBe(201); // POST returns 201
+      expect(syncResponse.body.action).toBe('updated'); // Already published, so it's an update
+
+      // Wait for sync to complete
+      await waitForBackend(2000);
+
+      // Fetch the event again to verify rkey is same
+      const getAfterSyncResponse = await serverApp
+        .get(`/api/events/${event.slug}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(getAfterSyncResponse.status).toBe(200);
+      expect(getAfterSyncResponse.body.atprotoRkey).toBe(originalRkey);
+      expect(getAfterSyncResponse.body.atprotoUri).toBe(originalUri);
+      console.log(`Manual sync preserved rkey: ${originalRkey}`);
+    });
   });
 
   describe('3. RSVP Publishing to PDS', () => {
