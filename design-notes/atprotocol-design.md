@@ -73,6 +73,8 @@ This document serves as the authoritative source of truth for OpenMeet's AT Prot
 - [Community Lexicon Adoption](#community-lexicon-adoption)
 - [Data Flow Patterns](#data-flow-patterns)
 - [OpenMeet Custodial PDS](#openmeet-custodial-pds)
+- [Known Limitations](#known-limitations)
+  - [Multi-Editor Gap: Group Admins vs AT Protocol Ownership](#multi-editor-gap-group-admins-vs-at-protocol-ownership)
 - [References](#references-1)
 
 ## Key Design Principles
@@ -1373,6 +1375,61 @@ PDS_ADMIN_PASSWORD=local-dev-admin-password
 # PDS_INVITE_REQUIRED: "true"
 # Then create an invite code as shown above
 ```
+
+## Known Limitations
+
+### Multi-Editor Gap: Group Admins vs AT Protocol Ownership
+
+**Problem:** OpenMeet's collaborative model allows multiple users (group admins, event co-hosts) to edit events in the PostgreSQL database. However, AT Protocol ownership is individual - only the DID owner can write to their PDS.
+
+**Current Behavior:**
+- **OpenMeet DB**: Group admins and event co-hosts can edit event details
+- **AT Protocol**: Only the event creator's DID can publish/update/delete the event on the PDS
+
+**Example Scenario:**
+1. Alice creates an event → Published to Alice's PDS as `at://alice-did/community.lexicon.calendar.event/xyz`
+2. Bob (group admin) edits the event description in OpenMeet
+3. The change is saved to PostgreSQL ✓
+4. The change is NOT synced to Alice's PDS ✗ (Bob can't write to Alice's repo)
+
+**Why This Happens:**
+- AT Protocol uses DIDs (Decentralized Identifiers) for ownership
+- Each user's data lives in their own PDS repository
+- Only the DID owner has signing keys to write to their repo
+- There's no concept of "delegated write access" in AT Protocol today
+
+**Implications:**
+- Event edits by non-owners won't sync to AT Protocol until the owner triggers a sync
+- The OpenMeet PostgreSQL database may be ahead of AT Protocol state
+- Users browsing via AT Protocol (e.g., from other apps) may see stale data
+
+**Mitigation (Current):**
+- Only event owners can manually trigger AT Protocol sync (API returns 403 for non-owners)
+- The "Not published" status badge is visible to all users for transparency
+- Automatic sync on event update only works when the owner makes the edit
+
+**Future Solutions:**
+
+1. **Group DIDs** (Planned)
+   - Groups get their own DID and PDS repository
+   - Group events publish to the group's PDS, not individual user's PDS
+   - Group admins can be granted signing authority through threshold signatures
+   - See: [Group Integration (AT Protocol)](#group-integration-at-protocol)
+
+2. **Event Co-ownership via Collections** (Future Lexicon)
+   - A future lexicon could define event ownership as a collection of DIDs
+   - Each co-owner could maintain a copy in their PDS
+   - Consensus mechanism for updates would need design
+
+3. **Delegation Primitives** (Depends on AT Protocol)
+   - AT Protocol may eventually support delegated write access
+   - Would allow granting temporary write permission to other DIDs
+
+**Related:**
+- Issue: om-kxiq (Fix: Only event owner can publish to ATProto)
+- Section: [Group Integration (AT Protocol)](#group-integration-at-protocol)
+
+---
 
 ## References
 
