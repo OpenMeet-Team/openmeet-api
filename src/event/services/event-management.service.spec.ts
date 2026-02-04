@@ -1414,18 +1414,21 @@ describe('EventManagementService', () => {
         .mockResolvedValue(mockSeries);
 
       // Mock multiple findOne calls for different stages of the update process
+      let findOneCallCount = 0;
       mockRepository.findOne.mockImplementation((options: any) => {
         const whereOptions = options.where || {};
         const slugToFind =
           typeof whereOptions === 'object' ? whereOptions.slug : null;
 
-        // First call will return the original event
+        // Track calls to return the right event at the right stage
         if (slugToFind === 'event-to-make-recurring') {
-          // If relations include 'series' or 'user', etc., this is the second call after updating
-          if (options.relations && options.relations.includes('user')) {
-            return Promise.resolve(updatedEvent);
+          findOneCallCount++;
+          // First call returns existing event (with user relation due to fix)
+          // Second and subsequent calls return the updated event (after series creation)
+          if (findOneCallCount === 1) {
+            return Promise.resolve(existingEvent);
           }
-          return Promise.resolve(existingEvent);
+          return Promise.resolve(updatedEvent);
         }
         return Promise.resolve(null);
       });
@@ -2221,6 +2224,112 @@ describe('EventManagementService', () => {
       // The saved event should have an atprotoRkey set (TID format: 13 chars)
       expect(savedEvent.atprotoRkey).toBeDefined();
       expect(savedEvent.atprotoRkey).toMatch(/^[a-z2-7]{13}$/);
+    });
+  });
+
+  describe('update - user relation loading', () => {
+    let mockAtprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
+
+    beforeEach(async () => {
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+      mockRepository.update.mockReset();
+
+      mockAtprotoPublisherService = service[
+        'atprotoPublisherService'
+      ] as jest.Mocked<AtprotoPublisherService>;
+    });
+
+    it('should load user relation when updating event to prevent "has no organizer" error', async () => {
+      // This test reproduces the bug where updating an event created in a group
+      // throws "Event {slug} has no organizer" because the user relation is not loaded.
+      //
+      // The bug is in the update() method at line 555 where findOne is called
+      // without relations: ['user'], causing atprotoPublisherService.publishEvent
+      // to fail because event.user is undefined.
+
+      const existingEventWithoutUser = {
+        id: 960,
+        ulid: '01HABCDEFGHJKMNPQRSTVWX60',
+        slug: 'group-event-no-user-loaded',
+        name: 'Group Event',
+        description: 'Event created in a group',
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        visibility: EventVisibility.Public,
+        sourceType: null, // Not a Bluesky-sourced event, so AT Protocol publish will be attempted
+        seriesSlug: null,
+        maxAttendees: 50,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        // NOTE: user is NOT loaded (simulating missing relation)
+        user: undefined,
+      } as EventEntity;
+
+      const updatedEventWithUser = {
+        ...existingEventWithoutUser,
+        name: 'Updated Group Event',
+        updatedAt: new Date('2024-01-02'),
+        // After the fix, user should be loaded
+        user: {
+          id: TESTING_USER_ID,
+          ulid: 'user-ulid-123',
+          slug: 'test-user',
+          email: 'test@example.com',
+        } as UserEntity,
+      } as EventEntity;
+
+      // Mock findOne to return event without user (simulating the bug)
+      // After fix, findOne should be called with relations: ['user']
+      mockRepository.findOne.mockImplementation((options: any) => {
+        // The fix should add relations: ['user'] to the first findOne call
+        // If the relation is requested, return the event with user loaded
+        if (options?.relations?.includes('user')) {
+          return Promise.resolve(updatedEventWithUser);
+        }
+        // Without the fix, return event without user
+        return Promise.resolve(existingEventWithoutUser);
+      });
+
+      mockRepository.save.mockResolvedValue(updatedEventWithUser);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock AT Protocol publisher - it should receive an event WITH user loaded
+      mockAtprotoPublisherService.publishEvent.mockImplementation(
+        (event: EventEntity) => {
+          // This is what happens in production: if user is not loaded, this throws
+          if (!event.user?.ulid) {
+            throw new Error(`Event ${event.slug} has no organizer`);
+          }
+          return Promise.resolve({
+            action: 'published' as const,
+            atprotoUri: 'at://did:plc:test/community.openmeet.event/xyz123',
+            atprotoRkey: 'xyz123',
+          });
+        },
+      );
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Group Event',
+      };
+
+      // Without the fix, this would throw "Event group-event-no-user-loaded has no organizer"
+      // With the fix, it should succeed
+      const result = await service.update(
+        'group-event-no-user-loaded',
+        updateDto,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.name).toBe('Updated Group Event');
+
+      // Verify that findOne was called with relations: ['user']
+      expect(mockRepository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'group-event-no-user-loaded' },
+          relations: ['user'],
+        }),
+      );
     });
   });
 

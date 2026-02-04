@@ -552,8 +552,10 @@ export class EventManagementService {
     }
 
     // Find existing event and verify ownership
+    // Include 'user' relation to support AT Protocol publishing which needs organizer info
     const event = await this.eventRepository.findOne({
       where: { slug },
+      relations: ['user'],
     });
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
