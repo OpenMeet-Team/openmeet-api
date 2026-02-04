@@ -311,9 +311,7 @@ describe('AT Protocol Publishing (e2e)', () => {
         .set('Authorization', `Bearer ${userToken}`);
 
       if (!identityResponse.body?.did) {
-        console.warn(
-          'Skipping TID consistency test - no AT Protocol identity',
-        );
+        console.warn('Skipping TID consistency test - no AT Protocol identity');
         return;
       }
 
