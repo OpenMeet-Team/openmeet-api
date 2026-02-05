@@ -50,10 +50,19 @@ export async function initializeOAuthClient(
     throw new Error('No valid keys found in environment variables');
   }
 
+  // When DID_PLC_URL is set (e.g. in dev), create a fetch wrapper that
+  // tries the private PLC before falling back to public plc.directory.
+  // This is needed because the private PLC doesn't federate with public plc.directory.
+  const didPlcUrl = configService.get('DID_PLC_URL', {
+    infer: true,
+  }) as string | undefined;
+  const customFetch = createPlcFallbackFetch(didPlcUrl);
+
   // Use path-based tenant routing for OAuth metadata URLs.
   // The PDS strips query parameters when fetching client metadata,
   // so we must embed tenantId in the URL path instead.
   const clientConfig: NodeOAuthClientOptions = {
+    ...(customFetch && { fetch: customFetch }),
     clientMetadata: {
       client_id: `${baseUrl}/api/v1/auth/bluesky/t/${tenantId}/client-metadata.json`,
       client_name: 'OpenMeet',
@@ -79,6 +88,57 @@ export async function initializeOAuthClient(
   };
 
   return new NodeOAuthClient(clientConfig);
+}
+
+/**
+ * Creates a custom fetch wrapper that intercepts requests to public plc.directory
+ * and tries a private PLC server first. This is needed in environments (like dev)
+ * where the private PLC doesn't federate with public plc.directory.
+ *
+ * When the private PLC returns a non-ok response (e.g. 404 for BYOD DIDs),
+ * the request falls through to the public plc.directory.
+ *
+ * @param didPlcUrl - The private PLC URL (e.g. "http://plc:2582"). If falsy, returns undefined.
+ * @param fetchFn - The underlying fetch function to use (defaults to globalThis.fetch).
+ * @returns A custom fetch function, or undefined if no didPlcUrl is provided.
+ */
+export function createPlcFallbackFetch(
+  didPlcUrl: string | undefined,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): typeof globalThis.fetch | undefined {
+  if (!didPlcUrl) {
+    return undefined;
+  }
+
+  const privatePlcOrigin = new URL(didPlcUrl).origin;
+
+  return async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url =
+      typeof input === 'string'
+        ? new URL(input)
+        : input instanceof URL
+          ? input
+          : new URL(input.url);
+
+    // Intercept requests to public plc.directory for DID lookups
+    // and try the private PLC first
+    if (
+      url.hostname === 'plc.directory' &&
+      url.pathname.startsWith('/did:plc:')
+    ) {
+      const privateUrl = new URL(url.pathname + url.search, privatePlcOrigin);
+      const privateResponse = await fetchFn(privateUrl.toString(), init);
+      if (privateResponse.ok) {
+        return privateResponse;
+      }
+      // Fall through to public PLC if private returns non-ok (e.g. 404 for BYOD DIDs)
+    }
+
+    return fetchFn(input, init);
+  };
 }
 
 async function loadKeys(configService: ConfigService): Promise<JoseKey[]> {
