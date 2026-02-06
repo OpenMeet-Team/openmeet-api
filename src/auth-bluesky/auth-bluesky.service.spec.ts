@@ -886,6 +886,37 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       // Assert: Should return a reasonable fallback
       expect(pdsUrl).toBe('https://bsky.social');
     });
+
+    it('should use PDS_URL config as fallback when resolution fails and PDS_URL is set', async () => {
+      // Arrange: PDS_URL is configured, resolution fails
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'PDS_URL') return 'https://pds.dev.opnmt.me';
+        return undefined;
+      });
+      mockBlueskyIdentityService.resolveProfile.mockRejectedValue(
+        new Error('Resolution failed'),
+      );
+
+      // Act
+      const pdsUrl = await service.resolvePdsUrlFromDid('did:plc:test123');
+
+      // Assert: Should use configured PDS_URL, not bsky.social
+      expect(pdsUrl).toBe('https://pds.dev.opnmt.me');
+    });
+
+    it('should fallback to bsky.social when resolution fails and PDS_URL is not set', async () => {
+      // Arrange: No PDS_URL configured, resolution fails
+      mockConfigService.get.mockReturnValue(undefined);
+      mockBlueskyIdentityService.resolveProfile.mockRejectedValue(
+        new Error('Resolution failed'),
+      );
+
+      // Act
+      const pdsUrl = await service.resolvePdsUrlFromDid('did:plc:test123');
+
+      // Assert: Should fallback to bsky.social
+      expect(pdsUrl).toBe('https://bsky.social');
+    });
   });
 
   describe('findUserByAtprotoIdentity', () => {
@@ -1403,6 +1434,138 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       expect(result.redirectUrl).toContain('linkError=');
       expect(result.redirectUrl).toContain('Failed%20to%20save%20identity');
       expect(result.sessionId).toBeUndefined();
+    });
+
+    it('should preserve existing handle when profile resolution falls back to DID', async () => {
+      // Arrange: Existing custodial identity with a proper handle and PDS URL
+      // but profile resolution returned DID as handle (Bluesky App View can't resolve private PLC DIDs)
+      const existingIdentity = {
+        id: 5,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:newdid123', // Same DID
+        handle: 'alice.dev.opnmt.me', // Existing proper handle
+        pdsUrl: 'https://pds.dev.opnmt.me', // Existing proper PDS URL
+        isCustodial: true,
+        pdsCredentials: 'encrypted-creds',
+      };
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        existingIdentity,
+      );
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+        existingIdentity,
+      );
+      mockUserAtprotoIdentityService.update = jest
+        .fn()
+        .mockResolvedValue({ ...existingIdentity, isCustodial: false });
+
+      mockUserService.findByUlid.mockResolvedValue({
+        id: 1,
+        ulid: mockLinkData.userUlid,
+        preferences: {},
+      });
+
+      // Profile with DID as handle (resolution failed at App View level)
+      const profileWithDidHandle = {
+        data: {
+          did: 'did:plc:newdid123',
+          handle: 'did:plc:newdid123', // Handle fell back to DID
+          displayName: undefined,
+          avatar: undefined,
+        },
+      };
+
+      // Restored session has the bsky.social fallback (resolution also failed there)
+      const restoredSessionWithFallback = {
+        did: 'did:plc:newdid123',
+        pdsUrl: 'https://bsky.social', // Fallback PDS URL
+      };
+
+      // Act
+      await service.handleLinkCallback(
+        mockOauthSession as any,
+        restoredSessionWithFallback as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        profileWithDidHandle as any,
+      );
+
+      // Assert: Should preserve existing handle, not overwrite with DID
+      expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
+        'tenant-123',
+        existingIdentity.id,
+        expect.objectContaining({
+          isCustodial: false,
+          pdsCredentials: null,
+          handle: 'alice.dev.opnmt.me', // Preserved, not 'did:plc:newdid123'
+          pdsUrl: 'https://pds.dev.opnmt.me', // Preserved, not 'https://bsky.social'
+        }),
+      );
+    });
+
+    it('should use resolved handle when profile resolution succeeds', async () => {
+      // Arrange: Existing custodial identity, profile resolution succeeds with proper handle
+      const existingIdentity = {
+        id: 5,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:newdid123',
+        handle: 'alice.dev.opnmt.me',
+        pdsUrl: 'https://pds.dev.opnmt.me',
+        isCustodial: true,
+        pdsCredentials: 'encrypted-creds',
+      };
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        existingIdentity,
+      );
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+        existingIdentity,
+      );
+      mockUserAtprotoIdentityService.update = jest
+        .fn()
+        .mockResolvedValue({ ...existingIdentity, isCustodial: false });
+
+      mockUserService.findByUlid.mockResolvedValue({
+        id: 1,
+        ulid: mockLinkData.userUlid,
+        preferences: {},
+      });
+
+      // Profile resolution worked and returned a proper new handle
+      const profileWithGoodHandle = {
+        data: {
+          did: 'did:plc:newdid123',
+          handle: 'alice.bsky.social', // Proper handle from Bluesky
+          displayName: 'Alice',
+          avatar: 'https://cdn.bsky.app/img/avatar/alice.jpg',
+        },
+      };
+
+      const restoredSessionWithGoodPds = {
+        did: 'did:plc:newdid123',
+        pdsUrl: 'https://morel.us-east.host.bsky.network', // Proper PDS
+      };
+
+      // Act
+      await service.handleLinkCallback(
+        mockOauthSession as any,
+        restoredSessionWithGoodPds as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        profileWithGoodHandle as any,
+      );
+
+      // Assert: Should use the new resolved handle and pdsUrl, not the old ones
+      expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
+        'tenant-123',
+        existingIdentity.id,
+        expect.objectContaining({
+          isCustodial: false,
+          pdsCredentials: null,
+          handle: 'alice.bsky.social', // New good handle
+          pdsUrl: 'https://morel.us-east.host.bsky.network', // New good PDS
+        }),
+      );
     });
 
     it('should return error redirect when deleteByUserUlid fails during DID replacement', async () => {
