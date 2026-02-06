@@ -120,6 +120,11 @@ const mockAgentImplementation = {
   getProfile: jest.fn().mockResolvedValue({}),
   com: {
     atproto: {
+      server: {
+        getSession: jest.fn().mockResolvedValue({
+          data: { did: 'test-did', handle: 'test.handle' },
+        }),
+      },
       repo: {
         getRecord: jest.fn(),
         putRecord: jest.fn().mockResolvedValue({
@@ -400,6 +405,30 @@ describe('BlueskyService', () => {
 
         // Assert
         expect(result).toBeDefined();
+      });
+
+      it('should verify session using getSession instead of getProfile', async () => {
+        // Act
+        await service.tryResumeSession('test-tenant', 'test-did');
+
+        // Assert - getSession should be called for session verification (PDS-only)
+        expect(
+          mockAgentImplementation.com.atproto.server.getSession,
+        ).toHaveBeenCalled();
+        // getProfile should NOT be called (it proxies through AppView)
+        expect(mockAgentImplementation.getProfile).not.toHaveBeenCalled();
+      });
+
+      it('should verify session using getSession in resumeSession with retries', async () => {
+        // Act
+        await service.resumeSession('test-tenant', 'test-did');
+
+        // Assert - getSession should be called for session verification (PDS-only)
+        expect(
+          mockAgentImplementation.com.atproto.server.getSession,
+        ).toHaveBeenCalled();
+        // getProfile should NOT be called (it proxies through AppView)
+        expect(mockAgentImplementation.getProfile).not.toHaveBeenCalled();
       });
 
       it('should handle session errors gracefully', async () => {

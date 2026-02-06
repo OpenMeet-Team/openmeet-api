@@ -69,8 +69,10 @@ export class BlueskyService {
         }
 
         const agent = new Agent(session);
-        // Verify the session is valid
-        await agent.getProfile({ actor: did });
+        // Verify the session is valid by calling getSession on the PDS directly.
+        // This avoids proxying through the AppView (api.bsky.app) which can't
+        // resolve DIDs registered on private PLC servers.
+        await agent.com.atproto.server.getSession();
         return agent;
       } catch (error) {
         const isSessionDeletedError = error.message?.includes(
@@ -476,8 +478,10 @@ export class BlueskyService {
         throw new Error('No session found');
       }
       const agent = new Agent(session);
-      // Verify the session is valid
-      await agent.getProfile({ actor: did });
+      // Verify the session is valid by calling getSession on the PDS directly.
+      // This avoids proxying through the AppView (api.bsky.app) which can't
+      // resolve DIDs registered on private PLC servers.
+      await agent.com.atproto.server.getSession();
       return agent;
     } catch (error) {
       // Log the error but with a cleaner message
