@@ -2303,10 +2303,11 @@ export class EventManagementService {
       this.logger.debug(`Pre-generated atprotoRkey: ${event.atprotoRkey}`);
     }
 
-    // Call the AT Protocol publisher service
+    // Call the AT Protocol publisher service with force to bypass needsRepublish check
     const publishResult = await this.atprotoPublisherService.publishEvent(
       event,
       this.request.tenantId,
+      { force: true },
     );
 
     // Map PublishResult action to SyncAtprotoResponseDto action

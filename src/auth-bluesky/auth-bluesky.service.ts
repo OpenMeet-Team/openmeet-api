@@ -634,9 +634,22 @@ export class AuthBlueskyService {
       if (existingIdentity) {
         if (existingIdentity.did === did) {
           // Same DID - update to non-custodial
+          // Use resolved handle only if it's an actual handle (not a DID fallback)
+          const resolvedHandle =
+            handle !== did ? handle : existingIdentity.handle || handle;
+          // Use resolved pdsUrl only if it was actually resolved (not the bsky.social fallback)
+          const resolvedPdsUrl =
+            pdsUrl !== 'https://bsky.social'
+              ? pdsUrl
+              : existingIdentity.pdsUrl || pdsUrl;
+
           this.logger.debug('Updating existing identity to non-custodial', {
             identityId: existingIdentity.id,
             did,
+            resolvedHandle,
+            resolvedPdsUrl,
+            originalHandle: handle,
+            originalPdsUrl: pdsUrl,
           });
           await this.userAtprotoIdentityService.update(
             tenantId,
@@ -644,8 +657,8 @@ export class AuthBlueskyService {
             {
               isCustodial: false,
               pdsCredentials: null,
-              pdsUrl,
-              handle,
+              pdsUrl: resolvedPdsUrl,
+              handle: resolvedHandle,
             },
           );
         } else {
@@ -870,8 +883,10 @@ export class AuthBlueskyService {
         did,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Fallback to bsky.social as it's the most common PDS
-      return 'https://bsky.social';
+      // Use configured PDS_URL if available (for self-hosted PDS environments)
+      // eslint-disable-next-line no-restricted-syntax
+      const configuredPdsUrl = this.configService.get<string>('PDS_URL');
+      return configuredPdsUrl || 'https://bsky.social';
     }
   }
 }

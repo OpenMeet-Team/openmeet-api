@@ -2225,6 +2225,40 @@ describe('EventManagementService', () => {
       expect(savedEvent.atprotoRkey).toBeDefined();
       expect(savedEvent.atprotoRkey).toMatch(/^[a-z2-7]{13}$/);
     });
+
+    it('should pass force option to publishEvent to bypass needsRepublish check', async () => {
+      const eventToSync = {
+        ...findOneMockEventEntity,
+        id: 1007,
+        slug: 'force-sync-event',
+        user: { id: mockUser.id } as UserEntity,
+        atprotoUri:
+          'at://did:plc:test/community.lexicon.calendar.event/existing',
+        atprotoRkey: 'existing',
+        atprotoSyncedAt: new Date('2026-01-02T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'), // older than syncedAt
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockResolvedValue(eventToSync);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'updated',
+        atprotoUri:
+          'at://did:plc:test/community.lexicon.calendar.event/existing',
+        atprotoRkey: 'existing',
+      });
+
+      await service.syncAtproto('force-sync-event', mockUser.id);
+
+      // Verify publishEvent was called with force: true
+      expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        { force: true },
+      );
+    });
   });
 
   describe('update - user relation loading', () => {

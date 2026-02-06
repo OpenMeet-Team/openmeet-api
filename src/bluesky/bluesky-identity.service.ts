@@ -253,7 +253,12 @@ export class BlueskyIdentityService {
           const { Agent } = require('@atproto/api');
 
           // Create identity resolver (contains both handle and did resolvers)
-          const idResolver = new IdResolver();
+          // Use private PLC when DID_PLC_URL is configured (e.g., for self-hosted PDS)
+          // eslint-disable-next-line no-restricted-syntax
+          const didPlcUrl = this.configService.get<string>('DID_PLC_URL');
+          const idResolver = new IdResolver(
+            didPlcUrl ? { plcUrl: didPlcUrl } : {},
+          );
 
           // Resolve handle to DID if needed
           let did = handleOrDid;
@@ -292,10 +297,26 @@ export class BlueskyIdentityService {
 
           // Add timeout to prevent hanging
           const didStartTime = Date.now();
-          const didDoc = await Promise.race([
+          let didDoc = await Promise.race([
             idResolver.did.resolveNoCheck(did),
             this.createTimeout(this.TIMEOUT_DID_RESOLUTION, 'DID resolution'),
           ]);
+
+          // Fallback to public PLC for BYOD DIDs when using private PLC
+          if (!didDoc && didPlcUrl) {
+            this.logger.debug(
+              `DID not found on private PLC, trying public plc.directory for ${did}`,
+            );
+            const publicResolver = new IdResolver();
+            didDoc = await Promise.race([
+              publicResolver.did.resolveNoCheck(did),
+              this.createTimeout(
+                this.TIMEOUT_DID_RESOLUTION,
+                'DID resolution (public fallback)',
+              ),
+            ]);
+          }
+
           span.setAttribute(
             'atproto.did_resolution_ms',
             Date.now() - didStartTime,

@@ -228,6 +228,7 @@ export class AtprotoPublisherService {
   publishEvent(
     event: EventEntity,
     tenantId: string,
+    options?: { force?: boolean },
   ): PublishResult | Promise<PublishResult> {
     // Synchronous eligibility checks - return immediately if not eligible
     if (!this.shouldPublishEvent(event)) {
@@ -237,7 +238,7 @@ export class AtprotoPublisherService {
       return { action: 'skipped' };
     }
 
-    if (!this.needsRepublish(event)) {
+    if (!options?.force && !this.needsRepublish(event)) {
       this.logger.debug(
         `Skipping publish for event ${event.slug}: already synced`,
       );
