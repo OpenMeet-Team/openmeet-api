@@ -395,6 +395,50 @@ describe('AtprotoPublisherService', () => {
       expect(result.action).toBe('updated');
     });
 
+    it('should skip needsRepublish check when force is true', async () => {
+      // Event is already synced and has no changes - would normally be skipped
+      const syncTime = new Date('2026-01-02T00:00:00Z');
+      const event = createMockEvent({
+        atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/rkey',
+        atprotoRkey: 'rkey',
+        atprotoSyncedAt: syncTime,
+        updatedAt: new Date('2026-01-01T00:00:00Z'), // older than syncedAt
+      });
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+      blueskyService.createEventRecord.mockResolvedValue({ rkey: 'rkey' });
+
+      const result = await service.publishEvent(event, tenantId, {
+        force: true,
+      });
+
+      // Should publish (update) instead of skipping
+      expect(result.action).toBe('updated');
+      expect(blueskyService.createEventRecord).toHaveBeenCalled();
+    });
+
+    it('should still check shouldPublishEvent even when force is true', () => {
+      // Private events should never be published, even with force
+      const event = createMockEvent({
+        visibility: EventVisibility.Private,
+      });
+
+      const result = service.publishEvent(event, tenantId, {
+        force: true,
+      }) as PublishResult;
+
+      expect(result.action).toBe('skipped');
+      expect(blueskyService.createEventRecord).not.toHaveBeenCalled();
+    });
+
     it('should throw when PDS call fails', async () => {
       const event = createMockEvent();
       const mockIdentity = {
