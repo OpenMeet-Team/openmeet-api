@@ -251,5 +251,8 @@ export class UserEntity extends EntityRelationalHelper {
       disconnectedAt?: Date;
       connectedAt?: Date;
     };
+    analytics?: {
+      optOut?: boolean;
+    };
   };
 }

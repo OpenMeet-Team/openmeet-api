@@ -1691,4 +1691,153 @@ describe('AuthService', () => {
       expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
     });
   });
+
+  describe('update - Preferences Deep Merge', () => {
+    const jwtPayload = {
+      id: 1,
+      sessionId: 'test-session',
+      role: { id: 1 },
+      slug: 'test-user',
+      tenantId: 'test-tenant',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    };
+
+    it('should deep-merge analytics preferences with existing preferences', async () => {
+      // Arrange - User has existing bluesky preferences
+      const currentUser = {
+        id: 1,
+        slug: 'test-user',
+        email: 'test@example.com',
+        role: { id: 1 },
+        preferences: {
+          bluesky: {
+            did: 'did:plc:test123',
+            handle: 'test.bsky.social',
+            connected: true,
+          },
+        },
+      };
+
+      mockUserService.findById.mockResolvedValue(currentUser);
+      mockUserService.update.mockResolvedValue(currentUser);
+
+      // Act - Update only analytics preferences
+      await authService.update(jwtPayload, {
+        preferences: {
+          analytics: { optOut: true },
+        },
+      });
+
+      // Assert - userService.update should be called with merged preferences
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        jwtPayload.id,
+        expect.objectContaining({
+          preferences: {
+            bluesky: {
+              did: 'did:plc:test123',
+              handle: 'test.bsky.social',
+              connected: true,
+            },
+            analytics: { optOut: true },
+          },
+        }),
+      );
+    });
+
+    it('should preserve analytics preferences when updating other preferences', async () => {
+      // Arrange - User has existing analytics preferences
+      const currentUser = {
+        id: 1,
+        slug: 'test-user',
+        email: 'test@example.com',
+        role: { id: 1 },
+        preferences: {
+          analytics: { optOut: true },
+          bluesky: { connected: true },
+        },
+      };
+
+      mockUserService.findById.mockResolvedValue(currentUser);
+      mockUserService.update.mockResolvedValue(currentUser);
+
+      // Act - Update only bio (no preferences change)
+      await authService.update(jwtPayload, { bio: 'New bio' });
+
+      // Assert - preferences should not be modified
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        jwtPayload.id,
+        expect.objectContaining({
+          bio: 'New bio',
+        }),
+      );
+      // Preferences should not be in the update payload when not provided
+      const updateCall = mockUserService.update.mock.calls[0][1];
+      expect(updateCall.preferences).toBeUndefined();
+    });
+
+    it('should handle setting analytics preferences when user has no existing preferences', async () => {
+      // Arrange - User has null preferences
+      const currentUser = {
+        id: 1,
+        slug: 'test-user',
+        email: 'test@example.com',
+        role: { id: 1 },
+        preferences: null,
+      };
+
+      mockUserService.findById.mockResolvedValue(currentUser);
+      mockUserService.update.mockResolvedValue(currentUser);
+
+      // Act
+      await authService.update(jwtPayload, {
+        preferences: {
+          analytics: { optOut: true },
+        },
+      });
+
+      // Assert
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        jwtPayload.id,
+        expect.objectContaining({
+          preferences: {
+            analytics: { optOut: true },
+          },
+        }),
+      );
+    });
+
+    it('should deep-merge analytics sub-properties without clobbering', async () => {
+      // Arrange - User has existing analytics preferences with future properties
+      const currentUser = {
+        id: 1,
+        slug: 'test-user',
+        email: 'test@example.com',
+        role: { id: 1 },
+        preferences: {
+          analytics: { optOut: false },
+        },
+      };
+
+      mockUserService.findById.mockResolvedValue(currentUser);
+      mockUserService.update.mockResolvedValue(currentUser);
+
+      // Act - Update analytics optOut
+      await authService.update(jwtPayload, {
+        preferences: {
+          analytics: { optOut: true },
+        },
+      });
+
+      // Assert - analytics should be merged, not replaced
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        jwtPayload.id,
+        expect.objectContaining({
+          preferences: {
+            analytics: { optOut: true },
+          },
+        }),
+      );
+    });
+  });
 });
