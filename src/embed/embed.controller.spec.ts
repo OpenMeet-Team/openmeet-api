@@ -128,7 +128,6 @@ describe('EmbedController', () => {
         expect.objectContaining({
           'Content-Type': 'application/javascript',
           'Cache-Control': 'public, max-age=3600',
-          'Access-Control-Allow-Origin': '*',
         }),
       );
       expect(res.send).toHaveBeenCalledWith('(function(){})();');

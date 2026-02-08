@@ -74,7 +74,6 @@ export class EmbedController {
       res.set({
         'Content-Type': 'application/javascript',
         'Cache-Control': 'public, max-age=3600',
-        'Access-Control-Allow-Origin': '*',
       });
 
       res.send(EmbedController.widgetJsCache);

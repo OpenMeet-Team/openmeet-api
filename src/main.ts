@@ -28,30 +28,55 @@ async function bootstrap() {
   startupLog('Bootstrap starting - creating NestJS application');
   try {
     const app = await NestFactory.create(AppModule, {
-      cors: {
-        origin: [
-          'http://localhost:9005',
-          'https://localhost:9005',
-          'http://localhost:8087',
-          'https://localhost:8087',
-          'https://localhost', // Capacitor Android
-          'capacitor://localhost', // Capacitor iOS
-          'https://api.dev.openmeet.net',
-          'https://platform.openmeet.net',
-          'https://platform-dev.openmeet.net',
-          'https://platform.dev.openmeet.net',
-        ],
-        credentials: true,
-        allowedHeaders: [
-          'Content-Type',
-          'Authorization',
-          'X-Tenant-ID',
-          'x-group-slug',
-          'x-event-slug',
-        ],
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      },
       bufferLogs: false, // Changed from true to false to output logs immediately
+    });
+
+    // Embed routes: permissive CORS (any origin, no credentials)
+    // Must be registered before global CORS so OPTIONS preflights are handled correctly
+    app.use(
+      '/api/embed',
+      (
+        req: import('express').Request,
+        res: import('express').Response,
+        next: import('express').NextFunction,
+      ) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader(
+          'Access-Control-Allow-Headers',
+          'Content-Type, X-Tenant-ID, x-tenant-id',
+        );
+        if (req.method === 'OPTIONS') {
+          res.status(204).end();
+          return;
+        }
+        next();
+      },
+    );
+
+    // Global CORS for all other routes (credentials-based with origin allowlist)
+    app.enableCors({
+      origin: [
+        'http://localhost:9005',
+        'https://localhost:9005',
+        'http://localhost:8087',
+        'https://localhost:8087',
+        'https://localhost', // Capacitor Android
+        'capacitor://localhost', // Capacitor iOS
+        'https://api.dev.openmeet.net',
+        'https://platform.openmeet.net',
+        'https://platform-dev.openmeet.net',
+        'https://platform.dev.openmeet.net',
+      ],
+      credentials: true,
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Tenant-ID',
+        'x-group-slug',
+        'x-event-slug',
+      ],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     });
     startupLog('NestJS application created successfully');
 
