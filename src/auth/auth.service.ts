@@ -808,6 +808,18 @@ export class AuthService {
     delete userDto.email;
     delete userDto.oldPassword;
 
+    if (userDto.preferences) {
+      const currentPrefs = (currentUser as any).preferences || {};
+      userDto.preferences = {
+        ...currentPrefs,
+        ...userDto.preferences,
+        analytics: {
+          ...(currentPrefs.analytics || {}),
+          ...(userDto.preferences.analytics || {}),
+        },
+      } as any;
+    }
+
     await this.userService.update(userJwtPayload.id, userDto);
 
     return this.userService.findById(userJwtPayload.id);

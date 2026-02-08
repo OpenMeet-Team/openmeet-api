@@ -1,8 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { FileDto } from '../../file/dto/file.dto';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { lowerCaseTransformer } from '../../utils/transformers/lower-case.transformer';
+import { UserPreferencesDto } from './user-preferences.dto';
 
 export class AuthUpdateDto {
   @ApiPropertyOptional({ type: () => FileDto })
@@ -43,4 +50,10 @@ export class AuthUpdateDto {
   @ApiPropertyOptional({ type: () => [Number] })
   @IsOptional()
   interests?: number[];
+
+  @ApiPropertyOptional({ type: () => UserPreferencesDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => UserPreferencesDto)
+  preferences?: UserPreferencesDto;
 }
