@@ -674,6 +674,7 @@ export class EventQueryService {
 
     const events = await this.eventRepository
       .createQueryBuilder('event')
+      .leftJoinAndSelect('event.image', 'image')
       .where('event.group.id = :groupId', { groupId })
       .andWhere('event.status IN (:...statuses)', {
         statuses: [EventStatus.Published, EventStatus.Cancelled],
@@ -682,6 +683,7 @@ export class EventQueryService {
         '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
         { now, oneHourAgo },
       )
+      .orderBy('event.startDate', 'ASC')
       .limit(limit)
       .getMany();
 
