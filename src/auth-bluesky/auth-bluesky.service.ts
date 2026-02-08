@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { ConfigService } from '@nestjs/config';
@@ -298,6 +304,18 @@ export class AuthBlueskyService {
 
     const userService = await this.getUserService();
 
+    // Build the social data object for auth service methods
+    const socialData = {
+      id: profileData.did,
+      email: profileData.email || existingUser?.email || '',
+      emailConfirmed: profileData.emailConfirmed,
+      firstName: profileData.displayName || profileData.handle,
+      lastName: '',
+      avatar: profileData.avatar,
+    };
+
+    let loginResponse;
+
     if (existingUser) {
       this.logger.debug('Found existing user:', {
         id: existingUser.id,
@@ -336,23 +354,62 @@ export class AuthBlueskyService {
           tenantId,
         );
       }
+
+      // User found via identity lookup - create session directly.
+      // This bypasses findOrCreateUser, avoiding duplicate email errors
+      // for users who linked their ATProto identity via Settings.
+      this.logger.debug(
+        'Creating login session directly for known user (bypassing findOrCreateUser)',
+        { userId: existingUser.id, foundVia },
+      );
+      loginResponse = await this.authService.createLoginSession(
+        existingUser,
+        'bluesky',
+        socialData,
+        tenantId,
+      );
+    } else {
+      // No user found via identity lookup.
+      // Check if the ATProto email matches an existing account.
+      const atprotoEmail = profileData.email;
+      if (atprotoEmail) {
+        const emailMatch = await userService.findByEmail(
+          atprotoEmail,
+          tenantId,
+        );
+
+        if (emailMatch) {
+          this.logger.warn(
+            'ATProto login blocked: email matches existing account without linked identity',
+            {
+              atprotoEmail,
+              existingUserId: emailMatch.id,
+              existingProvider: emailMatch.provider,
+              did: profileData.did,
+            },
+          );
+          throw new UnprocessableEntityException({
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            errors: {
+              email:
+                'An account with this email already exists. Log in with your existing account, then link your AT Protocol identity in Settings.',
+            },
+          });
+        }
+      }
+
+      // Genuinely new user - use validateSocialLogin to create account
+      this.logger.debug('Creating new user via validateSocialLogin', {
+        tenantId,
+      });
+      loginResponse = await this.authService.validateSocialLogin(
+        'bluesky',
+        socialData,
+        tenantId,
+      );
     }
 
-    this.logger.debug('Validating social login with tenant ID:', { tenantId });
-    const loginResponse = await this.authService.validateSocialLogin(
-      'bluesky',
-      {
-        id: profileData.did,
-        email: profileData.email || existingUser?.email || '',
-        emailConfirmed: profileData.emailConfirmed,
-        firstName: profileData.displayName || profileData.handle,
-        lastName: '',
-        avatar: profileData.avatar, // Pass avatar URL for user photo
-        // Handle is not stored - it's resolved from DID when needed
-      },
-      tenantId,
-    );
-    this.logger.debug('Social login validated:', { loginResponse, tenantId });
+    this.logger.debug('Login completed:', { tenantId });
 
     // Ensure AT Protocol identity record exists
     // - For users found via 'atproto-identity': record already exists, skip

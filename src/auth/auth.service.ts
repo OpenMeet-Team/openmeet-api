@@ -356,6 +356,32 @@ export class AuthService {
       }
     }
 
+    return this.createLoginSession(user, authProvider, socialData, tenantId);
+  }
+
+  /**
+   * Create a login session for an already-identified user.
+   *
+   * This method handles the common session creation logic shared across all
+   * login paths: ensureAtprotoIdentity, session creation, and JWT generation.
+   *
+   * Used by:
+   * - validateSocialLogin (after findOrCreateUser)
+   * - AuthBlueskyService.handleAuthCallback (when user found via identity lookup,
+   *   bypassing findOrCreateUser to avoid duplicate email errors)
+   *
+   * @param user - The authenticated user
+   * @param authProvider - The auth provider used (e.g., 'bluesky', 'google')
+   * @param socialData - Social login data (includes DID for Bluesky users)
+   * @param tenantId - Tenant identifier
+   * @returns LoginResponseDto with JWT tokens and session
+   */
+  async createLoginSession(
+    user: User,
+    authProvider: string,
+    socialData: SocialInterface | null,
+    tenantId: string,
+  ): Promise<LoginResponseDto> {
     // Auto-create AT Protocol identity for users who don't have one
     await this.ensureAtprotoIdentity(user, authProvider, socialData, tenantId);
 
