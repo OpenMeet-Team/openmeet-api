@@ -70,6 +70,11 @@ export function getStyles(theme: 'light' | 'dark'): string {
       background: ${colors.border};
     }
 
+    .om-event-image--placeholder {
+      object-fit: contain;
+      padding: 8px;
+    }
+
     .om-event-content {
       flex: 1;
       min-width: 0;

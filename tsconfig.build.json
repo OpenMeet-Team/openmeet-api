@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts", "disabled-tests"]
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts", "disabled-tests", "src/embed-widget"]
 }
