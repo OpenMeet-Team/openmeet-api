@@ -104,7 +104,7 @@ describe('AT Protocol Account Linking (E2E)', () => {
       // The actual OAuth callback with identity lookup + createLoginSession
       // requires mocking and is covered by unit tests
       const response = await request(app)
-        .get('/api/v1/auth-bluesky')
+        .get('/api/v1/auth/bluesky/authorize')
         .set('x-tenant-id', TESTING_TENANT_ID)
         .query({ handle: 'test.bsky.social' });
 
