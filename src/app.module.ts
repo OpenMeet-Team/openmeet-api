@@ -63,6 +63,7 @@ import { SitemapModule } from './sitemap/sitemap.module';
 import { OidcModule } from './oidc/oidc.module';
 import { ActivityFeedModule } from './activity-feed/activity-feed.module';
 import { MetaModule } from './meta/meta.module';
+import { EmbedModule } from './embed/embed.module';
 import { TestHelpersModule } from './test-helpers/test-helpers.module';
 import { PdsModule } from './pds/pds.module';
 import { UserAtprotoIdentityModule } from './user-atproto-identity/user-atproto-identity.module';
@@ -168,6 +169,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     SitemapModule,
     OidcModule,
     MetaModule,
+    EmbedModule,
     PdsModule,
     UserAtprotoIdentityModule,
     AtprotoIdentityModule,
