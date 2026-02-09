@@ -39,6 +39,7 @@ import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.service';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { ProfileSummaryDto } from './dto/profile-summary.dto';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -61,6 +62,7 @@ export class UserService {
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
     private readonly blueskyIdentityService: BlueskyIdentityService,
     private readonly atprotoHandleCacheService: AtprotoHandleCacheService,
+    private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -335,6 +337,18 @@ export class UserService {
     if (user && user.preferences?.bluesky) {
       const { bluesky } = user.preferences;
 
+      // Derive connected status from the identity table (source of truth)
+      const tenantId = this.request?.tenantId;
+      let atprotoConnected = false;
+      if (tenantId && user.ulid) {
+        const atprotoIdentity =
+          await this.userAtprotoIdentityService.findByUserUlid(
+            tenantId,
+            user.ulid,
+          );
+        atprotoConnected = !!atprotoIdentity;
+      }
+
       // Add formatted ATProtocol profile data for easier consumption by the frontend
       user['socialProfiles'] = {
         ...user['socialProfiles'], // Preserve any existing social profiles
@@ -342,7 +356,7 @@ export class UserService {
           did: bluesky.did,
           handle: bluesky.handle, // Now using resolved handle from above
           avatarUrl: bluesky.avatar,
-          connected: bluesky.connected === true,
+          connected: atprotoConnected,
           connectedAt: bluesky.connectedAt,
         },
       };

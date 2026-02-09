@@ -20,6 +20,7 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 
 @Injectable()
 export class BlueskyService {
@@ -41,6 +42,7 @@ export class BlueskyService {
     @Inject(forwardRef(() => BlueskyIdService))
     private readonly blueskyIdService: BlueskyIdService,
     private readonly blueskyIdentityService: BlueskyIdentityService,
+    private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -226,8 +228,19 @@ export class BlueskyService {
       }
     }
 
+    // Derive connected status from the identity table (source of truth)
+    const tenantId = this.request?.tenantId;
+    let connected = false;
+    if (tenantId && user.ulid) {
+      const identity = await this.userAtprotoIdentityService.findByUserUlid(
+        tenantId,
+        user.ulid,
+      );
+      connected = !!identity;
+    }
+
     return {
-      connected: !!user.preferences?.bluesky?.connected,
+      connected,
       handle,
     };
   }

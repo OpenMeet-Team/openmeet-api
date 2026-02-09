@@ -1034,8 +1034,6 @@ export class EventManagementService {
       name: event.name,
       sourceType: event.sourceType,
       sourceId: event.sourceId,
-      userBlueskyConnected:
-        !!this.request.user?.preferences?.bluesky?.connected,
     });
 
     // Get latest user data with preferences to check Bluesky connection state
@@ -1056,10 +1054,10 @@ export class EventManagementService {
       blueskyPreferences: currentUser?.preferences?.bluesky,
     });
 
-    // If the event is a Bluesky event and the user is connected to Bluesky, attempt to delete it there
+    // If the event is a Bluesky event, attempt to delete it there
+    // The remaining structural guards (sourceType, socialId, sourceId, rkey) are sufficient
     if (
       event.sourceType === EventSourceType.BLUESKY && // check if event came from Bluesky
-      currentUser?.preferences?.bluesky?.connected && // confirm user is connected to Bluesky
       currentUser?.socialId && // ensure we have user's DID
       event.sourceId && // ensure we have event creator's DID
       event.sourceData?.rkey // ensure we have the Bluesky record key

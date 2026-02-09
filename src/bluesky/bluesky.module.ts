@@ -12,6 +12,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { MetricsModule } from '../metrics/metrics.module';
+import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { MetricsModule } from '../metrics/metrics.module';
     ShadowAccountModule,
     TenantModule,
     MetricsModule,
+    UserAtprotoIdentityModule,
     forwardRef(() => EventModule),
   ],
   controllers: [BlueskyController],

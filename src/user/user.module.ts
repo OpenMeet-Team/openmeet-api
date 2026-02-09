@@ -11,6 +11,7 @@ import { UserListener } from './user.listener';
 import { ConfigModule } from '@nestjs/config';
 import { MatrixModule } from '../matrix/matrix.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 
 const infrastructurePersistenceModule = RelationalUserPersistenceModule;
 
@@ -23,6 +24,7 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
     RoleModule,
     forwardRef(() => MatrixModule),
     BlueskyModule, // No forwardRef needed - BlueskyIdentityService has no circular dependency
+    UserAtprotoIdentityModule,
   ],
   controllers: [UserController],
   providers: [

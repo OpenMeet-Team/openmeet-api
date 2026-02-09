@@ -26,6 +26,7 @@ import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.service';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { StatusEnum } from '../status/status.enum';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -99,6 +100,16 @@ describe('UserService', () => {
             resolveHandle: jest.fn().mockResolvedValue('vlad.sitalo.org'),
             resolveHandles: jest.fn(),
             invalidate: jest.fn(),
+          },
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: {
+            findByUserUlid: jest.fn().mockResolvedValue(null),
+            findByDid: jest.fn().mockResolvedValue(null),
+            create: jest.fn(),
+            deleteByUserUlid: jest.fn(),
+            update: jest.fn(),
           },
         },
       ],
@@ -2045,6 +2056,127 @@ describe('UserService', () => {
 
       // Assert: Handle is updated in-memory
       expect(result?.preferences?.bluesky?.handle).toBe(handle);
+    });
+  });
+
+  describe('showProfile - AT Protocol identity-based connected status', () => {
+    let mockUsersRepository: any;
+    let mockAtprotoHandleCacheService: jest.Mocked<AtprotoHandleCacheService>;
+    let mockUserAtprotoIdentityServiceRef: jest.Mocked<UserAtprotoIdentityService>;
+
+    beforeEach(() => {
+      mockUsersRepository = module.get(Repository);
+      mockAtprotoHandleCacheService = module.get(AtprotoHandleCacheService);
+      mockUserAtprotoIdentityServiceRef = module.get(UserAtprotoIdentityService);
+    });
+
+    it('should set connected=true in socialProfiles when identity exists in identity table', async () => {
+      const did = 'did:plc:test-identity-exists';
+
+      // Arrange: User with bluesky preferences (connected=false in preferences, but identity exists)
+      const userWithIdentity = {
+        id: 1,
+        ulid: 'test-ulid-identity',
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle: 'test.user',
+            connected: false, // Preferences say false
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      mockUsersRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(userWithIdentity);
+
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockAtprotoHandleCacheService.resolveHandle.mockResolvedValue(
+        'test.user',
+      );
+      mockUsersRepository.save = jest.fn();
+
+      // Identity table returns a record
+      mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue({
+        id: 1,
+        userUlid: 'test-ulid-identity',
+        did,
+        handle: 'test.user',
+        pdsUrl: 'https://pds.example.com',
+      } as any);
+
+      // Act
+      const result = await userService.showProfile('openmeet-abc123');
+
+      // Assert: socialProfiles.atprotocol.connected should be true from identity table
+      expect(result?.['socialProfiles']?.atprotocol?.connected).toBe(true);
+      expect(
+        mockUserAtprotoIdentityServiceRef.findByUserUlid,
+      ).toHaveBeenCalledWith(TESTING_TENANT_ID, 'test-ulid-identity');
+    });
+
+    it('should set connected=false in socialProfiles when no identity exists in identity table', async () => {
+      const did = 'did:plc:test-no-identity';
+
+      // Arrange: User with bluesky preferences (connected=true in preferences, but no identity)
+      const userWithoutIdentity = {
+        id: 1,
+        ulid: 'test-ulid-no-identity',
+        slug: 'openmeet-abc123',
+        firstName: 'OpenMeet',
+        isShadowAccount: false,
+        preferences: {
+          bluesky: {
+            did,
+            handle: 'test.user',
+            connected: true, // Preferences say true, but identity table is authoritative
+          },
+        },
+        photo: null,
+        interests: [],
+      };
+
+      mockUsersRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(userWithoutIdentity);
+
+      mockUsersRepository.manager = {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockAtprotoHandleCacheService.resolveHandle.mockResolvedValue(
+        'test.user',
+      );
+      mockUsersRepository.save = jest.fn();
+
+      // Identity table returns null (no identity)
+      mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue(null);
+
+      // Act
+      const result = await userService.showProfile('openmeet-abc123');
+
+      // Assert: socialProfiles.atprotocol.connected should be false from identity table
+      expect(result?.['socialProfiles']?.atprotocol?.connected).toBe(false);
     });
   });
 

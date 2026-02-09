@@ -21,6 +21,7 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { RoleEnum } from '../role/role.enum';
 import { Public } from '../auth/decorators/public.decorator';
 import { UserService } from '../user/user.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 
 @ApiTags('Bluesky')
 @Controller('bluesky')
@@ -32,6 +33,7 @@ export class BlueskyController {
   constructor(
     private readonly blueskyService: BlueskyService,
     private readonly userService: UserService,
+    private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
   ) {}
 
   @Post('connect')
@@ -126,11 +128,21 @@ export class BlueskyController {
       const isSelf = currentUser.id === user.id;
 
       if (!isAdmin && !isSelf) {
+        // Derive connected status from the identity table (source of truth)
+        let connected = false;
+        if (user.ulid) {
+          const identity = await this.userAtprotoIdentityService.findByUserUlid(
+            req.tenantId,
+            user.ulid,
+          );
+          connected = !!identity;
+        }
+
         return {
           message: 'User profile basics only',
           // Return minimal public info
           handle: user.preferences?.bluesky?.handle,
-          connected: !!user.preferences?.bluesky?.connected,
+          connected,
         };
       }
 
