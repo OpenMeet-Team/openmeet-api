@@ -351,7 +351,7 @@ describe('AtprotoPublisherService', () => {
         mockIdentity,
       );
       pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
-      blueskyService.createEventRecord.mockResolvedValue({ rkey });
+      blueskyService.createEventRecord.mockResolvedValue({ rkey, cid: 'bafyreimockcid' });
 
       const result = await service.publishEvent(event, tenantId);
 
@@ -367,6 +367,29 @@ describe('AtprotoPublisherService', () => {
         tenantId,
         mockSessionResult.agent, // Agent from PdsSessionService
       );
+    });
+
+    it('should include atprotoCid in publish result', async () => {
+      const event = createMockEvent();
+      const rkey = 'test-rkey-123';
+      const cid = 'bafyreicid789';
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+      blueskyService.createEventRecord.mockResolvedValue({ rkey, cid });
+
+      const result = await service.publishEvent(event, tenantId);
+
+      expect(result.action).toBe('published');
+      expect(result.atprotoRkey).toBe(rkey);
+      expect(result.atprotoCid).toBe(cid);
     });
 
     it('should return updated action when republishing existing event', async () => {
@@ -388,7 +411,7 @@ describe('AtprotoPublisherService', () => {
         mockIdentity,
       );
       pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
-      blueskyService.createEventRecord.mockResolvedValue({ rkey });
+      blueskyService.createEventRecord.mockResolvedValue({ rkey, cid: 'bafyreimockcid' });
 
       const result = await service.publishEvent(event, tenantId);
 
@@ -414,7 +437,7 @@ describe('AtprotoPublisherService', () => {
         mockIdentity,
       );
       pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
-      blueskyService.createEventRecord.mockResolvedValue({ rkey: 'rkey' });
+      blueskyService.createEventRecord.mockResolvedValue({ rkey: 'rkey', cid: 'bafyreimockcid' });
 
       const result = await service.publishEvent(event, tenantId, {
         force: true,
@@ -437,6 +460,54 @@ describe('AtprotoPublisherService', () => {
 
       expect(result.action).toBe('skipped');
       expect(blueskyService.createEventRecord).not.toHaveBeenCalled();
+    });
+
+    it('should return error result with validationError when BlueskyService throws validation error', async () => {
+      const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+      blueskyService.createEventRecord.mockRejectedValue(
+        new Error(
+          'AT Protocol record validation failed: Record must have the property "name"',
+        ),
+      );
+
+      const result = await service.publishEvent(event, tenantId);
+
+      expect(result.action).toBe('error');
+      expect(result.validationError).toContain(
+        'AT Protocol record validation failed',
+      );
+      expect(result.error).toContain('AT Protocol record validation failed');
+    });
+
+    it('should re-throw non-validation errors from BlueskyService', async () => {
+      const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+      blueskyService.createEventRecord.mockRejectedValue(
+        new Error('Network timeout'),
+      );
+
+      await expect(service.publishEvent(event, tenantId)).rejects.toThrow(
+        'Network timeout',
+      );
     });
 
     it('should throw when PDS call fails', async () => {
@@ -534,7 +605,7 @@ describe('AtprotoPublisherService', () => {
         pdsSessionService.getSessionForUser.mockResolvedValue(
           mockSessionResult,
         );
-        blueskyService.createEventRecord.mockResolvedValue({ rkey });
+        blueskyService.createEventRecord.mockResolvedValue({ rkey, cid: 'bafyreimockcid' });
 
         await service.publishEvent(event, tenantId);
 
@@ -588,7 +659,7 @@ describe('AtprotoPublisherService', () => {
         pdsSessionService.getSessionForUser.mockResolvedValue(
           mockSessionResult,
         );
-        blueskyService.createEventRecord.mockResolvedValue({ rkey });
+        blueskyService.createEventRecord.mockResolvedValue({ rkey, cid: 'bafyreimockcid' });
 
         const result = await service.publishEvent(event, tenantId);
 

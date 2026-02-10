@@ -514,12 +514,19 @@ export class EventManagementService {
           {
             atprotoUri: publishResult.atprotoUri,
             atprotoRkey: publishResult.atprotoRkey,
+            atprotoCid: publishResult.atprotoCid,
             atprotoSyncedAt: new Date(),
           },
         );
 
         this.logger.debug(
           `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
+        );
+      }
+
+      if (publishResult.action === 'error' && publishResult.validationError) {
+        this.logger.warn(
+          `Event ${eventToPublish.slug} saved but AT Protocol publish failed: ${publishResult.validationError}`,
         );
       }
     }
@@ -986,12 +993,19 @@ export class EventManagementService {
           {
             atprotoUri: publishResult.atprotoUri,
             atprotoRkey: publishResult.atprotoRkey,
+            atprotoCid: publishResult.atprotoCid,
             atprotoSyncedAt: new Date(),
           },
         );
 
         this.logger.debug(
           `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
+        );
+      }
+
+      if (publishResult.action === 'error' && publishResult.validationError) {
+        this.logger.warn(
+          `Event ${updatedEvent.slug} saved but AT Protocol publish failed: ${publishResult.validationError}`,
         );
       }
     }
@@ -2339,6 +2353,7 @@ export class EventManagementService {
         {
           atprotoUri: publishResult.atprotoUri,
           atprotoRkey: publishResult.atprotoRkey,
+          atprotoCid: publishResult.atprotoCid,
           atprotoSyncedAt: new Date(),
         },
       );

@@ -19,9 +19,15 @@ export interface PublishResult {
   /** The record key used in the AT Protocol URI */
   atprotoRkey?: string;
 
+  /** The Content Identifier (CID) of the published record, used for StrongRef */
+  atprotoCid?: string;
+
   /** Error message when action is 'error' */
   error?: string;
 
   /** Indicates the user needs to re-link their AT Protocol account via OAuth */
   needsOAuthLink?: boolean;
+
+  /** Validation error message when record fails lexicon schema validation */
+  validationError?: string;
 }

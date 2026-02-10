@@ -5,6 +5,7 @@ import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
 import { BlueskyRsvpService } from './bluesky-rsvp.service';
 import { AtprotoHandleCacheService } from './atproto-handle-cache.service';
+import { AtprotoLexiconService } from './atproto-lexicon.service';
 import { UserModule } from '../user/user.module';
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
 import { EventModule } from '../event/event.module';
@@ -32,6 +33,7 @@ import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto
     BlueskyIdentityService,
     BlueskyRsvpService,
     AtprotoHandleCacheService,
+    AtprotoLexiconService,
   ],
   exports: [
     BlueskyService,
@@ -39,6 +41,7 @@ import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto
     BlueskyIdentityService,
     BlueskyRsvpService,
     AtprotoHandleCacheService,
+    AtprotoLexiconService,
   ],
 })
 export class BlueskyModule {}

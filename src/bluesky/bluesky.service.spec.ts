@@ -13,6 +13,7 @@ import { REQUEST } from '@nestjs/core';
 import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { AtprotoLexiconService } from './atproto-lexicon.service';
 
 // Mock modules first before creating mock implementations
 jest.mock('@atproto/api', () => ({
@@ -133,6 +134,10 @@ const mockRequest = {
   tenantId: 'test-tenant',
 };
 
+const mockAtprotoLexiconService = {
+  validate: jest.fn().mockReturnValue({ success: true, value: {} }),
+};
+
 // Mock Agent implementation to return in tests
 const mockAgentImplementation = {
   getProfile: jest.fn().mockResolvedValue({}),
@@ -146,8 +151,10 @@ const mockAgentImplementation = {
       repo: {
         getRecord: jest.fn(),
         putRecord: jest.fn().mockResolvedValue({
-          uri: 'at://test/test',
-          cid: 'test-cid',
+          data: {
+            uri: 'at://test/test',
+            cid: 'test-cid',
+          },
         }),
         listRecords: jest.fn().mockResolvedValue({
           data: { records: [] },
@@ -205,6 +212,10 @@ describe('BlueskyService', () => {
         {
           provide: UserAtprotoIdentityService,
           useValue: mockUserAtprotoIdentityService,
+        },
+        {
+          provide: AtprotoLexiconService,
+          useValue: mockAtprotoLexiconService,
         },
       ],
     }).compile();
@@ -421,10 +432,9 @@ describe('BlueskyService', () => {
 
       // Assert: connected should be true because identity exists in table
       expect(result.connected).toBe(true);
-      expect(mockUserAtprotoIdentityService.findByUserUlid).toHaveBeenCalledWith(
-        'test-tenant',
-        'test-ulid-123',
-      );
+      expect(
+        mockUserAtprotoIdentityService.findByUserUlid,
+      ).toHaveBeenCalledWith('test-tenant', 'test-ulid-123');
     });
 
     it('should return connected=false when user has no AT Protocol identity in the identity table', async () => {
@@ -1158,6 +1168,45 @@ describe('BlueskyService', () => {
       expect(result.rkey).toBe(existingRkey);
     });
 
+    it('should return cid from putRecord result alongside rkey', async () => {
+      // Arrange
+      const event = {
+        name: 'Test Event with CID',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-cid',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Mock putRecord to return a specific CID
+      mockAgentImplementation.com.atproto.repo.putRecord.mockResolvedValueOnce({
+        data: {
+          uri: 'at://test-did/community.lexicon.calendar.event/testrkey',
+          cid: 'bafyreieventcid456',
+        },
+      });
+
+      // Act
+      const result = await service.createEventRecord(
+        event,
+        did,
+        handle,
+        tenantId,
+      );
+
+      // Assert - result should include cid from putRecord
+      expect(result).toBeDefined();
+      expect(result.rkey).toBeDefined();
+      expect(result.cid).toBe('bafyreieventcid456');
+    });
+
     it('should use event.atprotoRkey first if set (pre-generated TID)', async () => {
       // Arrange - event with pre-generated atprotoRkey
       const preGeneratedRkey = '3ktest1234abc';
@@ -1489,6 +1538,74 @@ describe('BlueskyService', () => {
 
       // Assert - should use the valid TID rkey
       expect(result.rkey).toBe(validTid);
+    });
+
+    it('should call lexicon validation before putRecord', async () => {
+      // Arrange
+      const event = {
+        name: 'Test Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - validate should be called before putRecord
+      expect(mockAtprotoLexiconService.validate).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        expect.objectContaining({
+          name: 'Test Event',
+        }),
+      );
+
+      const validateCallOrder =
+        mockAtprotoLexiconService.validate.mock.invocationCallOrder[0];
+      const putRecordCallOrder =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock
+          .invocationCallOrder[0];
+      expect(validateCallOrder).toBeLessThan(putRecordCallOrder);
+    });
+
+    it('should throw an error and not call putRecord when validation fails', async () => {
+      // Arrange
+      const event = {
+        name: 'Test Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Mock validation failure
+      mockAtprotoLexiconService.validate.mockReturnValueOnce({
+        success: false,
+        error: { message: 'Record must have the property "name"' },
+      });
+
+      // Act & Assert
+      await expect(
+        service.createEventRecord(event, did, handle, tenantId),
+      ).rejects.toThrow('AT Protocol record validation failed');
+
+      // putRecord should NOT have been called
+      expect(
+        mockAgentImplementation.com.atproto.repo.putRecord,
+      ).not.toHaveBeenCalled();
     });
 
     // Bug 2+4 combined: uris array items should all have $type
