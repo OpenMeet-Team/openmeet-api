@@ -24,4 +24,7 @@ export interface PublishResult {
 
   /** Indicates the user needs to re-link their AT Protocol account via OAuth */
   needsOAuthLink?: boolean;
+
+  /** Validation error message when record fails lexicon schema validation */
+  validationError?: string;
 }

@@ -312,13 +312,32 @@ export class AtprotoPublisherService {
       return { action: 'skipped' };
     }
 
-    const { rkey } = await this.blueskyService.createEventRecord(
-      event,
-      session.did,
-      session.did, // Use DID as handle fallback
-      tenantId,
-      session.agent, // Pass the agent from PdsSessionService
-    );
+    let rkey: string;
+    try {
+      const result = await this.blueskyService.createEventRecord(
+        event,
+        session.did,
+        session.did, // Use DID as handle fallback
+        tenantId,
+        session.agent, // Pass the agent from PdsSessionService
+      );
+      rkey = result.rkey;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message?.startsWith('AT Protocol record validation failed:')
+      ) {
+        this.logger.warn(
+          `Validation error publishing event ${event.slug}: ${error.message}`,
+        );
+        return {
+          action: 'error',
+          error: error.message,
+          validationError: error.message,
+        };
+      }
+      throw error; // Re-throw non-validation errors
+    }
 
     const atprotoUri = `at://${session.did}/${BLUESKY_EVENT_COLLECTION}/${rkey}`;
 

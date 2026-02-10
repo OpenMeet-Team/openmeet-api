@@ -439,6 +439,54 @@ describe('AtprotoPublisherService', () => {
       expect(blueskyService.createEventRecord).not.toHaveBeenCalled();
     });
 
+    it('should return error result with validationError when BlueskyService throws validation error', async () => {
+      const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+      blueskyService.createEventRecord.mockRejectedValue(
+        new Error(
+          'AT Protocol record validation failed: Record must have the property "name"',
+        ),
+      );
+
+      const result = await service.publishEvent(event, tenantId);
+
+      expect(result.action).toBe('error');
+      expect(result.validationError).toContain(
+        'AT Protocol record validation failed',
+      );
+      expect(result.error).toContain('AT Protocol record validation failed');
+    });
+
+    it('should re-throw non-validation errors from BlueskyService', async () => {
+      const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+      blueskyService.createEventRecord.mockRejectedValue(
+        new Error('Network timeout'),
+      );
+
+      await expect(service.publishEvent(event, tenantId)).rejects.toThrow(
+        'Network timeout',
+      );
+    });
+
     it('should throw when PDS call fails', async () => {
       const event = createMockEvent();
       const mockIdentity = {

@@ -522,6 +522,12 @@ export class EventManagementService {
           `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
         );
       }
+
+      if (publishResult.action === 'error' && publishResult.validationError) {
+        this.logger.warn(
+          `Event ${eventToPublish.slug} saved but AT Protocol publish failed: ${publishResult.validationError}`,
+        );
+      }
     }
 
     return event || createdEvent; // Fallback to createdEvent if findOne returns null
@@ -992,6 +998,12 @@ export class EventManagementService {
 
         this.logger.debug(
           `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
+        );
+      }
+
+      if (publishResult.action === 'error' && publishResult.validationError) {
+        this.logger.warn(
+          `Event ${updatedEvent.slug} saved but AT Protocol publish failed: ${publishResult.validationError}`,
         );
       }
     }

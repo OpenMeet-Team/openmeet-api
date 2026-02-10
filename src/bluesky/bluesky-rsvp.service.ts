@@ -13,6 +13,7 @@ import {
   RSVP_STATUS,
   RsvpStatusShort,
 } from './BlueskyTypes';
+import { AtprotoLexiconService } from './atproto-lexicon.service';
 
 /**
  * Service for managing RSVPs in the ATProtocol ecosystem
@@ -39,6 +40,7 @@ export class BlueskyRsvpService {
     private readonly rsvpOperationsCounter: Counter<string>,
     @InjectMetric('bluesky_rsvp_processing_duration_seconds')
     private readonly processingDuration: Histogram<string>,
+    private readonly atprotoLexiconService: AtprotoLexiconService,
   ) {}
 
   /**
@@ -180,6 +182,21 @@ export class BlueskyRsvpService {
         eventUri,
         recordData,
       });
+
+      // Validate record against AT Protocol lexicon schema
+      const validation = this.atprotoLexiconService.validate(
+        BLUESKY_COLLECTIONS.RSVP,
+        recordData,
+      );
+      if (!validation.success) {
+        this.logger.error('RSVP record failed lexicon validation', {
+          eventId: event.id,
+          errors: validation.error.message,
+        });
+        throw new Error(
+          `AT Protocol record validation failed: ${validation.error.message}`,
+        );
+      }
 
       // Use standard collection name without suffix
       const standardRsvpCollection = BLUESKY_COLLECTIONS.RSVP;

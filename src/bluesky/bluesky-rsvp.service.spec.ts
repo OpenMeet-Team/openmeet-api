@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BlueskyRsvpService } from './bluesky-rsvp.service';
 import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
+import { AtprotoLexiconService } from './atproto-lexicon.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventSourceType } from '../core/constants/source-type.constant';
 import { Counter, Histogram } from 'prom-client';
@@ -11,6 +12,7 @@ describe('BlueskyRsvpService', () => {
   let service: BlueskyRsvpService;
   let blueskyService: jest.Mocked<BlueskyService>;
   let blueskyIdService: jest.Mocked<BlueskyIdService>;
+  let atprotoLexiconService: jest.Mocked<AtprotoLexiconService>;
   let rsvpOperationsCounter: jest.Mocked<Counter<string>>;
   let processingDuration: jest.Mocked<Histogram<string>>;
 
@@ -24,6 +26,10 @@ describe('BlueskyRsvpService', () => {
       createUri: jest.fn(),
       parseUri: jest.fn(),
     } as unknown as jest.Mocked<BlueskyIdService>;
+
+    atprotoLexiconService = {
+      validate: jest.fn().mockReturnValue({ success: true, value: {} }),
+    } as unknown as jest.Mocked<AtprotoLexiconService>;
 
     rsvpOperationsCounter = {
       inc: jest.fn(),
@@ -43,6 +49,10 @@ describe('BlueskyRsvpService', () => {
         {
           provide: BlueskyIdService,
           useValue: blueskyIdService,
+        },
+        {
+          provide: AtprotoLexiconService,
+          useValue: atprotoLexiconService,
         },
         {
           provide: 'PROM_METRIC_BLUESKY_RSVP_OPERATIONS_TOTAL',
@@ -185,6 +195,103 @@ describe('BlueskyRsvpService', () => {
         rsvpUri: mockRsvpUri,
         rsvpCid: 'cidxyz123',
       });
+    });
+
+    it('should call lexicon validation before putRecord', async () => {
+      // Mock event data
+      const event = {
+        id: 1,
+        name: 'Test Event',
+        sourceType: EventSourceType.BLUESKY,
+        sourceData: {
+          did: 'did:plc:abcdef123456',
+          rkey: 'event123',
+          cid: 'bafyreieventcid123',
+        },
+      } as unknown as EventEntity;
+
+      const userDid = 'did:plc:xyz789';
+      const tenantId = 'tenant123';
+
+      const mockEventUri =
+        'at://did:plc:abcdef123456/community.lexicon.calendar.event/event123';
+      blueskyIdService.createUri.mockReturnValueOnce(mockEventUri);
+      blueskyIdService.createUri.mockReturnValueOnce(
+        'at://did:plc:xyz789/community.lexicon.calendar.rsvp/rkey',
+      );
+
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: 'mock-uri', cid: 'mock-cid' },
+              }),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      await service.createRsvp(event, 'going', userDid, tenantId);
+
+      // Validate should be called with RSVP collection and record data
+      expect(atprotoLexiconService.validate).toHaveBeenCalledWith(
+        'community.lexicon.calendar.rsvp',
+        expect.objectContaining({
+          $type: 'community.lexicon.calendar.rsvp',
+          status: 'community.lexicon.calendar.rsvp#going',
+        }),
+      );
+    });
+
+    it('should throw when lexicon validation fails for RSVP', async () => {
+      // Mock event data
+      const event = {
+        id: 1,
+        name: 'Test Event',
+        sourceType: EventSourceType.BLUESKY,
+        sourceData: {
+          did: 'did:plc:abcdef123456',
+          rkey: 'event123',
+          cid: 'bafyreieventcid123',
+        },
+      } as unknown as EventEntity;
+
+      const userDid = 'did:plc:xyz789';
+      const tenantId = 'tenant123';
+
+      const mockEventUri =
+        'at://did:plc:abcdef123456/community.lexicon.calendar.event/event123';
+      blueskyIdService.createUri.mockReturnValueOnce(mockEventUri);
+
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn(),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      // Mock validation failure
+      atprotoLexiconService.validate.mockReturnValueOnce({
+        success: false,
+        error: { message: 'Record/subject must have the property "cid"' },
+      } as any);
+
+      await expect(
+        service.createRsvp(event, 'going', userDid, tenantId),
+      ).rejects.toThrow('AT Protocol record validation failed');
+
+      // putRecord should NOT have been called
+      expect(mockAgent.com.atproto.repo.putRecord).not.toHaveBeenCalled();
     });
 
     it('should throw an error if event does not have Bluesky source data', async () => {

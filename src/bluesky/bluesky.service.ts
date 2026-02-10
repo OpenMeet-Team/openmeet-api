@@ -15,6 +15,7 @@ import {
   BlueskyEventUri,
   BLUESKY_COLLECTIONS,
 } from './BlueskyTypes';
+import { AtprotoLexiconService } from './atproto-lexicon.service';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
@@ -65,6 +66,7 @@ export class BlueskyService {
     private readonly blueskyIdService: BlueskyIdService,
     private readonly blueskyIdentityService: BlueskyIdentityService,
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
+    private readonly atprotoLexiconService: AtprotoLexiconService,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -489,6 +491,21 @@ export class BlueskyService {
           seriesSlug: event.series.slug,
           isRecurring: true,
         };
+      }
+
+      // Validate record against AT Protocol lexicon schema
+      const validation = this.atprotoLexiconService.validate(
+        BLUESKY_COLLECTIONS.EVENT,
+        recordData,
+      );
+      if (!validation.success) {
+        this.logger.error('Event record failed lexicon validation', {
+          eventId: event.id,
+          errors: validation.error.message,
+        });
+        throw new Error(
+          `AT Protocol record validation failed: ${validation.error.message}`,
+        );
       }
 
       // Use standard collection name without suffix
