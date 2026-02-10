@@ -6,6 +6,7 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { Agent } from '@atproto/api';
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { TID } from '@atproto/common-web';
+import { instanceToPlain } from 'class-transformer';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { delay } from '../utils/delay';
@@ -21,6 +22,27 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+
+/**
+ * Ensure a URL string has a protocol prefix.
+ * If no protocol is present, prepends https://.
+ */
+function ensureUri(url: string): string {
+  if (!/^https?:\/\//i.test(url)) {
+    return `https://${url}`;
+  }
+  return url;
+}
+
+/**
+ * Remove all properties with null or undefined values from an object.
+ * AT Protocol does not allow null for optional fields -- they must be omitted.
+ */
+function stripNullish(obj: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== null && v !== undefined),
+  );
+}
 
 @Injectable()
 export class BlueskyService {
@@ -51,6 +73,37 @@ export class BlueskyService {
       this.configService,
       this.elasticacheService,
     );
+  }
+
+  /**
+   * Build a full URL for an image path.
+   * If the path is already a full URL, return it as-is.
+   * Otherwise, construct from CloudFront or backend domain config.
+   */
+  private buildImageUrl(path: string): string {
+    // Already a full URL
+    if (/^https?:\/\//i.test(path)) {
+      return path;
+    }
+
+    const cloudfrontDomain = this.configService.get<string>(
+      'file.cloudfrontDistributionDomain',
+      { infer: true },
+    );
+    if (cloudfrontDomain) {
+      return `https://${cloudfrontDomain}/${path}`;
+    }
+
+    const backendDomain =
+      this.configService.get<string>('app.backendDomain', { infer: true }) ||
+      this.configService.get<string>('BACKEND_DOMAIN', { infer: true });
+    if (backendDomain) {
+      const separator = path.startsWith('/') ? '' : '/';
+      return `${backendDomain}${separator}${path}`;
+    }
+
+    // Last resort: prepend https://
+    return `https://${path}`;
   }
 
   async resumeSession(tenantId: string, did: string): Promise<Agent> {
@@ -277,7 +330,6 @@ export class BlueskyService {
         });
 
         // Use instanceToPlain to force the Transform decorator to run
-        const { instanceToPlain } = await import('class-transformer');
         event.image = instanceToPlain(event.image) as any;
 
         this.logger.debug('Transformed image', {
@@ -323,7 +375,7 @@ export class BlueskyService {
       if (event.locationOnline) {
         locations.push({
           $type: 'community.lexicon.calendar.event#uri',
-          uri: event.locationOnline,
+          uri: ensureUri(event.locationOnline),
           name: 'Online Meeting Link',
         });
       }
@@ -339,7 +391,13 @@ export class BlueskyService {
         this.logger.debug(`Using pre-generated atprotoRkey: ${rkey}`);
       } else if (event.sourceData?.rkey) {
         rkey = event.sourceData.rkey as string;
-        this.logger.debug(`Using existing sourceData.rkey: ${rkey}`);
+        if (!TID.is(rkey)) {
+          this.logger.warn(
+            `sourceData.rkey "${rkey}" is not a valid TID — using as-is to preserve record identity`,
+          );
+        } else {
+          this.logger.debug(`Using existing sourceData.rkey: ${rkey}`);
+        }
       } else {
         rkey = TID.nextStr();
         this.logger.warn(
@@ -350,8 +408,13 @@ export class BlueskyService {
       // Prepare uris array with image if it exists
       const uris: BlueskyEventUri[] = [];
       if (event.image?.path) {
+        // Build the full image URL from the raw DB path.
+        // instanceToPlain may not fire @Transform on plain objects, so we
+        // construct the URL using config -- the same approach as embed.service.ts.
+        const imageUrl = this.buildImageUrl(event.image.path);
         uris.push({
-          uri: event.image.path,
+          $type: 'community.lexicon.calendar.event#uri',
+          uri: imageUrl,
           name: 'Event Image',
         });
       } else if (event.image) {
@@ -365,7 +428,8 @@ export class BlueskyService {
       // Add online location to uris if it exists
       if (event.locationOnline) {
         uris.push({
-          uri: event.locationOnline,
+          $type: 'community.lexicon.calendar.event#uri',
+          uri: ensureUri(event.locationOnline),
           name: 'Online Meeting Link',
         });
       }
@@ -386,6 +450,7 @@ export class BlueskyService {
       if (!existingOpenMeetUri) {
         this.logger.debug(`Adding OpenMeet event URL: ${openmeetEventUrl}`);
         uris.push({
+          $type: 'community.lexicon.calendar.event#uri',
           uri: openmeetEventUrl,
           name: 'OpenMeet Event',
         });
@@ -395,7 +460,7 @@ export class BlueskyService {
         );
       }
 
-      const recordData: any = {
+      const recordData: any = stripNullish({
         $type: 'community.lexicon.calendar.event',
         name: event.name,
         description: event.description,
@@ -415,7 +480,7 @@ export class BlueskyService {
         status: statusMap[event.status] || statusMap['published'],
         locations,
         uris,
-      };
+      });
 
       // Add openmeet-specific metadata in record
       if (event.series) {

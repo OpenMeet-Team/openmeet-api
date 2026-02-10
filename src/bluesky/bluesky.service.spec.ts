@@ -105,7 +105,16 @@ const mockBlueskyIdentityService = {
 };
 
 const mockConfigService = {
-  get: jest.fn(),
+  get: jest.fn().mockImplementation((key: string) => {
+    const map: Record<string, string | undefined> = {
+      'file.cloudfrontDistributionDomain': 'cdn.example.com',
+      'file.driver': 'cloudfront',
+      'app.backendDomain': 'https://api.openmeet.net',
+      APP_URL: 'https://platform.openmeet.net',
+      BACKEND_DOMAIN: 'https://api.openmeet.net',
+    };
+    return map[key];
+  }),
 };
 
 const mockTenantConnectionService = {
@@ -1117,8 +1126,8 @@ describe('BlueskyService', () => {
     });
 
     it('should preserve existing rkey when updating events', async () => {
-      // Arrange - event with existing rkey in sourceData
-      const existingRkey = 'existing-rkey-123';
+      // Arrange - event with existing valid TID rkey in sourceData
+      const existingRkey = '3ktest1234abc';
       const event = {
         name: 'Test Event Update',
         description: 'Test Description',
@@ -1185,8 +1194,8 @@ describe('BlueskyService', () => {
     });
 
     it('should use sourceData.rkey when atprotoRkey is not set', async () => {
-      // Arrange - event with only sourceData.rkey
-      const sourceDataRkey = 'source-data-rkey';
+      // Arrange - event with only sourceData.rkey (valid TID)
+      const sourceDataRkey = '3kabcdefghijk';
       const event = {
         name: 'Test Event with Source Data',
         description: 'Test Description',
@@ -1216,6 +1225,304 @@ describe('BlueskyService', () => {
 
       // Assert - should use sourceData.rkey
       expect(result.rkey).toBe(sourceDataRkey);
+    });
+
+    // Bug 1: Image URI should be a full URL, not raw DB path
+    it('should transform image path to a full URL using instanceToPlain', async () => {
+      // Arrange - event with a raw DB path (tenantId/filename.jpg)
+      const event = {
+        name: 'Test Event with Image',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-image',
+        image: {
+          path: 'lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg',
+        },
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - the image URI should NOT be the raw DB path
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const imageUri = putRecordCall.record.uris.find(
+        (u: any) => u.name === 'Event Image',
+      );
+      expect(imageUri).toBeDefined();
+      // The raw path should have been transformed - it should NOT be the bare DB value
+      expect(imageUri.uri).not.toBe('lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg');
+      // It should be a full CloudFront URL
+      expect(imageUri.uri).toBe(
+        'https://cdn.example.com/lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg',
+      );
+    });
+
+    // Bug 2: locationOnline should be normalized to include protocol
+    it('should normalize locationOnline to include https:// protocol in uris array', async () => {
+      // Arrange - event with locationOnline missing protocol
+      const event = {
+        name: 'Test Event Online',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.Online,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-online-noproto',
+        locationOnline: 'npmx.dev',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - the online meeting link in uris should have https:// prefix
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const onlineUri = putRecordCall.record.uris.find(
+        (u: any) => u.name === 'Online Meeting Link',
+      );
+      expect(onlineUri).toBeDefined();
+      expect(onlineUri.uri).toBe('https://npmx.dev');
+    });
+
+    it('should not double-prefix locationOnline that already has https://', async () => {
+      // Arrange - event with locationOnline that already has protocol
+      const event = {
+        name: 'Test Event Online',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.Online,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-online-withproto',
+        locationOnline: 'https://zoom.us/j/123',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - should not double-prefix
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const onlineUri = putRecordCall.record.uris.find(
+        (u: any) => u.name === 'Online Meeting Link',
+      );
+      expect(onlineUri).toBeDefined();
+      expect(onlineUri.uri).toBe('https://zoom.us/j/123');
+    });
+
+    // Bug 3: null values should be stripped from the record
+    it('should strip null values from the record before publishing', async () => {
+      // Arrange - event with null endDate (like an open-ended event)
+      const event = {
+        name: 'Test Event No End',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: null,
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-no-end',
+      } as unknown as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - the record should NOT have endsAt: null
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const record = putRecordCall.record;
+      expect(record).not.toHaveProperty('endsAt');
+      // Other fields should still be present
+      expect(record).toHaveProperty('startsAt');
+      expect(record).toHaveProperty('name');
+    });
+
+    it('should strip undefined values from the record before publishing', async () => {
+      // Arrange - event with undefined description
+      const event = {
+        name: 'Test Event No Desc',
+        description: undefined,
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-no-desc',
+      } as unknown as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - the record should NOT have description: undefined
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const record = putRecordCall.record;
+      expect(record).not.toHaveProperty('description');
+    });
+
+    // Bug 4: Online location URI in locations array should also be normalized
+    it('should normalize locationOnline URI in the locations array', async () => {
+      // Arrange - event with locationOnline missing protocol
+      const event = {
+        name: 'Test Hybrid Event No Proto',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.Hybrid,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-hybrid-noproto',
+        location: 'Conference Center',
+        lat: 51.5074,
+        lon: -0.1278,
+        locationOnline: 'meet.example.com/room',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - the locations array URI entry should have the protocol
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const uriLocation = putRecordCall.record.locations.find(
+        (loc: any) => loc.$type === 'community.lexicon.calendar.event#uri',
+      );
+      expect(uriLocation).toBeDefined();
+      expect(uriLocation.uri).toBe('https://meet.example.com/room');
+    });
+
+    // Bug 5: sourceData.rkey should be validated as a TID
+    it('should use non-TID sourceData.rkey as-is to preserve record identity', async () => {
+      // Arrange - event with a non-TID rkey in sourceData (e.g., from an external source)
+      const event = {
+        name: 'Test Event Non-TID Rkey',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-non-tid-rkey',
+        atprotoRkey: null,
+        sourceData: {
+          rkey: 'my-custom-rkey',
+        },
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      const result = await service.createEventRecord(
+        event,
+        did,
+        handle,
+        tenantId,
+      );
+
+      // Assert - should use the rkey as-is to preserve record identity
+      expect(result.rkey).toBe('my-custom-rkey');
+    });
+
+    it('should accept valid TID in sourceData.rkey', async () => {
+      // Arrange - event with a valid TID rkey in sourceData
+      // A valid TID is 13 chars of base32-sort characters
+      const validTid = '3ktest1234abc';
+      const event = {
+        name: 'Test Event Good Rkey',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-good-rkey',
+        atprotoRkey: null,
+        sourceData: {
+          rkey: validTid,
+        },
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      const result = await service.createEventRecord(
+        event,
+        did,
+        handle,
+        tenantId,
+      );
+
+      // Assert - should use the valid TID rkey
+      expect(result.rkey).toBe(validTid);
+    });
+
+    // Bug 2+4 combined: uris array items should all have $type
+    it('should include $type on all uri entries in the uris array', async () => {
+      // Arrange
+      const event = {
+        name: 'Test Event URIs Type',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.Online,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-uris-type',
+        locationOnline: 'https://zoom.us/j/123',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - all uris entries should have $type
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const uris = putRecordCall.record.uris;
+      for (const uri of uris) {
+        expect(uri).toHaveProperty(
+          '$type',
+          'community.lexicon.calendar.event#uri',
+        );
+      }
     });
   });
 });
