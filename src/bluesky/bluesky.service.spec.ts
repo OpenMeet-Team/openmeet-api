@@ -12,6 +12,7 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 
 // Mock modules first before creating mock implementations
 jest.mock('@atproto/api', () => ({
@@ -111,6 +112,14 @@ const mockTenantConnectionService = {
   getTenantConnection: jest.fn().mockResolvedValue({}),
 };
 
+const mockUserAtprotoIdentityService = {
+  findByUserUlid: jest.fn(),
+  findByDid: jest.fn(),
+  create: jest.fn(),
+  deleteByUserUlid: jest.fn(),
+  update: jest.fn(),
+};
+
 const mockRequest = {
   tenantId: 'test-tenant',
 };
@@ -183,6 +192,10 @@ describe('BlueskyService', () => {
         {
           provide: BlueskyIdentityService,
           useValue: mockBlueskyIdentityService,
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: mockUserAtprotoIdentityService,
         },
       ],
     }).compile();
@@ -366,6 +379,94 @@ describe('BlueskyService', () => {
         }),
         tenantId,
       );
+    });
+  });
+
+  describe('getConnectionStatus', () => {
+    it('should return connected=true when user has an AT Protocol identity in the identity table', async () => {
+      // Arrange: User with bluesky preferences but we derive connected from identity table
+      const user = {
+        id: 1,
+        ulid: 'test-ulid-123',
+        socialId: 'did:plc:test-user',
+        preferences: {
+          bluesky: {
+            did: 'did:plc:test-user',
+            handle: 'test.user',
+            connected: false, // Even if preferences say false, identity table is the source of truth
+          },
+        },
+      } as UserEntity;
+
+      // Mock identity table returns a record
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue({
+        id: 1,
+        userUlid: 'test-ulid-123',
+        did: 'did:plc:test-user',
+        handle: 'test.user',
+        pdsUrl: 'https://pds.example.com',
+      });
+
+      // Act
+      const result = await service.getConnectionStatus(user);
+
+      // Assert: connected should be true because identity exists in table
+      expect(result.connected).toBe(true);
+      expect(mockUserAtprotoIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        'test-tenant',
+        'test-ulid-123',
+      );
+    });
+
+    it('should return connected=false when user has no AT Protocol identity in the identity table', async () => {
+      // Arrange: User with bluesky preferences but no identity table entry
+      const user = {
+        id: 1,
+        ulid: 'test-ulid-456',
+        socialId: 'did:plc:test-user',
+        preferences: {
+          bluesky: {
+            did: 'did:plc:test-user',
+            handle: 'test.user',
+            connected: true, // Even if preferences say true, identity table is the source of truth
+          },
+        },
+      } as UserEntity;
+
+      // Mock identity table returns null
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      // Act
+      const result = await service.getConnectionStatus(user);
+
+      // Assert: connected should be false because no identity exists in table
+      expect(result.connected).toBe(false);
+    });
+
+    it('should still resolve handle from DID when available', async () => {
+      // Arrange
+      const user = {
+        id: 1,
+        ulid: 'test-ulid-789',
+        preferences: {
+          bluesky: {
+            did: 'did:plc:test-user',
+          },
+        },
+      } as UserEntity;
+
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue({
+        id: 1,
+        userUlid: 'test-ulid-789',
+        did: 'did:plc:test-user',
+      });
+
+      // Act
+      const result = await service.getConnectionStatus(user);
+
+      // Assert
+      expect(result.handle).toBe('test.user'); // Resolved from mock blueskyIdentityService
+      expect(result.connected).toBe(true);
     });
   });
 

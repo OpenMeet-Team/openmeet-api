@@ -20,6 +20,7 @@ import { RoleService } from '../role/role.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 
 describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () => {
   let userService: UserService;
@@ -106,6 +107,16 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
         {
           provide: AtprotoHandleCacheService,
           useValue: atprotoHandleCache,
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: {
+            findByUserUlid: jest.fn().mockResolvedValue(null),
+            findByDid: jest.fn().mockResolvedValue(null),
+            create: jest.fn(),
+            deleteByUserUlid: jest.fn(),
+            update: jest.fn(),
+          },
         },
       ],
     }).compile();

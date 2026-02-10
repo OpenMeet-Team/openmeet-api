@@ -2367,6 +2367,92 @@ describe('EventManagementService', () => {
     });
   });
 
+  describe('Bluesky event deletion guard', () => {
+    it('should attempt Bluesky deletion without checking preferences.bluesky.connected', async () => {
+      // This test verifies that the deletion guard no longer requires
+      // preferences.bluesky.connected to be true. The remaining structural
+      // guards (sourceType, socialId, sourceId, rkey) are sufficient.
+      const blueskyEvent = {
+        ...findOneMockEventEntity,
+        id: 950,
+        slug: 'bluesky-delete-no-connected-check',
+        sourceType: 'bluesky' as any,
+        sourceId: 'did:plc:event-creator',
+        sourceData: { rkey: 'test-rkey-123' },
+        matrixRoomId: null,
+        seriesSlug: null,
+        series: null,
+        atprotoUri: null,
+        atprotoRkey: null,
+      } as EventEntity;
+
+      // User has socialId but NO preferences.bluesky.connected
+      const userWithoutConnected = {
+        id: TESTING_USER_ID,
+        name: 'Test User',
+        role: { id: 1, name: RoleEnum.User } as any,
+        socialId: 'did:plc:event-creator',
+        preferences: {
+          // bluesky.connected is NOT set (or is false)
+          bluesky: { connected: false },
+        },
+      };
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+      mockRepository.findOne.mockResolvedValue(blueskyEvent);
+
+      // Mock UserService.findByIdWithPreferences to return user without connected flag
+      const mockUserServiceRef = service['userService'] as jest.Mocked<UserService>;
+      mockUserServiceRef.findByIdWithPreferences = jest
+        .fn()
+        .mockResolvedValue(userWithoutConnected);
+
+      // Mock BlueskyService.deleteEventRecord to succeed
+      const mockBlueskyServiceRef = service['blueskyService'] as jest.Mocked<BlueskyService>;
+      mockBlueskyServiceRef.deleteEventRecord = jest.fn().mockResolvedValue({});
+
+      // Mock the transaction
+      const mockEventAttendeeRepo = {
+        delete: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      const mockEventRepo = {
+        softRemove: jest.fn().mockResolvedValue(blueskyEvent),
+      };
+      const mockTransactionalManager = {
+        save: jest.fn().mockResolvedValue(blueskyEvent),
+        getRepository: jest.fn().mockImplementation((entity) => {
+          if (entity.name === 'EventAttendeesEntity') {
+            return mockEventAttendeeRepo;
+          }
+          return mockEventRepo;
+        }),
+        findOne: jest.fn().mockResolvedValue(null),
+        softRemove: jest.fn().mockResolvedValue(blueskyEvent),
+        remove: jest.fn().mockResolvedValue(blueskyEvent),
+      };
+      mockTenantConnectionService.getTenantConnection.mockResolvedValue({
+        getRepository: jest.fn().mockReturnValue(mockRepository),
+        transaction: jest.fn().mockImplementation(async (cb) => {
+          return cb(mockTransactionalManager);
+        }),
+      } as any);
+
+      // Act: deletion should proceed and attempt Bluesky deletion
+      await expect(
+        service.remove('bluesky-delete-no-connected-check'),
+      ).resolves.not.toThrow();
+
+      // Assert: Bluesky deleteEventRecord should have been called
+      // (this proves the connected check was removed)
+      expect(mockBlueskyServiceRef.deleteEventRecord).toHaveBeenCalledWith(
+        blueskyEvent,
+        'did:plc:event-creator',
+        'test-tenant',
+      );
+    });
+  });
+
   afterAll(() => {
     stopCleanupInterval();
   });
