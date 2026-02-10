@@ -197,6 +197,146 @@ describe('BlueskyRsvpService', () => {
       });
     });
 
+    it('should use atprotoCid from event for atproto-published events', async () => {
+      // Mock event published via AtprotoPublisherService (has atprotoUri, atprotoRkey, atprotoCid)
+      const event = {
+        id: 2,
+        name: 'Native OpenMeet Event',
+        sourceType: null,
+        sourceData: null,
+        atprotoUri:
+          'at://did:plc:organizer/community.lexicon.calendar.event/tid123',
+        atprotoRkey: 'tid123',
+        atprotoCid: 'bafyreicid999',
+      } as unknown as EventEntity;
+
+      const userDid = 'did:plc:attendee';
+      const tenantId = 'tenant123';
+
+      // Mock the RSVP URI for the return value
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+
+      // Mock the Bluesky agent
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: {
+                  uri: mockRsvpUri,
+                  cid: 'rsvpcid123',
+                },
+              }),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      // Call the service method
+      const result = await service.createRsvp(
+        event,
+        'going',
+        userDid,
+        tenantId,
+      );
+
+      // Assert the RSVP subject includes the CID from event.atprotoCid
+      expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          record: expect.objectContaining({
+            subject: {
+              uri: 'at://did:plc:organizer/community.lexicon.calendar.event/tid123',
+              cid: 'bafyreicid999',
+            },
+          }),
+        }),
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should fetch CID on-demand via getRecord when atprotoCid is missing for atproto-published events', async () => {
+      // Mock event published via AtprotoPublisherService but missing CID
+      // (e.g., event published before the atprotoCid column was added)
+      const event = {
+        id: 3,
+        name: 'Legacy Published Event',
+        sourceType: null,
+        sourceData: null,
+        atprotoUri:
+          'at://did:plc:organizer/community.lexicon.calendar.event/tid456',
+        atprotoRkey: 'tid456',
+        atprotoCid: null, // CID not stored (legacy)
+      } as unknown as EventEntity;
+
+      const userDid = 'did:plc:attendee';
+      const tenantId = 'tenant123';
+
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+
+      // Mock parseUri to parse the atprotoUri for on-demand CID fetch
+      blueskyIdService.parseUri.mockReturnValueOnce({
+        did: 'did:plc:organizer',
+        collection: 'community.lexicon.calendar.event',
+        rkey: 'tid456',
+      });
+
+      // Mock the Bluesky agent with getRecord fallback
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: {
+                  uri: mockRsvpUri,
+                  cid: 'rsvpcid456',
+                },
+              }),
+              getRecord: jest.fn().mockResolvedValue({
+                data: {
+                  uri: 'at://did:plc:organizer/community.lexicon.calendar.event/tid456',
+                  cid: 'bafyreifetched789',
+                },
+              }),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      // Call the service method
+      const result = await service.createRsvp(
+        event,
+        'going',
+        userDid,
+        tenantId,
+      );
+
+      // Assert the RSVP subject includes the CID fetched on-demand
+      expect(mockAgent.com.atproto.repo.getRecord).toHaveBeenCalled();
+      expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          record: expect.objectContaining({
+            subject: {
+              uri: 'at://did:plc:organizer/community.lexicon.calendar.event/tid456',
+              cid: 'bafyreifetched789',
+            },
+          }),
+        }),
+      );
+
+      expect(result.success).toBe(true);
+    });
+
     it('should call lexicon validation before putRecord', async () => {
       // Mock event data
       const event = {

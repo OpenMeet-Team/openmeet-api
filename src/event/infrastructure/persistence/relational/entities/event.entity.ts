@@ -200,6 +200,14 @@ export class EventEntity
   atprotoRkey: string | null;
 
   /**
+   * AT Protocol Content Identifier (CID) for the published event record.
+   * Required for building StrongRef objects (e.g., RSVP subjects).
+   * Updated each time the event is published/updated on the PDS.
+   */
+  @Column({ type: 'text', nullable: true })
+  atprotoCid: string | null;
+
+  /**
    * When this event was last synced to the user's PDS.
    * Compare with updatedAt to detect changes needing re-sync.
    */

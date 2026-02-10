@@ -87,8 +87,7 @@ export class BlueskyRsvpService {
       if (event.atprotoUri && event.atprotoRkey) {
         // New style: event was published via AtprotoPublisherService
         eventUri = event.atprotoUri;
-        // CID is not currently stored for atproto-published events
-        eventCid = undefined;
+        eventCid = event.atprotoCid ?? undefined;
         this.logger.debug(`Using atprotoUri for RSVP: ${eventUri}`);
       } else if (
         event.sourceData?.rkey &&
@@ -126,15 +125,6 @@ export class BlueskyRsvpService {
         throw new Error('Event does not have AT Protocol source information');
       }
 
-      if (!eventCid) {
-        this.logger.debug(
-          `Event does not have CID - RSVP will use uri-only reference`,
-          {
-            eventId: event.id,
-          },
-        );
-      }
-
       // Get agent for the user
       // Use provided agent (from PdsSessionService for custodial users)
       // or fall back to OAuth session (for Bluesky OAuth users)
@@ -159,6 +149,36 @@ export class BlueskyRsvpService {
           throw new Error(`Failed to create Bluesky session for user ${did}`);
         }
         agent = resumedAgent;
+      }
+
+      // Fallback: fetch CID on-demand if not stored (legacy events published before atprotoCid column)
+      if (!eventCid && event.atprotoUri && event.atprotoRkey) {
+        try {
+          // Parse the atprotoUri to get the DID, collection, and rkey
+          const parsedUri = this.blueskyIdService.parseUri(event.atprotoUri);
+          const getResult = await agent.com.atproto.repo.getRecord({
+            repo: parsedUri.did,
+            collection: parsedUri.collection,
+            rkey: parsedUri.rkey,
+          });
+          eventCid = getResult.data.cid;
+          this.logger.debug(
+            `Fetched CID on-demand for event ${event.id}: ${eventCid}`,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Failed to fetch CID on-demand for event ${event.id}: ${error.message}`,
+          );
+        }
+      }
+
+      if (!eventCid) {
+        this.logger.debug(
+          `Event does not have CID - RSVP will use uri-only reference`,
+          {
+            eventId: event.id,
+          },
+        );
       }
 
       // Create the RSVP record using StrongRef format per community.lexicon.calendar.rsvp spec

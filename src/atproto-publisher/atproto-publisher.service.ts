@@ -313,6 +313,7 @@ export class AtprotoPublisherService {
     }
 
     let rkey: string;
+    let cid: string;
     try {
       const result = await this.blueskyService.createEventRecord(
         event,
@@ -322,6 +323,7 @@ export class AtprotoPublisherService {
         session.agent, // Pass the agent from PdsSessionService
       );
       rkey = result.rkey;
+      cid = result.cid;
     } catch (error) {
       if (
         error instanceof Error &&
@@ -349,6 +351,7 @@ export class AtprotoPublisherService {
       action: isUpdate ? 'updated' : 'published',
       atprotoUri,
       atprotoRkey: rkey,
+      atprotoCid: cid,
     };
   }
 

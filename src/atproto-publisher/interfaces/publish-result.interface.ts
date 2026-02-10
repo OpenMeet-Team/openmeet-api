@@ -19,6 +19,9 @@ export interface PublishResult {
   /** The record key used in the AT Protocol URI */
   atprotoRkey?: string;
 
+  /** The Content Identifier (CID) of the published record, used for StrongRef */
+  atprotoCid?: string;
+
   /** Error message when action is 'error' */
   error?: string;
 

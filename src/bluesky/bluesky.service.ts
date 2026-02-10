@@ -306,7 +306,7 @@ export class BlueskyService {
     handle: string,
     tenantId: string,
     providedAgent?: Agent,
-  ): Promise<{ rkey: string }> {
+  ): Promise<{ rkey: string; cid: string }> {
     this.logger.debug('Creating Bluesky event record:', {
       event: {
         name: event.name,
@@ -522,7 +522,7 @@ export class BlueskyService {
       this.logger.log(
         `Event ${event.name} posted to Bluesky for user ${handle}`,
       );
-      return { rkey };
+      return { rkey, cid: result.data.cid };
     } catch (error: any) {
       this.logger.error('Failed to create Bluesky event:', {
         error: error.message,

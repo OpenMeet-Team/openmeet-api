@@ -514,6 +514,7 @@ export class EventManagementService {
           {
             atprotoUri: publishResult.atprotoUri,
             atprotoRkey: publishResult.atprotoRkey,
+            atprotoCid: publishResult.atprotoCid,
             atprotoSyncedAt: new Date(),
           },
         );
@@ -992,6 +993,7 @@ export class EventManagementService {
           {
             atprotoUri: publishResult.atprotoUri,
             atprotoRkey: publishResult.atprotoRkey,
+            atprotoCid: publishResult.atprotoCid,
             atprotoSyncedAt: new Date(),
           },
         );
@@ -2351,6 +2353,7 @@ export class EventManagementService {
         {
           atprotoUri: publishResult.atprotoUri,
           atprotoRkey: publishResult.atprotoRkey,
+          atprotoCid: publishResult.atprotoCid,
           atprotoSyncedAt: new Date(),
         },
       );

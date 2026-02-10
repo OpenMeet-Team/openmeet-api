@@ -151,8 +151,10 @@ const mockAgentImplementation = {
       repo: {
         getRecord: jest.fn(),
         putRecord: jest.fn().mockResolvedValue({
-          uri: 'at://test/test',
-          cid: 'test-cid',
+          data: {
+            uri: 'at://test/test',
+            cid: 'test-cid',
+          },
         }),
         listRecords: jest.fn().mockResolvedValue({
           data: { records: [] },
@@ -1164,6 +1166,45 @@ describe('BlueskyService', () => {
 
       // Assert - should use the existing rkey, not generate a new one
       expect(result.rkey).toBe(existingRkey);
+    });
+
+    it('should return cid from putRecord result alongside rkey', async () => {
+      // Arrange
+      const event = {
+        name: 'Test Event with CID',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-cid',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Mock putRecord to return a specific CID
+      mockAgentImplementation.com.atproto.repo.putRecord.mockResolvedValueOnce({
+        data: {
+          uri: 'at://test-did/community.lexicon.calendar.event/testrkey',
+          cid: 'bafyreieventcid456',
+        },
+      });
+
+      // Act
+      const result = await service.createEventRecord(
+        event,
+        did,
+        handle,
+        tenantId,
+      );
+
+      // Assert - result should include cid from putRecord
+      expect(result).toBeDefined();
+      expect(result.rkey).toBeDefined();
+      expect(result.cid).toBe('bafyreieventcid456');
     });
 
     it('should use event.atprotoRkey first if set (pre-generated TID)', async () => {
