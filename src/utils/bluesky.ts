@@ -50,13 +50,24 @@ export async function initializeOAuthClient(
     throw new Error('No valid keys found in environment variables');
   }
 
-  // When DID_PLC_URL is set (e.g. in dev), create a fetch wrapper that
-  // tries the private PLC before falling back to public plc.directory.
-  // This is needed because the private PLC doesn't federate with public plc.directory.
+  // Create a fetch wrapper that can handle:
+  // 1. PLC fallback: tries private PLC before public plc.directory (for dev environments)
+  // 2. Handle resolution: resolves local PDS handles via com.atproto.identity.resolveHandle
   const didPlcUrl = configService.get('DID_PLC_URL', {
     infer: true,
   }) as string | undefined;
-  const customFetch = createPlcFallbackFetch(didPlcUrl);
+  const pdsUrl = configService.get('PDS_URL', {
+    infer: true,
+  }) as string | undefined;
+  const handleDomains = configService.get('PDS_SERVICE_HANDLE_DOMAINS', {
+    infer: true,
+  }) as string | undefined;
+  const customFetch = createPlcFallbackFetch(
+    didPlcUrl,
+    globalThis.fetch,
+    pdsUrl,
+    handleDomains,
+  );
 
   // Use path-based tenant routing for OAuth metadata URLs.
   // The PDS strips query parameters when fetching client metadata,
@@ -91,26 +102,44 @@ export async function initializeOAuthClient(
 }
 
 /**
- * Creates a custom fetch wrapper that intercepts requests to public plc.directory
- * and tries a private PLC server first. This is needed in environments (like dev)
- * where the private PLC doesn't federate with public plc.directory.
+ * Creates a custom fetch wrapper that can intercept two kinds of requests:
  *
- * When the private PLC returns a non-ok response (e.g. 404 for BYOD DIDs),
- * the request falls through to the public plc.directory.
+ * 1. **PLC fallback**: Intercepts requests to public plc.directory and tries a
+ *    private PLC server first. Needed in environments where the private PLC
+ *    doesn't federate with public plc.directory.
  *
- * @param didPlcUrl - The private PLC URL (e.g. "http://plc:2582"). If falsy, returns undefined.
+ * 2. **Handle resolution**: Intercepts `.well-known/atproto-did` requests for
+ *    handles matching configured domain suffixes (e.g. `.pds.test`) and resolves
+ *    them via the local PDS's `com.atproto.identity.resolveHandle` XRPC method.
+ *    Needed when custodial PDS handles have no public DNS.
+ *
+ * @param didPlcUrl - The private PLC URL (e.g. "http://plc:2582"). Optional.
  * @param fetchFn - The underlying fetch function to use (defaults to globalThis.fetch).
- * @returns A custom fetch function, or undefined if no didPlcUrl is provided.
+ * @param pdsUrl - The local PDS URL for handle resolution (e.g. "http://localhost:3101"). Optional.
+ * @param handleDomains - Comma-separated handle domain suffixes with leading dots (e.g. ".pds.test"). Optional.
+ * @returns A custom fetch function, or undefined if no features are configured.
  */
 export function createPlcFallbackFetch(
   didPlcUrl: string | undefined,
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
+  pdsUrl?: string,
+  handleDomains?: string,
 ): typeof globalThis.fetch | undefined {
-  if (!didPlcUrl) {
+  const hasPlcFallback = !!didPlcUrl;
+  const hasHandleResolution = !!pdsUrl && !!handleDomains;
+
+  if (!hasPlcFallback && !hasHandleResolution) {
     return undefined;
   }
 
-  const privatePlcOrigin = new URL(didPlcUrl).origin;
+  const privatePlcOrigin = hasPlcFallback
+    ? new URL(didPlcUrl!).origin
+    : undefined;
+
+  // Parse handle domains into an array of suffixes
+  const domainSuffixes = hasHandleResolution
+    ? handleDomains!.split(',').map((d) => d.trim())
+    : [];
 
   return async (
     input: RequestInfo | URL,
@@ -123,9 +152,67 @@ export function createPlcFallbackFetch(
           ? input
           : new URL(input.url);
 
-    // Intercept requests to public plc.directory for DID lookups
+    // Handle resolution: intercept .well-known/atproto-did requests for
+    // handles matching configured domain suffixes.
+    // Strategy: try normal DNS/.well-known fetch first (canonical path that
+    // handles account migration), fall back to local PDS resolveHandle when
+    // the normal path fails (e.g. .pds.test handles with no public DNS).
+    if (
+      hasHandleResolution &&
+      url.pathname === '/.well-known/atproto-did' &&
+      domainSuffixes.some((suffix) =>
+        url.hostname.endsWith(suffix.replace(/^\./, '')),
+      )
+    ) {
+      const handle = url.hostname;
+      const resolveUrl = `${pdsUrl}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`;
+
+      // Step 1: Try normal fetch with a short timeout
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 3000);
+      let normalResponse: Response | undefined;
+      try {
+        normalResponse = await fetchFn(input, {
+          ...init,
+          signal: abortController.signal,
+        });
+        clearTimeout(timeoutId);
+        if (normalResponse.ok) {
+          return normalResponse;
+        }
+      } catch {
+        clearTimeout(timeoutId);
+        // Normal fetch failed (timeout, network error, etc.) — try PDS
+      }
+
+      // Step 2: Fall back to PDS resolveHandle
+      try {
+        const pdsResponse = await fetchFn(resolveUrl, init);
+        if (pdsResponse.ok) {
+          const data = await pdsResponse.json();
+          return new Response(data.did, {
+            status: 200,
+            headers: { 'content-type': 'text/plain' },
+          });
+        }
+      } catch {
+        // PDS also failed
+      }
+
+      // Step 3: Both failed — return the original failed response or a synthetic error
+      if (normalResponse) {
+        return normalResponse;
+      }
+      return new Response('Handle resolution failed', {
+        status: 502,
+        headers: { 'content-type': 'text/plain' },
+      });
+    }
+
+    // PLC fallback: intercept requests to public plc.directory for DID lookups
     // and try the private PLC first
     if (
+      privatePlcOrigin &&
       url.hostname === 'plc.directory' &&
       url.pathname.startsWith('/did:plc:')
     ) {
