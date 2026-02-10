@@ -17,6 +17,7 @@ export interface BlueskyUriLocation {
 export type BlueskyLocation = BlueskyGeoLocation | BlueskyUriLocation;
 
 export interface BlueskyEventUri {
+  $type?: 'community.lexicon.calendar.event#uri';
   uri: string;
   name?: string;
 }
