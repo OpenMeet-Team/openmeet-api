@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '../../mailer/mailer.service';
 import { ICalendarService } from '../../event/services/ical/ical.service';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
@@ -13,6 +13,8 @@ interface CalendarLinks {
 
 @Injectable()
 export class CalendarInviteService {
+  private readonly logger = new Logger(CalendarInviteService.name);
+
   constructor(
     private readonly mailerService: MailerService,
     private readonly icalService: ICalendarService,
@@ -77,9 +79,10 @@ export class CalendarInviteService {
   ): Promise<void> {
     // Validate email is present
     if (!attendee.email) {
-      throw new BadRequestException(
-        'Attendee email is required to send calendar invite',
+      this.logger.warn(
+        `Attendee email is required to send calendar invite, skipping for user ${attendee.id}`,
       );
+      return;
     }
 
     // Build event URL from tenant config

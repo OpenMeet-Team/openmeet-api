@@ -111,6 +111,42 @@ describe('CalendarInviteService', () => {
   });
 
   describe('sendCalendarInvite', () => {
+    it('should return without sending when attendee has no email', async () => {
+      const noEmailAttendee: Partial<UserEntity> = {
+        id: 1,
+        email: null as unknown as string,
+        firstName: 'John',
+        lastName: 'Doe',
+      };
+
+      await service.sendCalendarInvite(
+        mockEvent as EventEntity,
+        noEmailAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
+    });
+
+    it('should return without sending when attendee email is empty string', async () => {
+      const emptyEmailAttendee: Partial<UserEntity> = {
+        id: 1,
+        email: '',
+        firstName: 'John',
+        lastName: 'Doe',
+      };
+
+      await service.sendCalendarInvite(
+        mockEvent as EventEntity,
+        emptyEmailAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
+    });
+
     it('should call ICalendarService to generate ICS content', async () => {
       await service.sendCalendarInvite(
         mockEvent as EventEntity,

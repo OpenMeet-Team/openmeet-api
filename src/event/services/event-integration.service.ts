@@ -523,7 +523,7 @@ export class EventIntegrationService {
     // Map external event to our event entity
     const newEvent = new EventEntity();
     newEvent.name = eventData.name;
-    newEvent.description = eventData.description;
+    newEvent.description = eventData.description || '';
     newEvent.startDate = new Date(eventData.startDate);
 
     // Fix the null assignment to Date type
@@ -676,7 +676,7 @@ export class EventIntegrationService {
 
     // Update basic fields
     existingEvent.name = eventData.name;
-    existingEvent.description = eventData.description;
+    existingEvent.description = eventData.description || '';
     existingEvent.startDate = new Date(eventData.startDate);
 
     // Fix the null assignment to Date type

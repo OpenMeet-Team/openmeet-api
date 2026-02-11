@@ -74,6 +74,13 @@ export class CalendarInviteListener {
         return;
       }
 
+      if (!attendee.user.email) {
+        this.logger.warn(
+          `Email not available for user ${params.userId}, skipping calendar invite for event ${params.eventId}`,
+        );
+        return;
+      }
+
       // Get tenant config
       const tenantConfig = this.tenantConnectionService.getTenantConfig(
         params.tenantId,

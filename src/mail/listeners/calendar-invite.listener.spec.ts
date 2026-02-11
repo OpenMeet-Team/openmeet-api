@@ -98,6 +98,104 @@ describe('CalendarInviteListener - Behavior Tests', () => {
     });
   });
 
+  describe('Email validation', () => {
+    it('should NOT send invite when attendee has no email', async () => {
+      const module = await Test.createTestingModule({
+        providers: [
+          CalendarInviteListener,
+          {
+            provide: CalendarInviteService,
+            useValue: { sendCalendarInvite: jest.fn() },
+          },
+          {
+            provide: EventAttendeeService,
+            useValue: {
+              findOne: jest.fn().mockResolvedValue({
+                id: 1,
+                status: EventAttendeeStatus.Confirmed,
+                event: {
+                  id: 1,
+                  name: 'Test Event',
+                  user: { id: 2, email: 'organizer@example.com' },
+                },
+                user: { id: 1, email: null },
+              }),
+            },
+          },
+          {
+            provide: TenantConnectionService,
+            useValue: {
+              getTenantConfig: jest.fn().mockReturnValue(mockTenantConfig),
+            },
+          },
+        ],
+      }).compile();
+
+      const noEmailListener = module.get(CalendarInviteListener);
+      const noEmailSendSpy = jest.spyOn(
+        module.get(CalendarInviteService),
+        'sendCalendarInvite',
+      );
+
+      await noEmailListener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(noEmailSendSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT send invite when attendee email is empty string', async () => {
+      const module = await Test.createTestingModule({
+        providers: [
+          CalendarInviteListener,
+          {
+            provide: CalendarInviteService,
+            useValue: { sendCalendarInvite: jest.fn() },
+          },
+          {
+            provide: EventAttendeeService,
+            useValue: {
+              findOne: jest.fn().mockResolvedValue({
+                id: 1,
+                status: EventAttendeeStatus.Confirmed,
+                event: {
+                  id: 1,
+                  name: 'Test Event',
+                  user: { id: 2, email: 'organizer@example.com' },
+                },
+                user: { id: 1, email: '' },
+              }),
+            },
+          },
+          {
+            provide: TenantConnectionService,
+            useValue: {
+              getTenantConfig: jest.fn().mockReturnValue(mockTenantConfig),
+            },
+          },
+        ],
+      }).compile();
+
+      const emptyEmailListener = module.get(CalendarInviteListener);
+      const emptyEmailSendSpy = jest.spyOn(
+        module.get(CalendarInviteService),
+        'sendCalendarInvite',
+      );
+
+      await emptyEmailListener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(emptyEmailSendSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Error resilience (must not crash event processing)', () => {
     it('should not throw when attendee lookup fails', async () => {
       const module = await Test.createTestingModule({
