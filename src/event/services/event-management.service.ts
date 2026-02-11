@@ -46,7 +46,6 @@ import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persis
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { GroupRole } from '../../core/constants/constant';
-import { assert } from 'console';
 import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
 import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
@@ -845,15 +844,21 @@ export class EventManagementService {
     const eventToSave = Object.assign(event, updatedEventData);
     const updatedEvent = await this.eventRepository.save(eventToSave);
 
-    assert(slug === updatedEvent.slug, 'Slug should be preserved');
-    assert(
-      updatedEvent.updatedAt > event.updatedAt,
-      'UpdatedAt should be greater than original updatedAt',
-    );
-    assert(
-      updatedEvent.createdAt === event.createdAt,
-      'CreatedAt should be the same',
-    );
+    if (slug !== updatedEvent.slug) {
+      this.logger.warn(
+        `Slug changed unexpectedly during event update: expected ${slug}, got ${updatedEvent.slug}`,
+      );
+    }
+    if (updatedEvent.updatedAt < event.updatedAt) {
+      this.logger.warn(
+        `UpdatedAt went backwards during event update ${updatedEvent.id}: ${updatedEvent.updatedAt} < ${event.updatedAt}`,
+      );
+    }
+    if (updatedEvent.createdAt?.getTime() !== event.createdAt?.getTime()) {
+      this.logger.warn(
+        `CreatedAt changed during event update ${updatedEvent.id}: ${updatedEvent.createdAt} !== ${event.createdAt}`,
+      );
+    }
 
     // If it's a Bluesky event, try to update it there too, but don't fail if Bluesky is unavailable
     if (
