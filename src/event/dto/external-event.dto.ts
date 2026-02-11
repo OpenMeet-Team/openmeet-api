@@ -108,13 +108,13 @@ export class ExternalEventDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Event description',
     example: 'Join us for our monthly community meetup!',
   })
   @IsString()
-  @IsNotEmpty()
-  description: string;
+  @IsOptional()
+  description?: string;
 
   @ApiProperty({
     description: 'Event start date and time',
