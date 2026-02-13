@@ -1363,17 +1363,18 @@ export PDS_INVITE_CODE=pds-xxx-xxxxx-xxxxx
 
 #### Local Development
 
-For local development with `docker-compose-dev.yml --profile pds`:
+For local development with [atproto-devnet](https://github.com/OpenMeet-Team/atproto-devnet):
 
 ```bash
-# PDS runs on port 3101 with invite disabled by default
-PDS_URL=http://localhost:3101
-PDS_SERVICE_HANDLE_DOMAINS=.pds.test
-PDS_ADMIN_PASSWORD=local-dev-admin-password
+# Start devnet (PDS + PLC + Jetstream + TAP)
+./scripts/devnet-up.sh
 
-# To test with invite codes, change docker-compose-dev.yml:
-# PDS_INVITE_REQUIRED: "true"
-# Then create an invite code as shown above
+# PDS runs on port 4000 (configurable via DEVNET_PDS_PORT in .env)
+PDS_URL=http://localhost:4000
+PDS_SERVICE_HANDLE_DOMAINS=.devnet.test
+PDS_ADMIN_PASSWORD=devnet-admin-password
+
+# Invite code is generated automatically by devnet-up.sh
 ```
 
 ## Known Limitations
