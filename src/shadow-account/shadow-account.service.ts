@@ -9,6 +9,7 @@ import slugify from 'slugify';
 import { generateShortCode } from '../utils/short-code';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 
 /**
  * Service for managing shadow accounts across different platforms
@@ -84,6 +85,26 @@ export class ShadowAccountService {
               `Found existing shadow account for ${provider} with external ID ${externalId} in tenant ${targetTenantId}`,
             );
             return existingUser;
+          }
+
+          // Check userAtprotoIdentities table for DID match
+          // Users who authenticated via AT Protocol OAuth have their DID here, not in users.socialId
+          const identityRepo = tenantConnection.getRepository(
+            UserAtprotoIdentityEntity,
+          );
+          const identity = await identityRepo.findOne({
+            where: { did: externalId },
+            relations: ['user'],
+          });
+
+          if (identity?.user) {
+            span.setAttribute('accountFound', true);
+            span.setAttribute('foundVia', 'userAtprotoIdentities');
+            span.setAttribute('isRealUser', true);
+            this.logger.log(
+              `Found existing user via userAtprotoIdentities for DID ${externalId} in tenant ${targetTenantId}, skipping shadow account creation`,
+            );
+            return identity.user;
           }
 
           span.setAttribute('accountFound', false);
