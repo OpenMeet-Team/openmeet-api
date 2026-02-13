@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ShadowAccountService } from './shadow-account.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { Repository } from 'typeorm';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
@@ -10,6 +11,9 @@ describe('ShadowAccountService', () => {
   let service: ShadowAccountService;
   let tenantService: jest.Mocked<TenantConnectionService>;
   let userRepository: jest.Mocked<Repository<UserEntity>>;
+  let atprotoIdentityRepository: jest.Mocked<
+    Repository<UserAtprotoIdentityEntity>
+  >;
   let blueskyIdentityService: jest.Mocked<BlueskyIdentityService>;
 
   const mockTenantConnection = {
@@ -56,6 +60,10 @@ describe('ShadowAccountService', () => {
       save: jest.fn(),
     } as any;
 
+    atprotoIdentityRepository = {
+      findOne: jest.fn(),
+    } as any;
+
     tenantService = {
       getTenantConnection: jest.fn().mockResolvedValue(mockTenantConnection),
     } as any;
@@ -65,7 +73,12 @@ describe('ShadowAccountService', () => {
       resolveProfile: jest.fn(),
     } as any;
 
-    mockTenantConnection.getRepository.mockReturnValue(userRepository);
+    mockTenantConnection.getRepository.mockImplementation((entity: any) => {
+      if (entity === UserAtprotoIdentityEntity) {
+        return atprotoIdentityRepository;
+      }
+      return userRepository;
+    });
     mockTenantConnection.createQueryRunner.mockReturnValue(mockQueryRunner);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -141,6 +154,51 @@ describe('ShadowAccountService', () => {
       expect(userRepository.save).not.toHaveBeenCalled();
       expect(result).toEqual(mockRealUser);
       expect(result.isShadowAccount).toBe(false);
+    });
+
+    it('should return real user found via userAtprotoIdentities when socialId does not match', async () => {
+      // Arrange: socialId lookup returns nothing
+      userRepository.findOne.mockResolvedValue(null);
+
+      // But the DID exists in userAtprotoIdentities, linked to a real user
+      const mockRealUser = {
+        id: 5,
+        ulid: 'user456',
+        email: 'realuser@example.com',
+        firstName: 'Real',
+        isShadowAccount: false,
+        provider: AuthProvidersEnum.google,
+      } as UserEntity;
+
+      atprotoIdentityRepository.findOne.mockResolvedValue({
+        id: 1,
+        did: 'did:plc:realuser123',
+        userUlid: 'user456',
+        handle: 'realuser.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+        pdsCredentials: null,
+        isCustodial: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: mockRealUser,
+      } as UserAtprotoIdentityEntity);
+
+      // Act
+      const result = await service.findOrCreateShadowAccount(
+        'did:plc:realuser123',
+        'realuser.opnmt.me',
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+      );
+
+      // Assert: should return the real user, NOT create a shadow account
+      expect(result).toEqual(mockRealUser);
+      expect(result.isShadowAccount).toBe(false);
+      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(atprotoIdentityRepository.findOne).toHaveBeenCalledWith({
+        where: { did: 'did:plc:realuser123' },
+        relations: ['user'],
+      });
     });
 
     it('should create a new shadow account if not found', async () => {
