@@ -131,31 +131,22 @@ Run migrations after: initial setup, pulling code with new migrations, or schema
 npm run migration:reset
 ```
 
-### PDS Invite Code (Local Development)
+### ATProto Devnet (Local Development)
 
-When setting up a fresh local environment or after resetting the PDS, you need to generate a new invite code:
+For local AT Protocol testing (PDS, PLC, Jetstream, TAP), use the [atproto-devnet](https://github.com/OpenMeet-Team/atproto-devnet) repo:
 
 ```bash
-# Generate a new invite code (100 uses)
-curl -s -u admin:local-dev-admin-password \
-  http://localhost:3101/xrpc/com.atproto.server.createInviteCode \
-  -X POST -H "Content-Type: application/json" -d '{"useCount": 100}'
+# Clone devnet as a sibling directory (one-time setup)
+git clone https://github.com/OpenMeet-Team/atproto-devnet.git ../atproto-devnet
+
+# Start everything (generates fresh PDS invite code automatically)
+./scripts/devnet-up.sh
+
+# Stop everything
+./scripts/devnet-down.sh
 ```
 
-Update your `.env` file with the returned code:
-```
-PDS_INVITE_CODE=pds-test-xxxxx-xxxxx
-```
-
-Then force-recreate the API container to pick up the new value:
-```bash
-docker compose -f docker-compose-dev.yml up -d --force-recreate api
-```
-
-**Note:** The PDS and PLC containers must both be running for account creation to work:
-```bash
-docker compose -f docker-compose-dev.yml --profile pds up -d
-```
+The script automatically generates a fresh PDS invite code, updates `.env`, and restarts the API.
 
 ### Testing
 

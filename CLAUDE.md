@@ -193,21 +193,9 @@ Check BLUESKY_KEY_* environment variables (to be renamed ATPROTO_KEY_*). Keys mu
 ### PDS Invite Code Exhausted (Local Dev)
 Error: `Provided invite code not available` or `502` errors from PDS when creating accounts.
 
-The local PDS uses invite codes which get exhausted. Generate a new one:
+Re-running `devnet-up.sh` generates a fresh invite code automatically (no need to take services down):
 ```bash
-curl -s -u admin:local-dev-admin-password \
-  http://localhost:3101/xrpc/com.atproto.server.createInviteCode \
-  -X POST -H "Content-Type: application/json" -d '{"useCount": 100}'
-```
-
-Update `.env` with the returned code (`PDS_INVITE_CODE=pds-test-xxxxx-xxxxx`), then **force-recreate** the API container (restart won't pick up env changes):
-```bash
-docker compose -f docker-compose-dev.yml up -d --force-recreate api
-```
-
-Also ensure both PDS and PLC containers are running:
-```bash
-docker compose -f docker-compose-dev.yml --profile pds up -d
+./scripts/devnet-up.sh
 ```
 
 ### Migration Errors

@@ -11,9 +11,12 @@ cp env-example-relational .env
 # 2. Install dependencies locally (required for tests and IDE support)
 npm install
 
-# 3. Start all services (add --profile pds for AT Protocol PDS testing)
+# 3. Start all services
 docker compose -f docker-compose-dev.yml up -d
-# Or with PDS: docker compose -f docker-compose-dev.yml --profile pds up -d
+
+# With ATProto devnet (PDS + PLC + Jetstream + TAP):
+# Requires: git clone https://github.com/OpenMeet-Team/atproto-devnet.git ../atproto-devnet
+./scripts/devnet-up.sh
 
 # 4. Run migrations (first time only, or after pulling new migrations)
 docker compose -f docker-compose-dev.yml run --rm migrate
