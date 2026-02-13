@@ -1,0 +1,66 @@
+# ATProto devnet overlay for openmeet-api
+#
+# Bridges atproto-devnet services into the openmeet docker environment,
+# reusing openmeet's postgres and maildev instead of spinning up duplicates.
+#
+# Usage:
+#   ./scripts/devnet-up.sh     # start everything
+#   ./scripts/devnet-down.sh   # stop everything
+#
+# Or manually:
+#   docker compose -f docker-compose-dev.yml \
+#     -f ../atproto-devnet/docker-compose.yml \
+#     -f docker-compose-devnet.yml \
+#     --project-directory . up -d
+
+services:
+  # ── Connect devnet PLC to openmeet's postgres ──────────────────
+  plc:
+    environment:
+      DEVNET_DB_HOST: postgres
+      DEVNET_DB_USER: ${DATABASE_USERNAME}
+      DEVNET_DB_PASSWORD: ${DATABASE_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - api-network
+
+  # ── Connect devnet PDS to openmeet's maildev ───────────────────
+  pds:
+    environment:
+      PDS_EMAIL_SMTP_URL: smtp://maildev:1025
+    networks:
+      - api-network
+
+  # ── Jetstream, TAP, init: just join the network ────────────────
+  jetstream:
+    networks:
+      - api-network
+
+  tap:
+    networks:
+      - api-network
+
+  init:
+    volumes:
+      - ../atproto-devnet/scripts:/scripts:ro
+      - ../atproto-devnet/data:/devnet-data
+    networks:
+      - api-network
+
+  # ── Point API at devnet PDS (container-to-container) ────────────
+  api:
+    environment:
+      - PDS_URL=http://pds:3000
+      - PDS_DID_PLC_URL=http://plc:2582
+
+  # ── Point firehose consumer at local Jetstream ─────────────────
+  bsky-firehose-consumer:
+    environment:
+      - BSKY_FIREHOSE_URL=ws://jetstream:6008/subscribe
+
+
+networks:
+  api-network:
+    name: api-network
