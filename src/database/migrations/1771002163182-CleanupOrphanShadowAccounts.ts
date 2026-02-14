@@ -40,6 +40,7 @@ export class CleanupOrphanShadowAccounts1771002163182
       JOIN "${schema}".users real_u ON uai."userUlid" = real_u.ulid
       WHERE u."isShadowAccount" = true
         AND u."deletedAt" IS NULL
+        AND real_u.id != u.id
       ORDER BY u.id
     `);
 
