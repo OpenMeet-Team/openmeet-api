@@ -63,10 +63,15 @@ describe('EventIntegrationController', () => {
     // Create mock service
     service = {
       processExternalEvent: jest.fn(),
+      deleteExternalEvent: jest.fn(),
     } as any;
 
-    // Configure mockservice behavior
+    // Configure mock service behavior
     service.processExternalEvent.mockResolvedValue(mockEventResult);
+    service.deleteExternalEvent.mockResolvedValue({
+      success: true,
+      message: 'Event deleted',
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EventIntegrationController],
@@ -128,6 +133,134 @@ describe('EventIntegrationController', () => {
       await expect(
         controller.ingestEvent('test-tenant', mockEventDto),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('deleteEventByQuery', () => {
+    it('should call service with sourceId and sourceType from query params', async () => {
+      const result = await controller.deleteEventByQuery(
+        'test-tenant',
+        'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+        'bluesky',
+      );
+
+      expect(service.deleteExternalEvent).toHaveBeenCalledWith(
+        'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+        'bluesky',
+        'test-tenant',
+      );
+      expect(result).toEqual({
+        success: true,
+        message: 'Event deletion request accepted',
+      });
+    });
+
+    it('should throw UnauthorizedException if tenant ID is missing', async () => {
+      await expect(
+        controller.deleteEventByQuery('', 'some-id', 'bluesky'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw BadRequestException if sourceId is missing', async () => {
+      await expect(
+        controller.deleteEventByQuery('test-tenant', '', 'bluesky'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if sourceType is missing', async () => {
+      await expect(
+        controller.deleteEventByQuery('test-tenant', 'some-id', ''),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should handle service errors properly', async () => {
+      service.deleteExternalEvent.mockRejectedValue(
+        new Error('Delete failed'),
+      );
+
+      await expect(
+        controller.deleteEventByQuery('test-tenant', 'some-id', 'bluesky'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('deleteAtprotoEvent', () => {
+    it('should construct at:// URI from path components and call service', async () => {
+      const result = await controller.deleteAtprotoEvent(
+        'test-tenant',
+        'did:plc:abc123',
+        'community.lexicon.calendar.event',
+        'rkey456',
+        'bluesky',
+      );
+
+      expect(service.deleteExternalEvent).toHaveBeenCalledWith(
+        'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+        'bluesky',
+        'test-tenant',
+      );
+      expect(result).toEqual({
+        success: true,
+        message: 'Event deleted',
+      });
+    });
+
+    it('should throw UnauthorizedException if tenant ID is missing', async () => {
+      await expect(
+        controller.deleteAtprotoEvent(
+          '',
+          'did:plc:abc123',
+          'community.lexicon.calendar.event',
+          'rkey456',
+          'bluesky',
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw BadRequestException if any path param is missing', async () => {
+      await expect(
+        controller.deleteAtprotoEvent(
+          'test-tenant',
+          '',
+          'community.lexicon.calendar.event',
+          'rkey456',
+          'bluesky',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if sourceType is missing', async () => {
+      await expect(
+        controller.deleteAtprotoEvent(
+          'test-tenant',
+          'did:plc:abc123',
+          'community.lexicon.calendar.event',
+          'rkey456',
+          '',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should handle service errors properly', async () => {
+      service.deleteExternalEvent.mockRejectedValue(
+        new Error('Delete failed'),
+      );
+
+      await expect(
+        controller.deleteAtprotoEvent(
+          'test-tenant',
+          'did:plc:abc123',
+          'community.lexicon.calendar.event',
+          'rkey456',
+          'bluesky',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('route consolidation', () => {
+    it('should not have a deleteEventByPath method (catch-all removed)', () => {
+      expect((controller as any).deleteEventByPath).toBeUndefined();
     });
   });
 });
