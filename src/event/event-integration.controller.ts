@@ -20,7 +20,6 @@ import {
   ApiResponse,
   ApiHeader,
   ApiQuery,
-  ApiParam,
 } from '@nestjs/swagger';
 import { EventIntegrationService } from './services/event-integration.service';
 import { ExternalEventDto } from './dto/external-event.dto';
@@ -181,88 +180,8 @@ export class EventIntegrationController {
   }
 
   /**
-   * Deletes an event from an external source using path parameter
-   */
-  @Delete(':sourceId(*)')
-  @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({
-    summary: 'Delete an event from an external source using path parameter',
-  })
-  @ApiHeader({
-    name: 'x-tenant-id',
-    description: 'Tenant ID',
-    required: true,
-  })
-  @ApiParam({
-    name: 'sourceId',
-    description:
-      'Source ID of the event to delete - should be the full URI for Bluesky events',
-    required: true,
-  })
-  @ApiQuery({
-    name: 'sourceType',
-    description: 'Source type of the event',
-    required: true,
-  })
-  @ApiResponse({
-    status: HttpStatus.ACCEPTED,
-    description: 'Event deletion request accepted',
-  })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid request',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Missing tenant ID',
-  })
-  async deleteEventByPath(
-    @Headers('x-tenant-id') tenantId: string,
-    @Param('sourceId') sourceId: string,
-    @Query('sourceType') sourceType: string,
-  ) {
-    if (!tenantId) {
-      throw new UnauthorizedException(
-        'Missing tenant ID. Please provide the x-tenant-id header.',
-      );
-    }
-
-    if (!sourceId || !sourceType) {
-      throw new BadRequestException(
-        'Both sourceId and sourceType parameters are required',
-      );
-    }
-
-    try {
-      // Source ID will be URL-encoded in the request, so we need to decode it
-      const decodedSourceId = decodeURIComponent(sourceId);
-
-      this.logger.debug(
-        `Deleting external event via path parameter for tenant ${tenantId} with sourceId: ${decodedSourceId} and sourceType: ${sourceType}`,
-      );
-
-      await this.eventIntegrationService.deleteExternalEvent(
-        decodedSourceId,
-        sourceType,
-        tenantId,
-      );
-
-      return {
-        success: true,
-        message: 'Event deletion request accepted',
-      };
-    } catch (error) {
-      this.logger.error(
-        `Error deleting external event via path parameter: ${error.message}`,
-        error.stack,
-      );
-      throw new BadRequestException(`Failed to delete event: ${error.message}`);
-    }
-  }
-
-  /**
-   * Deletes an event from an external source using path parameter
-   * The wildcard routing pattern accepts URLs with multiple segments
+   * Deletes an AT Protocol event using individual path parameter components.
+   * Constructs the at:// URI from the components to match the stored sourceId format.
    */
   @Delete('atproto/:did/:collection/:rkey')
   @HttpCode(HttpStatus.ACCEPTED)
