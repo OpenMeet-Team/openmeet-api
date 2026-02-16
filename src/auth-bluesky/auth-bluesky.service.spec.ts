@@ -595,6 +595,44 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
         /^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/,
       );
     });
+
+    it('should redirect to external redirect_uri when provided', () => {
+      const result = service.buildRedirectUrl(
+        'tenant-123',
+        testParams,
+        'web',
+        'https://roomy.chat/auth/openmeet/callback',
+      );
+
+      expect(result).toMatch(
+        /^https:\/\/roomy\.chat\/auth\/openmeet\/callback\?/,
+      );
+      expect(result).toContain('token=test-token');
+    });
+
+    it('should reject redirect_uri to non-allowed domains', () => {
+      expect(() =>
+        service.buildRedirectUrl(
+          'tenant-123',
+          testParams,
+          'web',
+          'https://evil.com/steal-tokens',
+        ),
+      ).toThrow('redirect_uri domain not allowed');
+    });
+
+    it('should allow redirect_uri to localhost', () => {
+      const result = service.buildRedirectUrl(
+        'tenant-123',
+        testParams,
+        'web',
+        'http://localhost:5173/auth/callback',
+      );
+
+      expect(result).toMatch(
+        /^http:\/\/localhost:5173\/auth\/callback\?/,
+      );
+    });
   });
 });
 
