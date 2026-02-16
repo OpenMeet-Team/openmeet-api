@@ -1725,7 +1725,10 @@ describe('EventManagementService', () => {
       };
 
       // The error should be caught, not propagated - update should succeed
-      const result = await service.update('atproto-update-error-test', updateDto);
+      const result = await service.update(
+        'atproto-update-error-test',
+        updateDto,
+      );
       expect(result).toBeDefined();
       expect(result.name).toBe('Updated Event Name');
     });
@@ -2022,8 +2025,7 @@ describe('EventManagementService', () => {
         id: 953,
         slug: 'event-atproto-publish-throws',
         sourceType: null,
-        atprotoUri:
-          'at://did:plc:test/community.openmeet.event/existing123',
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/existing123',
         atprotoRkey: 'existing123',
         atprotoCid: 'bafyreicurrentcid',
         atprotoSyncedAt: new Date('2024-01-01'),
@@ -2077,8 +2079,7 @@ describe('EventManagementService', () => {
         id: 954,
         slug: 'event-atproto-resync',
         sourceType: null,
-        atprotoUri:
-          'at://did:plc:test/community.openmeet.event/resync456',
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/resync456',
         atprotoRkey: 'resync456',
         atprotoCid: 'bafyreioldcid',
         atprotoSyncedAt: new Date('2024-01-01'),
@@ -2108,8 +2109,7 @@ describe('EventManagementService', () => {
       // Mock successful ATProto update
       mockAtprotoPublisherService.publishEvent.mockResolvedValue({
         action: 'updated',
-        atprotoUri:
-          'at://did:plc:test/community.openmeet.event/resync456',
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/resync456',
         atprotoRkey: 'resync456',
         atprotoCid: 'bafyreinewcid',
       });
@@ -2127,8 +2127,7 @@ describe('EventManagementService', () => {
       expect(mockRepository.update).toHaveBeenCalledWith(
         { id: updatedEvent.id },
         expect.objectContaining({
-          atprotoUri:
-            'at://did:plc:test/community.openmeet.event/resync456',
+          atprotoUri: 'at://did:plc:test/community.openmeet.event/resync456',
           atprotoRkey: 'resync456',
           atprotoCid: 'bafyreinewcid',
           atprotoSyncedAt: expect.any(Date),
@@ -2143,8 +2142,7 @@ describe('EventManagementService', () => {
         id: 955,
         slug: 'event-atproto-error-action',
         sourceType: null,
-        atprotoUri:
-          'at://did:plc:test/community.openmeet.event/err789',
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/err789',
         atprotoRkey: 'err789',
         atprotoCid: 'bafyreierrcid',
         atprotoSyncedAt: new Date('2024-01-01'),
@@ -2165,8 +2163,7 @@ describe('EventManagementService', () => {
       let findOneCallCount = 0;
       mockRepository.findOne.mockImplementation(() => {
         findOneCallCount++;
-        if (findOneCallCount === 1)
-          return Promise.resolve(eventForErrorAction);
+        if (findOneCallCount === 1) return Promise.resolve(eventForErrorAction);
         return Promise.resolve(updatedEvent);
       });
       mockRepository.save.mockResolvedValue(updatedEvent);
@@ -2179,10 +2176,7 @@ describe('EventManagementService', () => {
       });
 
       // Spy on the logger to verify warning is logged
-      const loggerWarnSpy = jest.spyOn(
-        service['logger'],
-        'warn',
-      );
+      const loggerWarnSpy = jest.spyOn(service['logger'], 'warn');
 
       const updateDto: UpdateEventDto = {
         name: 'Updated Despite Error Action',
@@ -2596,13 +2590,17 @@ describe('EventManagementService', () => {
       mockRepository.findOne.mockResolvedValue(blueskyEvent);
 
       // Mock UserService.findByIdWithPreferences to return user without connected flag
-      const mockUserServiceRef = service['userService'] as jest.Mocked<UserService>;
+      const mockUserServiceRef = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
       mockUserServiceRef.findByIdWithPreferences = jest
         .fn()
         .mockResolvedValue(userWithoutConnected);
 
       // Mock BlueskyService.deleteEventRecord to succeed
-      const mockBlueskyServiceRef = service['blueskyService'] as jest.Mocked<BlueskyService>;
+      const mockBlueskyServiceRef = service[
+        'blueskyService'
+      ] as jest.Mocked<BlueskyService>;
       mockBlueskyServiceRef.deleteEventRecord = jest.fn().mockResolvedValue({});
 
       // Mock the transaction
