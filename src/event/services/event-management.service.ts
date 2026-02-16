@@ -690,7 +690,9 @@ export class EventManagementService {
     }
 
     // Update basic event information
-    const updatedEventData: Partial<EventEntity> = {
+    // Only include fields that were explicitly provided in the DTO to avoid
+    // overwriting existing values with undefined (which TypeORM saves as null)
+    const rawEventData: Record<string, unknown> = {
       name: updateEventDto.name,
       description: updateEventDto.description,
       type: updateEventDto.type as EventType,
@@ -714,8 +716,17 @@ export class EventManagementService {
       resources: updateEventDto.resources,
       blocksTime: updateEventDto.blocksTime,
       isAllDay: updateEventDto.isAllDay,
-      timeZone: updateEventDto.timeZone || 'UTC',
     };
+
+    // Only set timeZone if explicitly provided
+    if (updateEventDto.timeZone !== undefined) {
+      rawEventData.timeZone = updateEventDto.timeZone;
+    }
+
+    // Strip undefined values so Object.assign won't overwrite existing entity fields
+    const updatedEventData: Partial<EventEntity> = Object.fromEntries(
+      Object.entries(rawEventData).filter(([, v]) => v !== undefined),
+    ) as Partial<EventEntity>;
 
     // Handle sourceType and sourceId
     if (updateEventDto.sourceType) {
