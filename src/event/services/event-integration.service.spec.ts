@@ -983,4 +983,106 @@ describe('EventIntegrationService', () => {
       );
     });
   });
+
+  describe('CID match guard in updateExistingEvent', () => {
+    it('should skip update when incoming CID matches stored atprotoCid (echo)', async () => {
+      // Arrange - existing event with a known atprotoCid
+      const echoEvent = {
+        ...mockExistingEvent,
+        atprotoCid: 'bafyreisamecid',
+      } as Partial<EventEntity>;
+
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        echoEvent as unknown as EventEntity,
+      ]);
+
+      // Event data from firehose with the SAME CID (this is our own echo)
+      const echoEventDto: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          ...mockEventDto.source,
+          metadata: {
+            ...mockEventDto.source.metadata,
+            cid: 'bafyreisamecid',
+          },
+        },
+      };
+
+      // Act
+      const result = await service.processExternalEvent(
+        echoEventDto,
+        'tenant1',
+      );
+
+      // Assert - save should NOT be called because this is our own echo
+      expect(eventRepository.save).not.toHaveBeenCalled();
+      // The returned event should be the existing event unchanged
+      expect(result.id).toBe(echoEvent.id);
+    });
+
+    it('should accept update when incoming CID differs from stored (remote edit)', async () => {
+      // Arrange - existing event with an old CID
+      const existingEventWithCid = {
+        ...mockExistingEvent,
+        atprotoCid: 'bafyreioldcid',
+      } as Partial<EventEntity>;
+
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        existingEventWithCid as unknown as EventEntity,
+      ]);
+
+      // Event data from firehose with a DIFFERENT CID (remote edit)
+      const remoteEditDto: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          ...mockEventDto.source,
+          metadata: {
+            ...mockEventDto.source.metadata,
+            cid: 'bafyreinewcid',
+          },
+        },
+      };
+
+      // Act
+      await service.processExternalEvent(remoteEditDto, 'tenant1');
+
+      // Assert - save SHOULD be called because this is a remote edit
+      expect(eventRepository.save).toHaveBeenCalled();
+      // The saved event should have the new CID
+      const savedEntity = eventRepository.save.mock.calls[0][0] as any;
+      expect(savedEntity.atprotoCid).toBe('bafyreinewcid');
+      // The saved event should have a fresh atprotoSyncedAt
+      expect(savedEntity.atprotoSyncedAt).toBeInstanceOf(Date);
+    });
+
+    it('should proceed normally when no CID is available (no atprotoCid on event)', async () => {
+      // Arrange - existing event with no atprotoCid (not published to ATProto yet)
+      const existingEventNoCid = {
+        ...mockExistingEvent,
+        atprotoCid: null,
+      } as Partial<EventEntity>;
+
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        existingEventNoCid as unknown as EventEntity,
+      ]);
+
+      // Event data from firehose with a CID
+      const eventDtoWithCid: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          ...mockEventDto.source,
+          metadata: {
+            ...mockEventDto.source.metadata,
+            cid: 'bafyreisomecid',
+          },
+        },
+      };
+
+      // Act
+      await service.processExternalEvent(eventDtoWithCid, 'tenant1');
+
+      // Assert - save SHOULD be called (normal update path, no CID guard triggered)
+      expect(eventRepository.save).toHaveBeenCalled();
+    });
+  });
 });
