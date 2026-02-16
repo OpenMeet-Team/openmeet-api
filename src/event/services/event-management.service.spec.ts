@@ -1684,7 +1684,10 @@ describe('EventManagementService', () => {
       );
     });
 
-    it('should propagate AT Protocol errors during event update', async () => {
+    it('should catch AT Protocol errors during event update and not propagate them', async () => {
+      // ATProto publish errors during update should be caught and logged,
+      // not propagated to the caller. The DB update has already succeeded
+      // and the event will be retried on next sync.
       const existingEvent = {
         ...findOneMockEventEntity,
         id: 901,
@@ -1721,10 +1724,10 @@ describe('EventManagementService', () => {
         name: 'Updated Event Name',
       };
 
-      // The error should propagate, not be swallowed
-      await expect(
-        service.update('atproto-update-error-test', updateDto),
-      ).rejects.toThrow('Failed to publish to AT Protocol: identity not found');
+      // The error should be caught, not propagated - update should succeed
+      const result = await service.update('atproto-update-error-test', updateDto);
+      expect(result).toBeDefined();
+      expect(result.name).toBe('Updated Event Name');
     });
 
     it('should catch AT Protocol errors during event deletion and proceed with local deletion', async () => {
@@ -2010,6 +2013,196 @@ describe('EventManagementService', () => {
           atprotoUri: expect.anything(),
         }),
       );
+    });
+
+    it('should not fail event update when ATProto publish throws', async () => {
+      // Event is public, published, sourceType=null, has ATProto metadata set
+      const eventWithAtproto = {
+        ...findOneMockEventEntity,
+        id: 953,
+        slug: 'event-atproto-publish-throws',
+        sourceType: null,
+        atprotoUri:
+          'at://did:plc:test/community.openmeet.event/existing123',
+        atprotoRkey: 'existing123',
+        atprotoCid: 'bafyreicurrentcid',
+        atprotoSyncedAt: new Date('2024-01-01'),
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...eventWithAtproto,
+        name: 'Updated Event After PDS Failure',
+        updatedAt: new Date('2024-01-02'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+
+      let findOneCallCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        findOneCallCount++;
+        if (findOneCallCount === 1) return Promise.resolve(eventWithAtproto);
+        return Promise.resolve(updatedEvent);
+      });
+      mockRepository.save.mockResolvedValue(updatedEvent);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock ATProto publish to REJECT with an error
+      mockAtprotoPublisherService.publishEvent.mockRejectedValue(
+        new Error('PDS unavailable'),
+      );
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Event After PDS Failure',
+      };
+
+      // The update should NOT throw even though publishEvent rejects
+      const result = await service.update(
+        'event-atproto-publish-throws',
+        updateDto,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.name).toBe('Updated Event After PDS Failure');
+      expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
+    });
+
+    it('should re-sync ATProto when updating an already-published event', async () => {
+      // Event already has ATProto metadata (already published)
+      const eventWithAtproto = {
+        ...findOneMockEventEntity,
+        id: 954,
+        slug: 'event-atproto-resync',
+        sourceType: null,
+        atprotoUri:
+          'at://did:plc:test/community.openmeet.event/resync456',
+        atprotoRkey: 'resync456',
+        atprotoCid: 'bafyreioldcid',
+        atprotoSyncedAt: new Date('2024-01-01'),
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...eventWithAtproto,
+        name: 'Re-synced Event',
+        updatedAt: new Date('2024-01-02'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+
+      let findOneCallCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        findOneCallCount++;
+        if (findOneCallCount === 1) return Promise.resolve(eventWithAtproto);
+        return Promise.resolve(updatedEvent);
+      });
+      mockRepository.save.mockResolvedValue(updatedEvent);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock successful ATProto update
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'updated',
+        atprotoUri:
+          'at://did:plc:test/community.openmeet.event/resync456',
+        atprotoRkey: 'resync456',
+        atprotoCid: 'bafyreinewcid',
+      });
+
+      const updateDto: UpdateEventDto = {
+        name: 'Re-synced Event',
+      };
+
+      const result = await service.update('event-atproto-resync', updateDto);
+
+      expect(result).toBeDefined();
+      expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
+
+      // Verify repository.update was called with the new CID and a fresh atprotoSyncedAt
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { id: updatedEvent.id },
+        expect.objectContaining({
+          atprotoUri:
+            'at://did:plc:test/community.openmeet.event/resync456',
+          atprotoRkey: 'resync456',
+          atprotoCid: 'bafyreinewcid',
+          atprotoSyncedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it('should log warning when ATProto publish returns any error action', async () => {
+      // Event is public, published, sourceType=null
+      const eventForErrorAction = {
+        ...findOneMockEventEntity,
+        id: 955,
+        slug: 'event-atproto-error-action',
+        sourceType: null,
+        atprotoUri:
+          'at://did:plc:test/community.openmeet.event/err789',
+        atprotoRkey: 'err789',
+        atprotoCid: 'bafyreierrcid',
+        atprotoSyncedAt: new Date('2024-01-01'),
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...eventForErrorAction,
+        name: 'Updated Despite Error Action',
+        updatedAt: new Date('2024-01-02'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+
+      let findOneCallCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        findOneCallCount++;
+        if (findOneCallCount === 1)
+          return Promise.resolve(eventForErrorAction);
+        return Promise.resolve(updatedEvent);
+      });
+      mockRepository.save.mockResolvedValue(updatedEvent);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock publishEvent returning an error action with .error (not .validationError)
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'error',
+        error: 'Session unavailable',
+      });
+
+      // Spy on the logger to verify warning is logged
+      const loggerWarnSpy = jest.spyOn(
+        service['logger'],
+        'warn',
+      );
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Despite Error Action',
+      };
+
+      // The update should still succeed (not throw)
+      const result = await service.update(
+        'event-atproto-error-action',
+        updateDto,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.name).toBe('Updated Despite Error Action');
+
+      // Verify warning was logged with the error message
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Session unavailable'),
+      );
+
+      loggerWarnSpy.mockRestore();
     });
   });
 

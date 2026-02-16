@@ -969,49 +969,61 @@ export class EventManagementService {
     // Publish to AT Protocol (user's PDS) if eligible
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     if (!event.sourceType) {
-      // Pre-generate TID only for events eligible for AT Protocol publishing
-      const isEligibleForAtproto =
-        updatedEvent.visibility === EventVisibility.Public &&
-        (updatedEvent.status === EventStatus.Published ||
-          updatedEvent.status === EventStatus.Cancelled);
+      try {
+        // Pre-generate TID only for events eligible for AT Protocol publishing
+        const isEligibleForAtproto =
+          updatedEvent.visibility === EventVisibility.Public &&
+          (updatedEvent.status === EventStatus.Published ||
+            updatedEvent.status === EventStatus.Cancelled);
 
-      if (isEligibleForAtproto && !updatedEvent.atprotoRkey) {
-        updatedEvent.atprotoRkey = TID.nextStr();
-        await this.eventRepository.save(updatedEvent);
-        this.logger.debug(
-          `Pre-generated atprotoRkey: ${updatedEvent.atprotoRkey}`,
+        if (isEligibleForAtproto && !updatedEvent.atprotoRkey) {
+          updatedEvent.atprotoRkey = TID.nextStr();
+          await this.eventRepository.save(updatedEvent);
+          this.logger.debug(
+            `Pre-generated atprotoRkey: ${updatedEvent.atprotoRkey}`,
+          );
+        }
+
+        const publishResult = await this.atprotoPublisherService.publishEvent(
+          updatedEvent,
+          this.request.tenantId,
         );
-      }
 
-      const publishResult = await this.atprotoPublisherService.publishEvent(
-        updatedEvent,
-        this.request.tenantId,
-      );
+        if (
+          publishResult.action === 'published' ||
+          publishResult.action === 'updated'
+        ) {
+          // Save AT Protocol metadata to database
+          await this.eventRepository.update(
+            { id: updatedEvent.id },
+            {
+              atprotoUri: publishResult.atprotoUri,
+              atprotoRkey: publishResult.atprotoRkey,
+              atprotoCid: publishResult.atprotoCid,
+              atprotoSyncedAt: new Date(),
+            },
+          );
 
-      if (
-        publishResult.action === 'published' ||
-        publishResult.action === 'updated'
-      ) {
-        // Save AT Protocol metadata to database
-        await this.eventRepository.update(
-          { id: updatedEvent.id },
+          this.logger.debug(
+            `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
+          );
+        }
+
+        if (publishResult.action === 'error') {
+          this.logger.warn(
+            `Event ${updatedEvent.slug} saved but AT Protocol publish failed: ${publishResult.error || publishResult.validationError}`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `ATProto publish failed for event ${updatedEvent.slug}, will retry on next sync`,
           {
-            atprotoUri: publishResult.atprotoUri,
-            atprotoRkey: publishResult.atprotoRkey,
-            atprotoCid: publishResult.atprotoCid,
-            atprotoSyncedAt: new Date(),
+            error: error.message,
+            eventId: updatedEvent.id,
+            slug: updatedEvent.slug,
           },
         );
-
-        this.logger.debug(
-          `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
-        );
-      }
-
-      if (publishResult.action === 'error' && publishResult.validationError) {
-        this.logger.warn(
-          `Event ${updatedEvent.slug} saved but AT Protocol publish failed: ${publishResult.validationError}`,
-        );
+        // Event stays marked as pending sync (updatedAt > atprotoSyncedAt)
       }
     }
 
