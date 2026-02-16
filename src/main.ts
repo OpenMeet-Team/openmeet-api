@@ -67,6 +67,10 @@ async function bootstrap() {
         'https://platform.openmeet.net',
         'https://platform-dev.openmeet.net',
         'https://platform.dev.openmeet.net',
+        // Roomy integration
+        'https://roomy.chat',
+        'https://app.roomy.chat',
+        'http://localhost:5173',
       ],
       credentials: true,
       allowedHeaders: [
