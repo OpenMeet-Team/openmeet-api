@@ -516,6 +516,8 @@ export class BlueskyService {
         collection: standardEventCollection,
         rkey,
         record: recordData,
+        // Optimistic concurrency: reject if PDS record changed since our last sync
+        ...(event.atprotoCid ? { swapRecord: event.atprotoCid } : {}),
       });
 
       this.logger.debug('post to bluesky result', JSON.stringify(result));

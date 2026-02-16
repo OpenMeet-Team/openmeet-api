@@ -325,6 +325,18 @@ export class AtprotoPublisherService {
       rkey = result.rkey;
       cid = result.cid;
     } catch (error) {
+      // Handle swapRecord conflict (409 InvalidSwap)
+      if (
+        error instanceof Error &&
+        ((error as any).status === 409 ||
+          error.message?.includes('InvalidSwap'))
+      ) {
+        this.logger.warn(
+          `Conflict publishing event ${event.slug}: PDS record was modified externally`,
+        );
+        return { action: 'conflict' };
+      }
+
       if (
         error instanceof Error &&
         error.message?.startsWith('AT Protocol record validation failed:')
