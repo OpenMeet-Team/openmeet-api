@@ -48,8 +48,12 @@ const BLUESKY_EVENT_COLLECTION = 'community.lexicon.calendar.event';
  * This service is "PDS first" - it publishes to AT Protocol and returns results.
  * The calling service is responsible for saving to the local database.
  *
- * If PDS is unavailable, this service throws an error (fail fast).
- * There is no buffering or retry logic - AT Protocol is the source of truth.
+ * Returns typed results for recoverable cases (e.g., optimistic concurrency
+ * conflicts via swapRecord, validation errors). Throws for unrecoverable
+ * errors (e.g., network failures, invalid credentials).
+ *
+ * AT Protocol is the source of truth. The AtprotoSyncScheduler retries
+ * failed publishes periodically.
  */
 @Injectable()
 export class AtprotoPublisherService {

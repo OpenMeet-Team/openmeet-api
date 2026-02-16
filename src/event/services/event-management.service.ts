@@ -526,6 +526,14 @@ export class EventManagementService {
       if (publishResult.action === 'error') {
         this.logger.warn(
           `Event ${eventToPublish.slug} saved but AT Protocol publish failed: ${publishResult.error || publishResult.validationError}`,
+          { tenantId: this.request.tenantId, eventId: eventToPublish.id, slug: eventToPublish.slug },
+        );
+      }
+
+      if (publishResult.action === 'conflict') {
+        this.logger.warn(
+          `ATProto conflict for event ${eventToPublish.slug}: PDS record was modified externally`,
+          { tenantId: this.request.tenantId, eventId: eventToPublish.id, slug: eventToPublish.slug },
         );
       }
     }
@@ -1023,12 +1031,21 @@ export class EventManagementService {
         if (publishResult.action === 'error') {
           this.logger.warn(
             `Event ${updatedEvent.slug} saved but AT Protocol publish failed: ${publishResult.error || publishResult.validationError}`,
+            { tenantId: this.request.tenantId, eventId: updatedEvent.id, slug: updatedEvent.slug },
+          );
+        }
+
+        if (publishResult.action === 'conflict') {
+          this.logger.warn(
+            `ATProto conflict for event ${updatedEvent.slug}: PDS record was modified externally`,
+            { tenantId: this.request.tenantId, eventId: updatedEvent.id, slug: updatedEvent.slug },
           );
         }
       } catch (error) {
         this.logger.error(
           `ATProto publish failed for event ${updatedEvent.slug}, will retry on next sync`,
           {
+            tenantId: this.request.tenantId,
             error: error.message,
             eventId: updatedEvent.id,
             slug: updatedEvent.slug,

@@ -1866,6 +1866,57 @@ describe('EventManagementService', () => {
         }),
       );
     });
+
+    it('should log warning when AT Protocol publish returns conflict during creation', async () => {
+      const createdEvent = {
+        ...findOneMockEventEntity,
+        id: 905,
+        slug: 'atproto-conflict-create-test',
+        sourceType: null,
+      } as EventEntity;
+
+      mockRepository.create.mockReturnValue(createdEvent);
+      mockRepository.save.mockResolvedValue(createdEvent);
+      mockRepository.findOne.mockResolvedValue(createdEvent);
+
+      // Mock AT Protocol publisher returning conflict
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'conflict',
+      });
+
+      // Spy on the logger to verify warning is logged
+      const loggerWarnSpy = jest.spyOn(service['logger'], 'warn');
+
+      const createEventDto: CreateEventDto = {
+        name: 'Conflict During Create Event',
+        description: 'Test Event Description',
+        startDate: new Date(),
+        type: EventType.InPerson,
+        location: 'Test Location',
+        locationOnline: '',
+        maxAttendees: 100,
+        categories: [],
+        lat: 1,
+        lon: 1,
+        timeZone: 'UTC',
+      };
+
+      const result = await service.create(createEventDto, mockUser.id);
+
+      expect(result).toBeDefined();
+      expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
+
+      // Verify warning was logged about the conflict
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('ATProto conflict'),
+        expect.objectContaining({
+          eventId: createdEvent.id,
+          slug: createdEvent.slug,
+        }),
+      );
+
+      loggerWarnSpy.mockRestore();
+    });
   });
 
   describe('ATProto Auto-Retry on Update', () => {
@@ -2191,9 +2242,76 @@ describe('EventManagementService', () => {
       expect(result).toBeDefined();
       expect(result.name).toBe('Updated Despite Error Action');
 
-      // Verify warning was logged with the error message
+      // Verify warning was logged with the error message and context
       expect(loggerWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Session unavailable'),
+        expect.objectContaining({ tenantId: 'test-tenant' }),
+      );
+
+      loggerWarnSpy.mockRestore();
+    });
+
+    it('should log warning when AT Protocol publish returns conflict during update', async () => {
+      const eventForConflict = {
+        ...findOneMockEventEntity,
+        id: 956,
+        slug: 'event-atproto-conflict-action',
+        sourceType: null,
+        atprotoUri: 'at://did:plc:test/community.openmeet.event/conflict789',
+        atprotoRkey: 'conflict789',
+        atprotoCid: 'bafyreicidconflict',
+        atprotoSyncedAt: new Date('2024-01-01'),
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...eventForConflict,
+        name: 'Updated Despite Conflict Action',
+        updatedAt: new Date('2024-01-02'),
+      } as EventEntity;
+
+      await service['initializeRepository']();
+
+      let findOneCallCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        findOneCallCount++;
+        if (findOneCallCount === 1) return Promise.resolve(eventForConflict);
+        return Promise.resolve(updatedEvent);
+      });
+      mockRepository.save.mockResolvedValue(updatedEvent);
+      mockRepository.update.mockResolvedValue({ affected: 1 } as any);
+
+      // Mock publishEvent returning a conflict action
+      mockAtprotoPublisherService.publishEvent.mockResolvedValue({
+        action: 'conflict',
+      });
+
+      // Spy on the logger to verify warning is logged
+      const loggerWarnSpy = jest.spyOn(service['logger'], 'warn');
+
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Despite Conflict Action',
+      };
+
+      // The update should still succeed (not throw)
+      const result = await service.update(
+        'event-atproto-conflict-action',
+        updateDto,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.name).toBe('Updated Despite Conflict Action');
+
+      // Verify warning was logged about the conflict
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('ATProto conflict'),
+        expect.objectContaining({
+          eventId: updatedEvent.id,
+          slug: updatedEvent.slug,
+        }),
       );
 
       loggerWarnSpy.mockRestore();

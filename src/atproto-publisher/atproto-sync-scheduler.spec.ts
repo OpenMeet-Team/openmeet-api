@@ -178,7 +178,7 @@ describe('AtprotoSyncScheduler', () => {
       expect(mockEventRepository.update).not.toHaveBeenCalled();
     });
 
-    it('should handle conflict result without updating the database', async () => {
+    it('should update atprotoSyncedAt on conflict to stop retry loop', async () => {
       const staleEvent = createMockStaleEvent();
       tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant1']);
       mockQueryBuilder.getMany.mockResolvedValue([staleEvent]);
@@ -190,8 +190,12 @@ describe('AtprotoSyncScheduler', () => {
       await scheduler.handlePendingSyncRetry();
 
       expect(mockPublisherService.publishEvent).toHaveBeenCalledTimes(1);
-      // Should NOT update the database on conflict
-      expect(mockEventRepository.update).not.toHaveBeenCalled();
+      // On conflict, should update atprotoSyncedAt to stop the retry loop.
+      // The firehose will deliver the PDS version for reconciliation.
+      expect(mockEventRepository.update).toHaveBeenCalledWith(
+        { id: staleEvent.id },
+        { atprotoSyncedAt: expect.any(Date) },
+      );
     });
 
     it('should continue processing other tenants if one tenant fails', async () => {
@@ -227,6 +231,63 @@ describe('AtprotoSyncScheduler', () => {
 
       // publishEvent should have been called for the second tenant's event
       expect(mockPublisherService.publishEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip events with null user and continue processing remaining events', async () => {
+      const orphanEvent = createMockStaleEvent({
+        id: 10,
+        slug: 'orphan-event',
+        user: null as any,
+      });
+      const normalEvent = createMockStaleEvent({
+        id: 11,
+        slug: 'normal-event',
+      });
+
+      tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant1']);
+      mockQueryBuilder.getMany.mockResolvedValue([orphanEvent, normalEvent]);
+
+      mockPublisherService.publishEvent.mockResolvedValue({
+        action: 'updated',
+        atprotoUri:
+          'at://did:plc:abc/community.lexicon.calendar.event/rkey-normal',
+        atprotoRkey: 'rkey-normal',
+        atprotoCid: 'cid-normal',
+      });
+
+      // Spy on logger to verify warning was emitted
+      const loggerWarnSpy = jest.spyOn(
+        scheduler['logger'],
+        'warn',
+      );
+
+      await scheduler.handlePendingSyncRetry();
+
+      // Should warn about the orphan event with tenantId context
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('orphan-event'),
+        expect.objectContaining({ tenantId: 'tenant1' }),
+      );
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('user'),
+        expect.objectContaining({ tenantId: 'tenant1' }),
+      );
+
+      // publishEvent should only be called for the normal event, not the orphan
+      expect(mockPublisherService.publishEvent).toHaveBeenCalledTimes(1);
+      expect(mockPublisherService.publishEvent).toHaveBeenCalledWith(
+        normalEvent,
+        'tenant1',
+      );
+
+      // Only the normal event should be updated in the DB
+      expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
+      expect(mockEventRepository.update).toHaveBeenCalledWith(
+        { id: normalEvent.id },
+        expect.objectContaining({
+          atprotoRkey: 'rkey-normal',
+        }),
+      );
     });
 
     it('should query with correct filters', async () => {

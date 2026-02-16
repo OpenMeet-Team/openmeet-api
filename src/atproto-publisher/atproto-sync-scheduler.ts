@@ -26,6 +26,7 @@ export class AtprotoSyncScheduler {
       } catch (error) {
         this.logger.error(
           `Failed ATProto sync retry for tenant ${tenantId}: ${error.message}`,
+          { tenantId },
         );
       }
     }
@@ -64,6 +65,14 @@ export class AtprotoSyncScheduler {
     );
 
     for (const event of staleEvents) {
+      if (!event.user) {
+        this.logger.warn(
+          `Skipping event ${event.slug} — no user associated (leftJoin returned null)`,
+          { tenantId, slug: event.slug },
+        );
+        continue;
+      }
+
       try {
         const result = await publisherService.publishEvent(
           event,
@@ -84,13 +93,21 @@ export class AtprotoSyncScheduler {
         }
 
         if (result.action === 'conflict') {
+          // Stop retrying — accept that PDS has diverged.
+          // Firehose will deliver the PDS version for reconciliation.
+          await eventRepository.update(
+            { id: event.id },
+            { atprotoSyncedAt: new Date() },
+          );
           this.logger.warn(
-            `Conflict retrying event ${event.slug} — PDS record was modified externally`,
+            `Conflict retrying event ${event.slug} — PDS record was modified externally. Marked as synced to stop retry loop.`,
+            { tenantId, slug: event.slug },
           );
         }
       } catch (error) {
         this.logger.error(
           `Failed to retry-sync event ${event.slug}: ${error.message}`,
+          { tenantId, slug: event.slug },
         );
       }
     }
