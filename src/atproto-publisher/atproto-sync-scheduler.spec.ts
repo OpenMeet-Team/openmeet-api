@@ -72,6 +72,7 @@ describe('AtprotoSyncScheduler', () => {
 
     mockModuleRef = {
       resolve: jest.fn().mockResolvedValue(mockPublisherService),
+      registerRequestByContextId: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({

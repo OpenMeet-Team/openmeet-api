@@ -50,8 +50,14 @@ export class AtprotoSyncScheduler {
       `Found ${staleEvents.length} events pending ATProto sync for tenant ${tenantId}`,
     );
 
-    // Resolve request-scoped AtprotoPublisherService dynamically per invocation
+    // Resolve request-scoped AtprotoPublisherService with a tenant-aware context.
+    // Durable providers (PdsSessionService, AtprotoIdentityService) inject REQUEST
+    // and read request.tenantId — provide a synthetic request for cron context.
     const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
     const publisherService = await this.moduleRef.resolve(
       AtprotoPublisherService,
       contextId,
