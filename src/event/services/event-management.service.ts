@@ -523,9 +523,9 @@ export class EventManagementService {
         );
       }
 
-      if (publishResult.action === 'error' && publishResult.validationError) {
+      if (publishResult.action === 'error') {
         this.logger.warn(
-          `Event ${eventToPublish.slug} saved but AT Protocol publish failed: ${publishResult.validationError}`,
+          `Event ${eventToPublish.slug} saved but AT Protocol publish failed: ${publishResult.error || publishResult.validationError}`,
         );
       }
     }
