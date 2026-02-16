@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ModuleRef } from '@nestjs/core';
 import { AtprotoSyncScheduler } from './atproto-sync-scheduler';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { AtprotoPublisherService } from './atproto-publisher.service';
@@ -36,7 +37,8 @@ function createMockStaleEvent(
 describe('AtprotoSyncScheduler', () => {
   let scheduler: AtprotoSyncScheduler;
   let tenantConnectionService: jest.Mocked<TenantConnectionService>;
-  let atprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
+  let mockPublisherService: { publishEvent: jest.Mock };
+  let mockModuleRef: { resolve: jest.Mock };
   let mockEventRepository: {
     createQueryBuilder: jest.Mock;
     update: jest.Mock;
@@ -64,27 +66,30 @@ describe('AtprotoSyncScheduler', () => {
       }),
     };
 
-    const mockAtprotoPublisherService = {
+    mockPublisherService = {
       publishEvent: jest.fn(),
+    };
+
+    mockModuleRef = {
+      resolve: jest.fn().mockResolvedValue(mockPublisherService),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AtprotoSyncScheduler,
         {
-          provide: TenantConnectionService,
-          useValue: mockTenantConnectionService,
+          provide: ModuleRef,
+          useValue: mockModuleRef,
         },
         {
-          provide: AtprotoPublisherService,
-          useValue: mockAtprotoPublisherService,
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
         },
       ],
     }).compile();
 
     scheduler = module.get<AtprotoSyncScheduler>(AtprotoSyncScheduler);
     tenantConnectionService = module.get(TenantConnectionService);
-    atprotoPublisherService = module.get(AtprotoPublisherService);
   });
 
   describe('handlePendingSyncRetry', () => {
@@ -93,7 +98,7 @@ describe('AtprotoSyncScheduler', () => {
       tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant1']);
       mockQueryBuilder.getMany.mockResolvedValue([staleEvent]);
 
-      atprotoPublisherService.publishEvent.mockResolvedValue({
+      mockPublisherService.publishEvent.mockResolvedValue({
         action: 'updated',
         atprotoUri:
           'at://did:plc:abc/community.lexicon.calendar.event/rkey-new',
@@ -103,8 +108,14 @@ describe('AtprotoSyncScheduler', () => {
 
       await scheduler.handlePendingSyncRetry();
 
+      // Verify ModuleRef.resolve was called to get a fresh publisher instance
+      expect(mockModuleRef.resolve).toHaveBeenCalledWith(
+        AtprotoPublisherService,
+        expect.any(Object),
+      );
+
       // Verify publishEvent was called with the stale event
-      expect(atprotoPublisherService.publishEvent).toHaveBeenCalledWith(
+      expect(mockPublisherService.publishEvent).toHaveBeenCalledWith(
         staleEvent,
         'tenant1',
       );
@@ -130,11 +141,12 @@ describe('AtprotoSyncScheduler', () => {
       mockQueryBuilder.getMany.mockResolvedValue([event1, event2]);
 
       // First event fails, second succeeds
-      atprotoPublisherService.publishEvent
+      mockPublisherService.publishEvent
         .mockRejectedValueOnce(new Error('PDS timeout'))
         .mockResolvedValueOnce({
           action: 'updated',
-          atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/rkey2',
+          atprotoUri:
+            'at://did:plc:abc/community.lexicon.calendar.event/rkey2',
           atprotoRkey: 'rkey2',
           atprotoCid: 'cid2',
         });
@@ -143,7 +155,7 @@ describe('AtprotoSyncScheduler', () => {
       await expect(scheduler.handlePendingSyncRetry()).resolves.not.toThrow();
 
       // Both events should have been attempted
-      expect(atprotoPublisherService.publishEvent).toHaveBeenCalledTimes(2);
+      expect(mockPublisherService.publishEvent).toHaveBeenCalledTimes(2);
 
       // Only the second event should have been updated in the DB
       expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
@@ -161,7 +173,7 @@ describe('AtprotoSyncScheduler', () => {
 
       await scheduler.handlePendingSyncRetry();
 
-      expect(atprotoPublisherService.publishEvent).not.toHaveBeenCalled();
+      expect(mockPublisherService.publishEvent).not.toHaveBeenCalled();
       expect(mockEventRepository.update).not.toHaveBeenCalled();
     });
 
@@ -170,13 +182,13 @@ describe('AtprotoSyncScheduler', () => {
       tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant1']);
       mockQueryBuilder.getMany.mockResolvedValue([staleEvent]);
 
-      atprotoPublisherService.publishEvent.mockResolvedValue({
+      mockPublisherService.publishEvent.mockResolvedValue({
         action: 'conflict',
       });
 
       await scheduler.handlePendingSyncRetry();
 
-      expect(atprotoPublisherService.publishEvent).toHaveBeenCalledTimes(1);
+      expect(mockPublisherService.publishEvent).toHaveBeenCalledTimes(1);
       // Should NOT update the database on conflict
       expect(mockEventRepository.update).not.toHaveBeenCalled();
     });
@@ -201,7 +213,7 @@ describe('AtprotoSyncScheduler', () => {
 
       mockQueryBuilder.getMany.mockResolvedValue([staleEvent]);
 
-      atprotoPublisherService.publishEvent.mockResolvedValue({
+      mockPublisherService.publishEvent.mockResolvedValue({
         action: 'updated',
         atprotoUri:
           'at://did:plc:abc/community.lexicon.calendar.event/rkey-new',
@@ -213,7 +225,7 @@ describe('AtprotoSyncScheduler', () => {
       await expect(scheduler.handlePendingSyncRetry()).resolves.not.toThrow();
 
       // publishEvent should have been called for the second tenant's event
-      expect(atprotoPublisherService.publishEvent).toHaveBeenCalledTimes(1);
+      expect(mockPublisherService.publishEvent).toHaveBeenCalledTimes(1);
     });
 
     it('should query with correct filters', async () => {

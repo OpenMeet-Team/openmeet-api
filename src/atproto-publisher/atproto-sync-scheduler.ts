@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { AtprotoPublisherService } from './atproto-publisher.service';
@@ -9,8 +10,8 @@ export class AtprotoSyncScheduler {
   private readonly logger = new Logger(AtprotoSyncScheduler.name);
 
   constructor(
+    private readonly moduleRef: ModuleRef,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly atprotoPublisherService: AtprotoPublisherService,
   ) {}
 
   @Cron(CronExpression.EVERY_5_MINUTES)
@@ -49,9 +50,16 @@ export class AtprotoSyncScheduler {
       `Found ${staleEvents.length} events pending ATProto sync for tenant ${tenantId}`,
     );
 
+    // Resolve request-scoped AtprotoPublisherService dynamically per invocation
+    const contextId = ContextIdFactory.create();
+    const publisherService = await this.moduleRef.resolve(
+      AtprotoPublisherService,
+      contextId,
+    );
+
     for (const event of staleEvents) {
       try {
-        const result = await this.atprotoPublisherService.publishEvent(
+        const result = await publisherService.publishEvent(
           event,
           tenantId,
         );
