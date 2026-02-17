@@ -70,7 +70,7 @@ async function bootstrap() {
         // Roomy integration
         'https://roomy.chat',
         'https://app.roomy.chat',
-        'http://localhost:5173',
+        /^http:\/\/(localhost|127\.0\.0\.1):\d+$/,
       ],
       credentials: true,
       allowedHeaders: [
