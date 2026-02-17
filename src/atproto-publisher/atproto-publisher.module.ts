@@ -21,8 +21,8 @@ import { TenantModule } from '../tenant/tenant.module';
  *
  * Design Philosophy:
  * - "PDS first, fail fast" - AT Protocol is the source of truth
- * - No buffering or retry logic for individual operations
- * - Periodic scanner picks up events that failed to sync
+ * - Individual operations fail fast (no inline retry or buffering)
+ * - Periodic scanner retries events that failed to sync (AtprotoSyncScheduler)
  * - Service returns results; callers handle database updates
  *
  * Note: This is distinct from the existing Bluesky integration which handles

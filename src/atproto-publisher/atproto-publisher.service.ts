@@ -354,7 +354,7 @@ export class AtprotoPublisherService {
           validationError: error.message,
         };
       }
-      throw error; // Re-throw non-validation errors
+      throw error; // Re-throw non-validation, non-conflict errors
     }
 
     const atprotoUri = `at://${session.did}/${BLUESKY_EVENT_COLLECTION}/${rkey}`;

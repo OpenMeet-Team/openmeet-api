@@ -3,6 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { AtprotoSyncScheduler } from './atproto-sync-scheduler';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { AtprotoPublisherService } from './atproto-publisher.service';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventStatus, EventVisibility } from '../core/constants/constant';
@@ -44,6 +45,7 @@ describe('AtprotoSyncScheduler', () => {
     update: jest.Mock;
   };
   let mockQueryBuilder: Record<string, jest.Mock>;
+  let mockElastiCacheService: { withLock: jest.Mock };
 
   beforeEach(async () => {
     // Set up query builder chain mock
@@ -75,6 +77,11 @@ describe('AtprotoSyncScheduler', () => {
       registerRequestByContextId: jest.fn(),
     };
 
+    // Default: withLock executes the callback (lock acquired)
+    mockElastiCacheService = {
+      withLock: jest.fn().mockImplementation((_key, fn, _ttl) => fn()),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AtprotoSyncScheduler,
@@ -85,6 +92,10 @@ describe('AtprotoSyncScheduler', () => {
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
+        },
+        {
+          provide: ElastiCacheService,
+          useValue: mockElastiCacheService,
         },
       ],
     }).compile();
@@ -312,6 +323,61 @@ describe('AtprotoSyncScheduler', () => {
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
         'event.updatedAt > event.atprotoSyncedAt',
+      );
+    });
+
+    it('should acquire a distributed lock with correct key and TTL', async () => {
+      tenantConnectionService.getAllTenantIds.mockResolvedValue([]);
+
+      await scheduler.handlePendingSyncRetry();
+
+      expect(mockElastiCacheService.withLock).toHaveBeenCalledWith(
+        'atproto-sync-scheduler:pending-retry',
+        expect.any(Function),
+        4 * 60 * 1000, // 4 minute TTL
+      );
+    });
+
+    it('should not perform sync work when lock is not acquired', async () => {
+      // withLock returns null when lock is not acquired
+      mockElastiCacheService.withLock.mockResolvedValue(null);
+
+      tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant1']);
+      mockQueryBuilder.getMany.mockResolvedValue([createMockStaleEvent()]);
+
+      await scheduler.handlePendingSyncRetry();
+
+      // Lock was attempted
+      expect(mockElastiCacheService.withLock).toHaveBeenCalledTimes(1);
+
+      // But no sync work should have been performed
+      expect(tenantConnectionService.getAllTenantIds).not.toHaveBeenCalled();
+      expect(mockPublisherService.publishEvent).not.toHaveBeenCalled();
+    });
+
+    it('should run sync logic inside the lock callback when lock is acquired', async () => {
+      const staleEvent = createMockStaleEvent();
+      tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant1']);
+      mockQueryBuilder.getMany.mockResolvedValue([staleEvent]);
+
+      mockPublisherService.publishEvent.mockResolvedValue({
+        action: 'updated',
+        atprotoUri:
+          'at://did:plc:abc/community.lexicon.calendar.event/rkey-new',
+        atprotoRkey: 'rkey-new',
+        atprotoCid: 'cid-new',
+      });
+
+      await scheduler.handlePendingSyncRetry();
+
+      // withLock should have been called and its callback executed
+      expect(mockElastiCacheService.withLock).toHaveBeenCalledTimes(1);
+
+      // The sync work should have been performed inside the lock
+      expect(tenantConnectionService.getAllTenantIds).toHaveBeenCalled();
+      expect(mockPublisherService.publishEvent).toHaveBeenCalledWith(
+        staleEvent,
+        'tenant1',
       );
     });
   });

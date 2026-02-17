@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { AtprotoPublisherService } from './atproto-publisher.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 
@@ -12,23 +13,37 @@ export class AtprotoSyncScheduler {
   constructor(
     private readonly moduleRef: ModuleRef,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly elasticacheService: ElastiCacheService,
   ) {}
 
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handlePendingSyncRetry(): Promise<void> {
-    this.logger.debug('Starting ATProto pending sync retry');
+    const result = await this.elasticacheService.withLock(
+      'atproto-sync-scheduler:pending-retry',
+      async () => {
+        this.logger.debug('Starting ATProto pending sync retry');
 
-    const tenantIds = await this.tenantConnectionService.getAllTenantIds();
+        const tenantIds =
+          await this.tenantConnectionService.getAllTenantIds();
 
-    for (const tenantId of tenantIds) {
-      try {
-        await this.syncTenant(tenantId);
-      } catch (error) {
-        this.logger.error(
-          `Failed ATProto sync retry for tenant ${tenantId}: ${error.message}`,
-          { tenantId },
-        );
-      }
+        for (const tenantId of tenantIds) {
+          try {
+            await this.syncTenant(tenantId);
+          } catch (error) {
+            this.logger.error(
+              `Failed ATProto sync retry for tenant ${tenantId}: ${error.message}`,
+              { tenantId },
+            );
+          }
+        }
+      },
+      4 * 60 * 1000, // 4 minute TTL (less than 5-min cron interval)
+    );
+
+    if (result === null) {
+      this.logger.debug(
+        'ATProto pending sync retry already running on another instance',
+      );
     }
   }
 
