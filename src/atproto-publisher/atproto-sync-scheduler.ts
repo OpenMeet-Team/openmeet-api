@@ -37,7 +37,7 @@ export class AtprotoSyncScheduler {
           }
         }
       },
-      4 * 60 * 1000, // 4 minute TTL (less than 5-min cron interval)
+      10 * 60 * 1000, // 10 minute TTL — safety net for crashes; withLock releases on completion
     );
 
     if (result === null) {

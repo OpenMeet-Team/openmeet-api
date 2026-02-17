@@ -334,7 +334,7 @@ describe('AtprotoSyncScheduler', () => {
       expect(mockElastiCacheService.withLock).toHaveBeenCalledWith(
         'atproto-sync-scheduler:pending-retry',
         expect.any(Function),
-        4 * 60 * 1000, // 4 minute TTL
+        10 * 60 * 1000, // 10 minute TTL
       );
     });
 
