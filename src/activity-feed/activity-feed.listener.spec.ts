@@ -9,6 +9,7 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { EVENT_LISTENER_METADATA } from '@nestjs/event-emitter/dist/constants';
 
 describe('ActivityFeedListener', () => {
   let listener: ActivityFeedListener;
@@ -812,6 +813,34 @@ describe('ActivityFeedListener', () => {
         listener.handleEventRsvpAdded(params),
       ).resolves.not.toThrow();
       expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Firehose ingested event subscriptions', () => {
+    function getEventNames(methodName: string): string[] {
+      const metadata: Array<{ event: string }> = Reflect.getMetadata(
+        EVENT_LISTENER_METADATA,
+        ActivityFeedListener.prototype[methodName],
+      );
+      return metadata ? metadata.map((m) => m.event) : [];
+    }
+
+    it('should handle event.ingested events for activity feed', () => {
+      const eventNames = getEventNames('handleEventCreated');
+      expect(eventNames).toContain('event.created');
+      expect(eventNames).toContain('event.ingested');
+    });
+
+    it('should handle event.rsvp.ingested events for activity feed', () => {
+      const eventNames = getEventNames('handleEventRsvpAdded');
+      expect(eventNames).toContain('event.rsvp.added');
+      expect(eventNames).toContain('event.rsvp.ingested');
+    });
+
+    it('should handle event.ingested.updated events for activity feed', () => {
+      const eventNames = getEventNames('handleEventUpdated');
+      expect(eventNames).toContain('event.updated');
+      expect(eventNames).toContain('event.ingested.updated');
     });
   });
 });

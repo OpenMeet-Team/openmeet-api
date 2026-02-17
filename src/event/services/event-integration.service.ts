@@ -616,8 +616,10 @@ export class EventIntegrationService {
       `Created new event with ID ${savedEvent.id} for tenant ${tenantId}, image: ${savedEvent.image ? savedEvent.image.id : 'none'}`,
     );
 
-    // Emit event.created for activity feed and other listeners
-    this.eventEmitter.emit('event.created', {
+    // Emit event.ingested for activity feed and other listeners
+    // Note: we use 'event.ingested' instead of 'event.created' to distinguish
+    // firehose-ingested events from user-created events (avoids unwanted notifications)
+    this.eventEmitter.emit('event.ingested', {
       eventId: savedEvent.id,
       slug: savedEvent.slug,
       userId: user.id,
@@ -625,7 +627,7 @@ export class EventIntegrationService {
     });
 
     this.logger.debug(
-      `Emitted event.created for ingested event ${savedEvent.slug}`,
+      `Emitted event.ingested for ingested event ${savedEvent.slug}`,
     );
 
     // Add the event creator as a host attendee
@@ -634,12 +636,11 @@ export class EventIntegrationService {
         EventAttendeeRole.Host,
       );
 
-      await this.eventAttendeeService.create({
+      await this.eventAttendeeService.createFromIngestion({
         role: hostRole,
         status: EventAttendeeStatus.Confirmed,
         user,
         event: savedEvent,
-        skipBlueskySync: true, // Skip RSVP sync for shadow accounts
       });
 
       this.logger.debug(
@@ -772,8 +773,10 @@ export class EventIntegrationService {
       `Updated event with ID ${updatedEvent.id} for tenant ${tenantId}, image: ${updatedEvent.image ? updatedEvent.image.id : 'none'}`,
     );
 
-    // Emit event.updated for activity feed and other listeners
-    this.eventEmitter.emit('event.updated', {
+    // Emit event.ingested.updated for activity feed and other listeners
+    // Note: we use 'event.ingested.updated' instead of 'event.updated' to distinguish
+    // firehose-ingested events from user-updated events (avoids unwanted notifications)
+    this.eventEmitter.emit('event.ingested.updated', {
       eventId: updatedEvent.id,
       slug: updatedEvent.slug,
       userId: updatedEvent.user?.id,
@@ -781,7 +784,7 @@ export class EventIntegrationService {
     });
 
     this.logger.debug(
-      `Emitted event.updated for ingested event ${updatedEvent.slug}`,
+      `Emitted event.ingested.updated for ingested event ${updatedEvent.slug}`,
     );
 
     return updatedEvent;

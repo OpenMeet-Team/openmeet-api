@@ -300,6 +300,70 @@ export class EventAttendeeService {
     }
   }
 
+  /**
+   * Create an attendee record from firehose ingestion.
+   * Unlike create(), this method:
+   * - Emits 'event.rsvp.ingested' instead of 'event.rsvp.added' (so email listeners ignore it)
+   * - Skips all sync (no syncRsvpToBluesky, no syncRsvpToAtproto)
+   */
+  @Trace('event-attendee.createFromIngestion')
+  async createFromIngestion(
+    createEventAttendeeDto: CreateEventAttendeeDto,
+  ): Promise<EventAttendeesEntity> {
+    await this.getTenantSpecificEventRepository();
+
+    this.logger.debug(
+      `[createFromIngestion] Creating attendee from firehose for event ${createEventAttendeeDto.event.slug || createEventAttendeeDto.event.id}, user ${createEventAttendeeDto.user.slug || createEventAttendeeDto.user.id}`,
+    );
+
+    try {
+      const attendee = this.eventAttendeesRepository.create(
+        createEventAttendeeDto,
+      );
+
+      const saved = await this.eventAttendeesRepository.save(attendee);
+
+      this.logger.debug(
+        `[createFromIngestion] Successfully created attendee record ID=${saved.id}`,
+      );
+
+      this.auditLogger.log('event attendee created (ingestion)', {
+        saved,
+      });
+
+      // Emit event.rsvp.ingested (NOT event.rsvp.added)
+      // This ensures email listeners (CalendarInviteListener) are not triggered
+      // while activity feed listeners still pick it up
+      const eventPayload = {
+        eventId: saved.event.id,
+        eventSlug: createEventAttendeeDto.event.slug,
+        userId: saved.user.id,
+        userSlug: createEventAttendeeDto.user.slug,
+        status: saved.status,
+        tenantId: this.request.tenantId,
+      };
+      this.logger.log(
+        `📣 Emitting event.rsvp.ingested: ${JSON.stringify(eventPayload)}`,
+      );
+      this.eventEmitter.emit('event.rsvp.ingested', eventPayload);
+
+      return saved;
+    } catch (error) {
+      if (
+        error.message.includes('duplicate key') ||
+        error.message.includes('unique constraint')
+      ) {
+        this.logger.warn(
+          `[createFromIngestion] Duplicate key error for event ${createEventAttendeeDto.event.slug || createEventAttendeeDto.event.id}, user ${createEventAttendeeDto.user.slug || createEventAttendeeDto.user.id}: ${error.message}`,
+        );
+      }
+
+      throw new Error(
+        'EventAttendeeService: Failed to save attendee: ' + error.message,
+      );
+    }
+  }
+
   @Trace('event-attendee.findAll')
   async findAll(
     pagination: PaginationDto,

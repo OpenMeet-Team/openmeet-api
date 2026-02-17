@@ -10,6 +10,7 @@ import {
   EventType,
   EventStatus,
   EventVisibility,
+  EventAttendeeStatus,
 } from '../../core/constants/constant';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -34,6 +35,7 @@ const PROM_METRIC_EVENT_INTEGRATION_PROCESSING_DURATION_SECONDS =
 
 describe('EventIntegrationService', () => {
   let service: EventIntegrationService;
+  let module: TestingModule;
   let eventQueryService: jest.Mocked<EventQueryService>;
   let tenantService: jest.Mocked<TenantConnectionService>;
   let shadowAccountService: jest.Mocked<ShadowAccountService>;
@@ -203,7 +205,7 @@ describe('EventIntegrationService', () => {
       .spyOn(EventEntity.prototype, 'generateSlug')
       .mockImplementation(() => {});
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         EventIntegrationService,
         {
@@ -226,6 +228,7 @@ describe('EventIntegrationService', () => {
           provide: EventAttendeeService,
           useValue: {
             create: jest.fn(),
+            createFromIngestion: jest.fn(),
           },
         },
         {
@@ -980,6 +983,105 @@ describe('EventIntegrationService', () => {
             atprotoRkey: 'native123rkey',
           }),
         }),
+      );
+    });
+  });
+
+  describe('Firehose event naming', () => {
+    it('should emit event.ingested (not event.created) when creating from firehose', async () => {
+      // Arrange - no existing event
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      const entity = new EventEntity();
+      eventRepository.create.mockReturnValue(entity);
+
+      // Get the event emitter mock
+      const eventEmitter = module.get(EventEmitter2);
+
+      // Act
+      await service.processExternalEvent(mockEventDto, 'tenant1');
+
+      // Assert - should emit event.ingested, NOT event.created
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'event.ingested',
+        expect.objectContaining({
+          tenantId: 'tenant1',
+        }),
+      );
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'event.created',
+        expect.anything(),
+      );
+    });
+
+    it('should call createFromIngestion() for host attendee creation', async () => {
+      // Arrange - no existing event, so createNewEvent path is taken
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      const entity = new EventEntity();
+      eventRepository.create.mockReturnValue(entity);
+
+      const eventAttendeeService = module.get(EventAttendeeService);
+
+      // Mock the role lookup
+      const eventRoleService = module.get(EventRoleService);
+      const mockHostRole = { id: 1, name: 'Host' };
+      (eventRoleService.getRoleByName as jest.Mock).mockResolvedValue(
+        mockHostRole,
+      );
+
+      // Act
+      await service.processExternalEvent(mockEventDto, 'tenant1');
+
+      // Assert - should use createFromIngestion, NOT create
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: mockHostRole,
+          status: EventAttendeeStatus.Confirmed,
+          user: mockUser,
+        }),
+      );
+      expect(eventAttendeeService.create).not.toHaveBeenCalled();
+    });
+
+    it('should emit event.ingested.updated (not event.updated) when updating from firehose', async () => {
+      // Arrange - existing event found
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        mockExistingEvent as unknown as EventEntity,
+      ]);
+
+      const updatedEvent = {
+        ...mockExistingEvent,
+        name: mockEventDto.name,
+        generateUlid: jest.fn(),
+        generateSlug: jest.fn(),
+        setEntityName: jest.fn(),
+        toJSON: jest.fn(),
+        reload: jest.fn(),
+        hasId: jest.fn(),
+        remove: jest.fn(),
+        softRemove: jest.fn(),
+        recover: jest.fn(),
+      } as unknown as EventEntity;
+
+      eventRepository.save.mockResolvedValue(updatedEvent);
+      eventRepository.merge.mockImplementation(() => updatedEvent);
+
+      const eventEmitter = module.get(EventEmitter2);
+
+      // Act
+      await service.processExternalEvent(mockEventDto, 'tenant1');
+
+      // Assert - should emit event.ingested.updated, NOT event.updated
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'event.ingested.updated',
+        expect.objectContaining({
+          tenantId: 'tenant1',
+        }),
+      );
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'event.updated',
+        expect.anything(),
       );
     });
   });

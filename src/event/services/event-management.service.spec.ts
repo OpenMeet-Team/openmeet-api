@@ -2403,13 +2403,17 @@ describe('EventManagementService', () => {
       mockRepository.findOne.mockResolvedValue(blueskyEvent);
 
       // Mock UserService.findByIdWithPreferences to return user without connected flag
-      const mockUserServiceRef = service['userService'] as jest.Mocked<UserService>;
+      const mockUserServiceRef = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
       mockUserServiceRef.findByIdWithPreferences = jest
         .fn()
         .mockResolvedValue(userWithoutConnected);
 
       // Mock BlueskyService.deleteEventRecord to succeed
-      const mockBlueskyServiceRef = service['blueskyService'] as jest.Mocked<BlueskyService>;
+      const mockBlueskyServiceRef = service[
+        'blueskyService'
+      ] as jest.Mocked<BlueskyService>;
       mockBlueskyServiceRef.deleteEventRecord = jest.fn().mockResolvedValue({});
 
       // Mock the transaction

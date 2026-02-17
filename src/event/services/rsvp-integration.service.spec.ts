@@ -82,6 +82,7 @@ describe('RsvpIntegrationService', () => {
             updateEventAttendee: jest.fn(),
             findOne: jest.fn(),
             create: jest.fn(),
+            createFromIngestion: jest.fn(),
             save: jest.fn(),
           },
         },
@@ -160,7 +161,7 @@ describe('RsvpIntegrationService', () => {
 
     it('should map "going" status to Confirmed', async () => {
       const mockAttendee = { id: 1, status: EventAttendeeStatus.Confirmed };
-      eventAttendeeService.create.mockResolvedValue(
+      eventAttendeeService.createFromIngestion.mockResolvedValue(
         mockAttendee as unknown as EventAttendeesEntity,
       );
 
@@ -169,7 +170,7 @@ describe('RsvpIntegrationService', () => {
         'test-tenant',
       );
 
-      expect(eventAttendeeService.create).toHaveBeenCalledWith(
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
         expect.objectContaining({
           status: EventAttendeeStatus.Confirmed,
         }),
@@ -178,7 +179,7 @@ describe('RsvpIntegrationService', () => {
 
     it('should map "interested" status to Maybe', async () => {
       const mockAttendee = { id: 1, status: EventAttendeeStatus.Maybe };
-      eventAttendeeService.create.mockResolvedValue(
+      eventAttendeeService.createFromIngestion.mockResolvedValue(
         mockAttendee as unknown as EventAttendeesEntity,
       );
 
@@ -187,7 +188,7 @@ describe('RsvpIntegrationService', () => {
         'test-tenant',
       );
 
-      expect(eventAttendeeService.create).toHaveBeenCalledWith(
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
         expect.objectContaining({
           status: EventAttendeeStatus.Maybe,
         }),
@@ -196,7 +197,7 @@ describe('RsvpIntegrationService', () => {
 
     it('should map "notgoing" status to Cancelled', async () => {
       const mockAttendee = { id: 1, status: EventAttendeeStatus.Cancelled };
-      eventAttendeeService.create.mockResolvedValue(
+      eventAttendeeService.createFromIngestion.mockResolvedValue(
         mockAttendee as unknown as EventAttendeesEntity,
       );
 
@@ -205,7 +206,7 @@ describe('RsvpIntegrationService', () => {
         'test-tenant',
       );
 
-      expect(eventAttendeeService.create).toHaveBeenCalledWith(
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
         expect.objectContaining({
           status: EventAttendeeStatus.Cancelled,
         }),
@@ -214,7 +215,7 @@ describe('RsvpIntegrationService', () => {
 
     it('should default unknown status to Pending', async () => {
       const mockAttendee = { id: 1, status: EventAttendeeStatus.Pending };
-      eventAttendeeService.create.mockResolvedValue(
+      eventAttendeeService.createFromIngestion.mockResolvedValue(
         mockAttendee as unknown as EventAttendeesEntity,
       );
 
@@ -223,11 +224,55 @@ describe('RsvpIntegrationService', () => {
         'test-tenant',
       );
 
-      expect(eventAttendeeService.create).toHaveBeenCalledWith(
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
         expect.objectContaining({
           status: EventAttendeeStatus.Pending,
         }),
       );
+    });
+  });
+
+  describe('processExternalRsvp - uses createFromIngestion for firehose RSVPs', () => {
+    beforeEach(() => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([mockEvent]);
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue(null);
+    });
+
+    it('should call createFromIngestion() (not create()) for firehose RSVPs', async () => {
+      const mockAttendee = { id: 1, status: EventAttendeeStatus.Confirmed };
+      eventAttendeeService.createFromIngestion.mockResolvedValue(
+        mockAttendee as unknown as EventAttendeesEntity,
+      );
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: mockEvent,
+          user: mockUser,
+          status: EventAttendeeStatus.Confirmed,
+        }),
+      );
+      expect(eventAttendeeService.create).not.toHaveBeenCalled();
+    });
+
+    it('should not pass skipBlueskySync in attendeeData (createFromIngestion handles it internally)', async () => {
+      const mockAttendee = { id: 1, status: EventAttendeeStatus.Confirmed };
+      eventAttendeeService.createFromIngestion.mockResolvedValue(
+        mockAttendee as unknown as EventAttendeesEntity,
+      );
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      const callArgs =
+        eventAttendeeService.createFromIngestion.mock.calls[0][0];
+      expect(callArgs).not.toHaveProperty('skipBlueskySync');
     });
   });
 
@@ -269,7 +314,7 @@ describe('RsvpIntegrationService', () => {
       };
 
       const mockAttendee = { id: 1, status: EventAttendeeStatus.Confirmed };
-      eventAttendeeService.create.mockResolvedValue(
+      eventAttendeeService.createFromIngestion.mockResolvedValue(
         mockAttendee as unknown as EventAttendeesEntity,
       );
 
@@ -282,7 +327,7 @@ describe('RsvpIntegrationService', () => {
         'at://did:plc:openmeet/community.lexicon.calendar.event/native123',
         'test-tenant',
       );
-      expect(eventAttendeeService.create).toHaveBeenCalled();
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalled();
     });
   });
 });

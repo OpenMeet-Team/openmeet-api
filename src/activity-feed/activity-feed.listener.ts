@@ -172,6 +172,7 @@ export class ActivityFeedListener {
     }
   }
 
+  @OnEvent('event.ingested')
   @OnEvent('event.created')
   async handleEventCreated(params: {
     eventId: number;
@@ -302,6 +303,7 @@ export class ActivityFeedListener {
     }
   }
 
+  @OnEvent('event.rsvp.ingested')
   @OnEvent('event.rsvp.added')
   async handleEventRsvpAdded(params: {
     eventId: number;
@@ -400,6 +402,7 @@ export class ActivityFeedListener {
     }
   }
 
+  @OnEvent('event.ingested.updated')
   @OnEvent('event.updated')
   async handleEventUpdated(params: {
     eventId: number;
