@@ -674,6 +674,34 @@ export class EventIntegrationService {
       `Updating event ${existingEvent.id} for tenant ${tenantId}`,
     );
 
+    // CID match guard: skip if this is our own echo from the firehose
+    // (incoming CID matches what we last published)
+    const incomingCid = eventData.source?.metadata?.cid as string | undefined;
+    if (
+      incomingCid &&
+      existingEvent.atprotoCid &&
+      incomingCid === existingEvent.atprotoCid
+    ) {
+      this.logger.debug(
+        `Skipping echo for event ${existingEvent.slug}: incoming CID ${incomingCid} matches stored atprotoCid`,
+      );
+      return existingEvent;
+    }
+
+    // If CID differs and event was published by us, PDS is truth — accept remote version
+    if (
+      incomingCid &&
+      existingEvent.atprotoCid &&
+      incomingCid !== existingEvent.atprotoCid
+    ) {
+      this.logger.log(
+        `Accepting remote edit for event ${existingEvent.slug}: CID changed from ${existingEvent.atprotoCid} to ${incomingCid}`,
+      );
+      // Update stored CID to track this version
+      existingEvent.atprotoCid = incomingCid;
+      existingEvent.atprotoSyncedAt = new Date();
+    }
+
     // Update basic fields
     existingEvent.name = eventData.name;
     existingEvent.description = eventData.description || '';

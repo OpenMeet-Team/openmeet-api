@@ -1608,6 +1608,65 @@ describe('BlueskyService', () => {
       ).not.toHaveBeenCalled();
     });
 
+    it('should include swapRecord CID when updating an existing event', async () => {
+      // Arrange - event with existing atprotoCid (has been published before)
+      const event = {
+        name: 'Test Event Update with CID',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-swap',
+        atprotoRkey: '3ktest1234abc',
+        atprotoCid: 'bafyreiexisting',
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - putRecord should be called with swapRecord matching the existing CID
+      expect(
+        mockAgentImplementation.com.atproto.repo.putRecord,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          swapRecord: 'bafyreiexisting',
+        }),
+      );
+    });
+
+    it('should NOT include swapRecord for new events without existing CID', async () => {
+      // Arrange - new event with no atprotoCid
+      const event = {
+        name: 'Test New Event No CID',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-no-swap',
+        atprotoCid: null,
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - putRecord should NOT have swapRecord in the call args
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      expect(putRecordCall).not.toHaveProperty('swapRecord');
+    });
+
     // Bug 2+4 combined: uris array items should all have $type
     it('should include $type on all uri entries in the uris array', async () => {
       // Arrange

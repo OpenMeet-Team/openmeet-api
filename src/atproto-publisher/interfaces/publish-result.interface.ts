@@ -8,10 +8,18 @@
  * - 'skipped': Record not eligible for publishing (not an error)
  * - 'pending': Reserved for future background processing
  * - 'error': Publishing failed with an actionable error message
+ * - 'conflict': PDS record was modified externally (optimistic concurrency conflict)
  */
 export interface PublishResult {
   /** What action was taken - primary indicator of result */
-  action: 'published' | 'updated' | 'deleted' | 'skipped' | 'pending' | 'error';
+  action:
+    | 'published'
+    | 'updated'
+    | 'deleted'
+    | 'skipped'
+    | 'pending'
+    | 'error'
+    | 'conflict';
 
   /** The AT Protocol URI of the published record (e.g., at://did:plc:xxx/community.lexicon.calendar.event/rkey) */
   atprotoUri?: string;

@@ -456,6 +456,169 @@ describe('AT Protocol Publishing (e2e)', () => {
       console.log(`Rkey preserved after update: ${originalRkey}`);
     });
 
+    it('should update the PDS record content when event is updated via PATCH', async () => {
+      // This test verifies the full round-trip: API update → PDS record update
+      // It queries the PDS directly to confirm the record content changed
+      const identityResponse = await serverApp
+        .get('/api/atproto/identity')
+        .set('Authorization', `Bearer ${userToken}`);
+
+      if (!identityResponse.body?.did) {
+        console.warn(
+          'Skipping PDS content update test - no AT Protocol identity',
+        );
+        return;
+      }
+
+      const userDid = identityResponse.body.did;
+      const originalName = `PDS Content Update Test ${testRunId}`;
+      const originalDescription = 'Original description for PDS verification';
+
+      // 1. Create a public event
+      const eventData = {
+        name: originalName,
+        description: originalDescription,
+        type: EventType.InPerson,
+        location: 'PDS Test Location',
+        maxAttendees: 50,
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+        startDate: new Date(
+          Date.now() + 11 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        endDate: new Date(
+          Date.now() + 11 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
+        ).toISOString(),
+        categories: [],
+        timeZone: 'America/New_York',
+      };
+
+      const createResponse = await serverApp
+        .post('/api/events')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send(eventData);
+
+      expect(createResponse.status).toBe(201);
+      const createdEvent = createResponse.body;
+      console.log(`Created event for PDS content test: ${createdEvent.slug}`);
+
+      // 2. Wait for async publishing to PDS
+      await waitForBackend(5000);
+
+      // Fetch the event to get AT Protocol fields
+      const getOriginalResponse = await serverApp
+        .get(`/api/events/${createdEvent.slug}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(getOriginalResponse.status).toBe(200);
+      const originalEvent = getOriginalResponse.body;
+
+      if (!originalEvent.atprotoRkey || !originalEvent.atprotoUri) {
+        console.warn(
+          'Event was not published to PDS - skipping PDS content update test',
+        );
+        return;
+      }
+
+      const rkey = originalEvent.atprotoRkey;
+      const originalCid = originalEvent.atprotoCid;
+      console.log(
+        `Event published: rkey=${rkey}, CID=${originalCid}, URI=${originalEvent.atprotoUri}`,
+      );
+
+      // 3. Query PDS directly to verify original record content
+      const pdsUrl = process.env.PDS_URL || 'http://localhost:3101';
+      const collection = 'community.lexicon.calendar.event';
+
+      // Helper to query PDS - returns null if PDS is not accessible
+      const getPdsRecord = async () => {
+        try {
+          const resp = await request(pdsUrl)
+            .get(
+              `/xrpc/com.atproto.repo.getRecord?repo=${userDid}&collection=${collection}&rkey=${rkey}`,
+            )
+            .set('Accept', 'application/json');
+          return resp.status === 200 ? resp.body : null;
+        } catch {
+          return null;
+        }
+      };
+
+      const originalPdsRecord = await getPdsRecord();
+      if (!originalPdsRecord) {
+        console.warn(
+          `PDS not accessible at ${pdsUrl} - skipping PDS content verification`,
+        );
+        return;
+      }
+
+      expect(originalPdsRecord.value.name).toBe(originalName);
+      expect(originalPdsRecord.value.description).toBe(originalDescription);
+      console.log(
+        `PDS record verified - original name: "${originalPdsRecord.value.name}"`,
+      );
+
+      // 4. Update the event via PATCH
+      const updatedName = `UPDATED PDS Content Test ${testRunId}`;
+      const updatedDescription = 'Updated description for PDS verification';
+
+      const updateResponse = await serverApp
+        .patch(`/api/events/${createdEvent.slug}`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          name: updatedName,
+          description: updatedDescription,
+        });
+
+      expect(updateResponse.status).toBe(200);
+      console.log('Event updated via PATCH');
+
+      // 5. Wait for async ATProto sync
+      await waitForBackend(5000);
+
+      // 6. Verify DB fields updated
+      const getUpdatedResponse = await serverApp
+        .get(`/api/events/${createdEvent.slug}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(getUpdatedResponse.status).toBe(200);
+      const updatedEvent = getUpdatedResponse.body;
+
+      // Rkey should be preserved
+      expect(updatedEvent.atprotoRkey).toBe(rkey);
+      console.log(`Rkey preserved after update: ${rkey}`);
+
+      // Log CID comparison
+      console.log(
+        `CID before: ${originalCid}, CID after: ${updatedEvent.atprotoCid}`,
+      );
+
+      // atprotoSyncedAt should be updated
+      expect(updatedEvent.atprotoSyncedAt).toBeDefined();
+      console.log(`atprotoSyncedAt: ${updatedEvent.atprotoSyncedAt}`);
+
+      // 7. Query PDS directly to verify record content was updated
+      const updatedPdsRecord = await getPdsRecord();
+      expect(updatedPdsRecord).not.toBeNull();
+      expect(updatedPdsRecord.value.name).toBe(updatedName);
+      expect(updatedPdsRecord.value.description).toBe(updatedDescription);
+      console.log(
+        `PDS record verified - updated name: "${updatedPdsRecord.value.name}"`,
+      );
+
+      // CID should change (new content = new hash)
+      if (originalCid && updatedEvent.atprotoCid) {
+        expect(updatedEvent.atprotoCid).not.toBe(originalCid);
+        console.log(
+          `CID changed: ${originalCid} → ${updatedEvent.atprotoCid}`,
+        );
+      }
+
+      console.log(
+        'SUCCESS: Event update synced to PDS with correct content',
+      );
+    });
+
     it('should use existing atprotoRkey when manually syncing', async () => {
       // Skip if no AT Protocol identity
       const identityResponse = await serverApp

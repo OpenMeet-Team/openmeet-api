@@ -523,9 +523,17 @@ export class EventManagementService {
         );
       }
 
-      if (publishResult.action === 'error' && publishResult.validationError) {
+      if (publishResult.action === 'error') {
         this.logger.warn(
-          `Event ${eventToPublish.slug} saved but AT Protocol publish failed: ${publishResult.validationError}`,
+          `Event ${eventToPublish.slug} saved but AT Protocol publish failed: ${publishResult.error || publishResult.validationError}`,
+          { tenantId: this.request.tenantId, eventId: eventToPublish.id, slug: eventToPublish.slug },
+        );
+      }
+
+      if (publishResult.action === 'conflict') {
+        this.logger.warn(
+          `ATProto conflict for event ${eventToPublish.slug}: PDS record was modified externally`,
+          { tenantId: this.request.tenantId, eventId: eventToPublish.id, slug: eventToPublish.slug },
         );
       }
     }
@@ -690,7 +698,9 @@ export class EventManagementService {
     }
 
     // Update basic event information
-    const updatedEventData: Partial<EventEntity> = {
+    // Only include fields that were explicitly provided in the DTO to avoid
+    // overwriting existing values with undefined (which TypeORM saves as null)
+    const rawEventData: Record<string, unknown> = {
       name: updateEventDto.name,
       description: updateEventDto.description,
       type: updateEventDto.type as EventType,
@@ -714,8 +724,17 @@ export class EventManagementService {
       resources: updateEventDto.resources,
       blocksTime: updateEventDto.blocksTime,
       isAllDay: updateEventDto.isAllDay,
-      timeZone: updateEventDto.timeZone || 'UTC',
     };
+
+    // Only set timeZone if explicitly provided
+    if (updateEventDto.timeZone !== undefined) {
+      rawEventData.timeZone = updateEventDto.timeZone;
+    }
+
+    // Strip undefined values so Object.assign won't overwrite existing entity fields
+    const updatedEventData: Partial<EventEntity> = Object.fromEntries(
+      Object.entries(rawEventData).filter(([, v]) => v !== undefined),
+    ) as Partial<EventEntity>;
 
     // Handle sourceType and sourceId
     if (updateEventDto.sourceType) {
@@ -969,49 +988,70 @@ export class EventManagementService {
     // Publish to AT Protocol (user's PDS) if eligible
     // This is for user-created events (not Bluesky-sourced events which are handled above)
     if (!event.sourceType) {
-      // Pre-generate TID only for events eligible for AT Protocol publishing
-      const isEligibleForAtproto =
-        updatedEvent.visibility === EventVisibility.Public &&
-        (updatedEvent.status === EventStatus.Published ||
-          updatedEvent.status === EventStatus.Cancelled);
+      try {
+        // Pre-generate TID only for events eligible for AT Protocol publishing
+        const isEligibleForAtproto =
+          updatedEvent.visibility === EventVisibility.Public &&
+          (updatedEvent.status === EventStatus.Published ||
+            updatedEvent.status === EventStatus.Cancelled);
 
-      if (isEligibleForAtproto && !updatedEvent.atprotoRkey) {
-        updatedEvent.atprotoRkey = TID.nextStr();
-        await this.eventRepository.save(updatedEvent);
-        this.logger.debug(
-          `Pre-generated atprotoRkey: ${updatedEvent.atprotoRkey}`,
+        if (isEligibleForAtproto && !updatedEvent.atprotoRkey) {
+          updatedEvent.atprotoRkey = TID.nextStr();
+          await this.eventRepository.save(updatedEvent);
+          this.logger.debug(
+            `Pre-generated atprotoRkey: ${updatedEvent.atprotoRkey}`,
+          );
+        }
+
+        const publishResult = await this.atprotoPublisherService.publishEvent(
+          updatedEvent,
+          this.request.tenantId,
         );
-      }
 
-      const publishResult = await this.atprotoPublisherService.publishEvent(
-        updatedEvent,
-        this.request.tenantId,
-      );
+        if (
+          publishResult.action === 'published' ||
+          publishResult.action === 'updated'
+        ) {
+          // Save AT Protocol metadata to database
+          await this.eventRepository.update(
+            { id: updatedEvent.id },
+            {
+              atprotoUri: publishResult.atprotoUri,
+              atprotoRkey: publishResult.atprotoRkey,
+              atprotoCid: publishResult.atprotoCid,
+              atprotoSyncedAt: new Date(),
+            },
+          );
 
-      if (
-        publishResult.action === 'published' ||
-        publishResult.action === 'updated'
-      ) {
-        // Save AT Protocol metadata to database
-        await this.eventRepository.update(
-          { id: updatedEvent.id },
+          this.logger.debug(
+            `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
+          );
+        }
+
+        if (publishResult.action === 'error') {
+          this.logger.warn(
+            `Event ${updatedEvent.slug} saved but AT Protocol publish failed: ${publishResult.error || publishResult.validationError}`,
+            { tenantId: this.request.tenantId, eventId: updatedEvent.id, slug: updatedEvent.slug },
+          );
+        }
+
+        if (publishResult.action === 'conflict') {
+          this.logger.warn(
+            `ATProto conflict for event ${updatedEvent.slug}: PDS record was modified externally`,
+            { tenantId: this.request.tenantId, eventId: updatedEvent.id, slug: updatedEvent.slug },
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `ATProto publish failed for event ${updatedEvent.slug}, will retry on next sync`,
           {
-            atprotoUri: publishResult.atprotoUri,
-            atprotoRkey: publishResult.atprotoRkey,
-            atprotoCid: publishResult.atprotoCid,
-            atprotoSyncedAt: new Date(),
+            tenantId: this.request.tenantId,
+            error: error.message,
+            eventId: updatedEvent.id,
+            slug: updatedEvent.slug,
           },
         );
-
-        this.logger.debug(
-          `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
-        );
-      }
-
-      if (publishResult.action === 'error' && publishResult.validationError) {
-        this.logger.warn(
-          `Event ${updatedEvent.slug} saved but AT Protocol publish failed: ${publishResult.validationError}`,
-        );
+        // Event stays marked as pending sync (updatedAt > atprotoSyncedAt)
       }
     }
 
