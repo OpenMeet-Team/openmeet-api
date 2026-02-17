@@ -1,6 +1,5 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { loginAsAdmin } from '../utils/functions';
 
 /**
  * E2E tests verifying that firehose-ingested events and RSVPs
@@ -17,13 +16,10 @@ const MAILDEV_URL = `http://${process.env.TESTING_MAIL_HOST || 'localhost'}:${pr
 jest.setTimeout(30000);
 
 describe('Firehose notification suppression (e2e)', () => {
-  let adminToken: string;
-
   beforeAll(async () => {
     if (!SERVICE_API_KEY) {
       throw new Error('SERVICE_API_KEYS not configured');
     }
-    adminToken = await loginAsAdmin();
   });
 
   /**

@@ -980,7 +980,7 @@ describe('EventAttendeeService', () => {
       );
     });
 
-    it('should not call syncRsvpToBluesky or syncRsvpToAtproto', async () => {
+    it('should not trigger any AT Protocol sync', async () => {
       // Arrange
       const roleEntity = new EventRoleEntity();
       roleEntity.id = 1;
@@ -1010,9 +1010,7 @@ describe('EventAttendeeService', () => {
       // Act
       await service.createFromIngestion(createDto);
 
-      // Assert - should NOT call UserService.findBySlug (which is called by syncRsvpToBluesky)
       expect(mockUserService.findBySlug).not.toHaveBeenCalled();
-      // Should NOT call findOne (which is called to reload for syncRsvpToAtproto)
       expect(mockRepository.findOne).not.toHaveBeenCalled();
     });
 

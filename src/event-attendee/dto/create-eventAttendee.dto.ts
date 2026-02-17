@@ -73,11 +73,4 @@ export class CreateEventAttendeeDto {
 
   // Metadata field removed in favor of standardized SourceFields
 
-  @ApiPropertyOptional({
-    description: 'Skip syncing this attendance to Bluesky',
-    type: 'boolean',
-    default: false,
-  })
-  @IsOptional()
-  skipBlueskySync?: boolean;
 }

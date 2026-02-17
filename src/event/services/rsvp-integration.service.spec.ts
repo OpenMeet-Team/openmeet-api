@@ -259,7 +259,7 @@ describe('RsvpIntegrationService', () => {
       expect(eventAttendeeService.create).not.toHaveBeenCalled();
     });
 
-    it('should not pass skipBlueskySync in attendeeData (createFromIngestion handles it internally)', async () => {
+    it('should not pass sync flags in attendeeData (createFromIngestion skips sync internally)', async () => {
       const mockAttendee = { id: 1, status: EventAttendeeStatus.Confirmed };
       eventAttendeeService.createFromIngestion.mockResolvedValue(
         mockAttendee as unknown as EventAttendeesEntity,

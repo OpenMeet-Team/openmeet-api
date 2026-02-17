@@ -181,7 +181,7 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
-      this.logger.log('event.created event received', {
+      this.logger.log('event created/ingested received', {
         eventId: params.eventId,
         slug: params.slug,
         userId: params.userId,
@@ -314,7 +314,7 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
-      this.logger.log('event.rsvp.added event received', {
+      this.logger.log('event rsvp added/ingested received', {
         eventId: params.eventId,
         eventSlug: params.eventSlug,
         userId: params.userId,
@@ -411,7 +411,7 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
-      this.logger.log('event.updated event received', {
+      this.logger.log('event updated/ingested received', {
         eventId: params.eventId,
         slug: params.slug,
         userId: params.userId,

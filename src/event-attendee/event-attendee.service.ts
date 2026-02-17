@@ -237,20 +237,12 @@ export class EventAttendeeService {
           saved,
         });
 
-        // Sync to Bluesky if not explicitly disabled
-        if (!createEventAttendeeDto.skipBlueskySync) {
-          await this.syncRsvpToBluesky(
-            createEventAttendeeDto.event,
-            createEventAttendeeDto.user.slug,
-            saved.status,
-            saved.id,
-          );
-        } else {
-          this.logger.debug(
-            `[create] Skipping Bluesky sync - explicitly disabled`,
-            { eventSlug: createEventAttendeeDto.event.slug },
-          );
-        }
+        await this.syncRsvpToBluesky(
+          createEventAttendeeDto.event,
+          createEventAttendeeDto.user.slug,
+          saved.status,
+          saved.id,
+        );
 
         // Sync to AT Protocol (user's PDS) for non-Bluesky events
         // Need to reload the attendee with event relation for the publisher
@@ -304,7 +296,8 @@ export class EventAttendeeService {
    * Create an attendee record from firehose ingestion.
    * Unlike create(), this method:
    * - Emits 'event.rsvp.ingested' instead of 'event.rsvp.added' (so email listeners ignore it)
-   * - Skips all sync (no syncRsvpToBluesky, no syncRsvpToAtproto)
+   * - Skips all AT Protocol sync to prevent feedback loops (firehose content
+   *   already exists on the network — syncing back would be redundant/circular)
    */
   @Trace('event-attendee.createFromIngestion')
   async createFromIngestion(
