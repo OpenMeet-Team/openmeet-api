@@ -987,7 +987,6 @@ describe('EventIntegrationService', () => {
     });
   });
 
-<<<<<<< fix/suppress-firehose-notifications
   describe('Firehose event naming', () => {
     it('should emit event.ingested (not event.created) when creating from firehose', async () => {
       // Arrange - no existing event
@@ -1084,7 +1083,9 @@ describe('EventIntegrationService', () => {
         'event.updated',
         expect.anything(),
       );
-=======
+    });
+  });
+
   describe('CID match guard in updateExistingEvent', () => {
     it('should skip update when incoming CID matches stored atprotoCid (echo)', async () => {
       // Arrange - existing event with a known atprotoCid
@@ -1184,7 +1185,6 @@ describe('EventIntegrationService', () => {
 
       // Assert - save SHOULD be called (normal update path, no CID guard triggered)
       expect(eventRepository.save).toHaveBeenCalled();
->>>>>>> main
     });
   });
 });
