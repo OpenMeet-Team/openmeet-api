@@ -2067,7 +2067,9 @@ describe('UserService', () => {
     beforeEach(() => {
       mockUsersRepository = module.get(Repository);
       mockAtprotoHandleCacheService = module.get(AtprotoHandleCacheService);
-      mockUserAtprotoIdentityServiceRef = module.get(UserAtprotoIdentityService);
+      mockUserAtprotoIdentityServiceRef = module.get(
+        UserAtprotoIdentityService,
+      );
     });
 
     it('should set connected=true in socialProfiles when identity exists in identity table', async () => {

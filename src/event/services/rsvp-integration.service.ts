@@ -215,11 +215,10 @@ export class RsvpIntegrationService {
               originalCreatedAt: rsvpData.timestamp,
             }
           : undefined,
-        // Skip syncing back to Bluesky since this RSVP came from Bluesky
-        skipBlueskySync: true,
       };
 
-      const newAttendee = await this.eventAttendeeService.create(attendeeData);
+      const newAttendee =
+        await this.eventAttendeeService.createFromIngestion(attendeeData);
 
       timer();
       return newAttendee;

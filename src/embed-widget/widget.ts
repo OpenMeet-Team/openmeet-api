@@ -76,9 +76,7 @@ import { escapeHtml, formatEventDate, truncate } from './utils';
 
     const eventsHtml =
       data.events.length > 0
-        ? data.events
-            .map((e) => renderEvent(e, config.layout))
-            .join('')
+        ? data.events.map((e) => renderEvent(e, config.layout)).join('')
         : `<div class="om-empty">No upcoming events</div>`;
 
     return `

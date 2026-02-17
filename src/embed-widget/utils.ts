@@ -4,10 +4,7 @@ export function escapeHtml(str: string): string {
   return div.innerHTML;
 }
 
-export function formatEventDate(
-  startDate: string,
-  timeZone: string,
-): string {
+export function formatEventDate(startDate: string, timeZone: string): string {
   try {
     const date = new Date(startDate);
     return new Intl.DateTimeFormat('en-US', {

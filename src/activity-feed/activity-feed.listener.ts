@@ -172,6 +172,7 @@ export class ActivityFeedListener {
     }
   }
 
+  @OnEvent('event.ingested')
   @OnEvent('event.created')
   async handleEventCreated(params: {
     eventId: number;
@@ -180,7 +181,7 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
-      this.logger.log('event.created event received', {
+      this.logger.log('event created/ingested received', {
         eventId: params.eventId,
         slug: params.slug,
         userId: params.userId,
@@ -302,6 +303,7 @@ export class ActivityFeedListener {
     }
   }
 
+  @OnEvent('event.rsvp.ingested')
   @OnEvent('event.rsvp.added')
   async handleEventRsvpAdded(params: {
     eventId: number;
@@ -312,7 +314,7 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
-      this.logger.log('event.rsvp.added event received', {
+      this.logger.log('event rsvp added/ingested received', {
         eventId: params.eventId,
         eventSlug: params.eventSlug,
         userId: params.userId,
@@ -400,6 +402,7 @@ export class ActivityFeedListener {
     }
   }
 
+  @OnEvent('event.ingested.updated')
   @OnEvent('event.updated')
   async handleEventUpdated(params: {
     eventId: number;
@@ -408,7 +411,7 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
-      this.logger.log('event.updated event received', {
+      this.logger.log('event updated/ingested received', {
         eventId: params.eventId,
         slug: params.slug,
         userId: params.userId,
