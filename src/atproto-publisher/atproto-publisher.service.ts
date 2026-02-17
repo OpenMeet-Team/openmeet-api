@@ -48,8 +48,12 @@ const BLUESKY_EVENT_COLLECTION = 'community.lexicon.calendar.event';
  * This service is "PDS first" - it publishes to AT Protocol and returns results.
  * The calling service is responsible for saving to the local database.
  *
- * If PDS is unavailable, this service throws an error (fail fast).
- * There is no buffering or retry logic - AT Protocol is the source of truth.
+ * Returns typed results for recoverable cases (e.g., optimistic concurrency
+ * conflicts via swapRecord, validation errors). Throws for unrecoverable
+ * errors (e.g., network failures, invalid credentials).
+ *
+ * AT Protocol is the source of truth. The AtprotoSyncScheduler retries
+ * failed publishes periodically.
  */
 @Injectable()
 export class AtprotoPublisherService {
@@ -325,6 +329,18 @@ export class AtprotoPublisherService {
       rkey = result.rkey;
       cid = result.cid;
     } catch (error) {
+      // Handle swapRecord conflict (409 InvalidSwap)
+      if (
+        error instanceof Error &&
+        ((error as any).status === 409 ||
+          error.message?.includes('InvalidSwap'))
+      ) {
+        this.logger.warn(
+          `Conflict publishing event ${event.slug}: PDS record was modified externally`,
+        );
+        return { action: 'conflict' };
+      }
+
       if (
         error instanceof Error &&
         error.message?.startsWith('AT Protocol record validation failed:')
@@ -338,7 +354,7 @@ export class AtprotoPublisherService {
           validationError: error.message,
         };
       }
-      throw error; // Re-throw non-validation errors
+      throw error; // Re-throw non-validation, non-conflict errors
     }
 
     const atprotoUri = `at://${session.did}/${BLUESKY_EVENT_COLLECTION}/${rkey}`;

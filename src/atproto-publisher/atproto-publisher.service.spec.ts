@@ -498,6 +498,53 @@ describe('AtprotoPublisherService', () => {
       expect(result.error).toContain('AT Protocol record validation failed');
     });
 
+    it('should return conflict action when putRecord returns 409', async () => {
+      const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+
+      // Simulate a 409 InvalidSwap error from AT Protocol
+      const conflictError = new Error(
+        'InvalidSwap: record was modified externally',
+      );
+      (conflictError as any).status = 409;
+      blueskyService.createEventRecord.mockRejectedValue(conflictError);
+
+      const result = await service.publishEvent(event, tenantId);
+
+      expect(result.action).toBe('conflict');
+    });
+
+    it('should return conflict action when error message includes InvalidSwap', async () => {
+      const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+
+      // Simulate an InvalidSwap error without status code (message-only detection)
+      const conflictError = new Error('InvalidSwap');
+      blueskyService.createEventRecord.mockRejectedValue(conflictError);
+
+      const result = await service.publishEvent(event, tenantId);
+
+      expect(result.action).toBe('conflict');
+    });
+
     it('should re-throw non-validation errors from BlueskyService', async () => {
       const event = createMockEvent();
       const mockIdentity = {

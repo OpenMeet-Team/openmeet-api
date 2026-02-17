@@ -1,7 +1,7 @@
 
 # Bluesky User and External Events
 
-> **NOTE**: This document contains early design notes. For the authoritative and comprehensive design documentation, please refer to [ATProtocol Design](/design-notes/atprotocol-design.md).
+> **DEPRECATED**: This document's sync strategy is superseded by [ATProto Bidirectional Sync Design](/design-notes/atproto-bidirectional-sync.md). Key change: events are saved locally first (optimistic) and published to PDS async, rather than requiring PDS-first writes. See the new document for the current source-of-truth model and conflict resolution strategy.
 
 When a bluesky user logs in, we authenticate with the provider PDS and get a token.
 That token is usable to look up and create records in the PDS.

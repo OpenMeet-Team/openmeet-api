@@ -1,0 +1,130 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { TenantConnectionService } from '../tenant/tenant.service';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { AtprotoPublisherService } from './atproto-publisher.service';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+
+@Injectable()
+export class AtprotoSyncScheduler {
+  private readonly logger = new Logger(AtprotoSyncScheduler.name);
+
+  constructor(
+    private readonly moduleRef: ModuleRef,
+    private readonly tenantConnectionService: TenantConnectionService,
+    private readonly elasticacheService: ElastiCacheService,
+  ) {}
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async handlePendingSyncRetry(): Promise<void> {
+    const result = await this.elasticacheService.withLock(
+      'atproto-sync-scheduler:pending-retry',
+      async () => {
+        this.logger.debug('Starting ATProto pending sync retry');
+
+        const tenantIds =
+          await this.tenantConnectionService.getAllTenantIds();
+
+        for (const tenantId of tenantIds) {
+          try {
+            await this.syncTenant(tenantId);
+          } catch (error) {
+            this.logger.error(
+              `Failed ATProto sync retry for tenant ${tenantId}: ${error.message}`,
+              { tenantId },
+            );
+          }
+        }
+      },
+      10 * 60 * 1000, // 10 minute TTL — safety net for crashes; withLock releases on completion
+    );
+
+    if (result === null) {
+      this.logger.debug(
+        'ATProto pending sync retry already running on another instance',
+      );
+    }
+  }
+
+  private async syncTenant(tenantId: string): Promise<void> {
+    const connection =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepository = connection.getRepository(EventEntity);
+
+    const staleEvents = await eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .where('event.atprotoUri IS NOT NULL')
+      .andWhere('event.sourceType IS NULL')
+      .andWhere('event.updatedAt > event.atprotoSyncedAt')
+      .getMany();
+
+    if (staleEvents.length === 0) return;
+
+    this.logger.log(
+      `Found ${staleEvents.length} events pending ATProto sync for tenant ${tenantId}`,
+    );
+
+    // Resolve request-scoped AtprotoPublisherService with a tenant-aware context.
+    // Durable providers (PdsSessionService, AtprotoIdentityService) inject REQUEST
+    // and read request.tenantId — provide a synthetic request for cron context.
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    const publisherService = await this.moduleRef.resolve(
+      AtprotoPublisherService,
+      contextId,
+    );
+
+    for (const event of staleEvents) {
+      if (!event.user) {
+        this.logger.warn(
+          `Skipping event ${event.slug} — no user associated (leftJoin returned null)`,
+          { tenantId, slug: event.slug },
+        );
+        continue;
+      }
+
+      try {
+        const result = await publisherService.publishEvent(
+          event,
+          tenantId,
+        );
+
+        if (result.action === 'updated' || result.action === 'published') {
+          await eventRepository.update(
+            { id: event.id },
+            {
+              atprotoUri: result.atprotoUri,
+              atprotoRkey: result.atprotoRkey,
+              atprotoCid: result.atprotoCid,
+              atprotoSyncedAt: new Date(),
+            },
+          );
+          this.logger.log(`Retry-synced event ${event.slug} to ATProto`);
+        }
+
+        if (result.action === 'conflict') {
+          // Stop retrying — accept that PDS has diverged.
+          // Firehose will deliver the PDS version for reconciliation.
+          await eventRepository.update(
+            { id: event.id },
+            { atprotoSyncedAt: new Date() },
+          );
+          this.logger.warn(
+            `Conflict retrying event ${event.slug} — PDS record was modified externally. Marked as synced to stop retry loop.`,
+            { tenantId, slug: event.slug },
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to retry-sync event ${event.slug}: ${error.message}`,
+          { tenantId, slug: event.slug },
+        );
+      }
+    }
+  }
+}
