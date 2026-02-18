@@ -143,20 +143,21 @@ export class TestHelpersController {
   }
 
   /**
-   * Simulate Bluesky OAuth login via the DIRECT path (handleAuthCallback code path)
+   * Simulate Bluesky OAuth login via identity lookup (handleAuthCallback direct path)
    *
    * POST /api/v1/test/auth/bluesky-direct
    *
-   * This endpoint replicates the actual handleAuthCallback() code path:
-   * 1. Finds user via findUserByAtprotoIdentity() (identity table + legacy fallback)
-   * 2. Performs shadow conversion if needed (isShadowAccount=false, role assignment)
-   * 3. Calls createLoginSession() directly
+   * handleAuthCallback() has two branches:
+   * 1. User found via AT Protocol identity lookup → loginExistingUser() (THIS endpoint)
+   * 2. No identity match → validateSocialLogin/findOrCreateUser (POST /test/auth/bluesky)
    *
-   * Unlike POST /api/v1/test/auth/bluesky which calls validateSocialLogin(),
-   * this endpoint exercises the exact code path that broke when shadow conversion
-   * was missing from handleAuthCallback.
+   * Both endpoints are needed because they exercise different production code paths.
+   * This endpoint specifically tests the identity-lookup branch, which handles:
+   * - Shadow account conversion (shadow → real with role assignment)
+   * - Shadow account claiming (real user absorbing a duplicate shadow)
+   * - Direct session creation (bypassing findOrCreateUser)
    *
-   * For new users (no existing shadow or identity), falls back to validateSocialLogin().
+   * For new users with no existing identity, falls back to validateSocialLogin().
    *
    * @example
    * ```typescript
