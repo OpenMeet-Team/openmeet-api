@@ -588,23 +588,22 @@ describe('EventSeriesOccurrenceService', () => {
       expect(result.timeZone).toBe(expectedTimeZone);
     });
 
-    it('should publish materialized occurrence to Bluesky when template is a Bluesky event', async () => {
+    it('should NOT copy sourceType from Bluesky template to materialized occurrence', async () => {
       const occurrenceDate = '2025-10-03T15:00:00Z';
       const date = new Date(occurrenceDate);
       const seriesSlug = 'test-series';
       const userId = 1;
-      const testDid = 'did:plc:testuser123';
-      const testHandle = 'testuser.bsky.social';
 
-      // Create a Bluesky-sourced template event
+      // Template event was ingested from firehose with sourceType='bluesky'
       const blueskyTemplateEvent = {
         ...mockTemplateEvent,
         slug: 'bluesky-template-event',
         sourceType: EventSourceType.BLUESKY,
-        sourceId: `at://${testDid}/community.lexicon.calendar.event/original-rkey`,
+        sourceId:
+          'at://did:plc:testuser123/community.lexicon.calendar.event/original-rkey',
         sourceData: {
-          did: testDid,
-          handle: testHandle,
+          did: 'did:plc:testuser123',
+          handle: 'testuser.bsky.social',
           rkey: 'original-rkey',
           collection: 'community.lexicon.calendar.event',
         },
@@ -612,7 +611,6 @@ describe('EventSeriesOccurrenceService', () => {
         visibility: EventVisibility.Public,
       };
 
-      // Setup mocks - series has the template event slug set
       const blueskyEventSeries = {
         ...mockEventSeries,
         templateEventSlug: 'bluesky-template-event',
@@ -622,8 +620,6 @@ describe('EventSeriesOccurrenceService', () => {
       eventSeriesService.findBySlug.mockResolvedValue(blueskyEventSeries);
       userService.findById.mockResolvedValue(mockUser);
 
-      // Mock template event lookup to return Bluesky event
-      // First reset the mock completely, then set up the new implementation
       mockEventQueryService.findEventBySlug.mockReset();
       mockEventQueryService.findEventBySlug.mockImplementation(
         (slug: string) => {
@@ -634,66 +630,28 @@ describe('EventSeriesOccurrenceService', () => {
         },
       );
 
-      // Mock the created occurrence - create() now handles Bluesky sync internally
-      // and returns the event with Bluesky metadata already set
-      const createdOccurrenceWithBluesky = {
-        ...blueskyTemplateEvent,
+      // Materialized occurrence is a new OpenMeet event (no sourceType)
+      const newOccurrence = {
+        ...mockTemplateEvent,
         id: 2,
         slug: 'test-event-2',
         startDate: date,
         seriesSlug: seriesSlug,
-        status: EventStatus.Published,
-        visibility: EventVisibility.Public,
-        // create() handles Bluesky sync and returns event with metadata
-        sourceType: EventSourceType.BLUESKY,
-        sourceId: `at://${testDid}/community.lexicon.calendar.event/test-rkey-123`,
-        sourceData: {
-          did: testDid,
-          handle: testHandle,
-          rkey: 'test-rkey-123',
-          collection: 'community.lexicon.calendar.event',
-        },
+        sourceType: null,
+        sourceId: null,
+        sourceData: null,
       };
 
-      eventManagementService.create.mockResolvedValue(
-        createdOccurrenceWithBluesky,
-      );
+      eventManagementService.create.mockResolvedValue(newOccurrence);
 
-      // Execute test
-      const result = await service.materializeOccurrence(
-        seriesSlug,
-        occurrenceDate,
-        userId,
-      );
+      await service.materializeOccurrence(seriesSlug, occurrenceDate, userId);
 
-      // Verify template was fetched
-      expect(eventQueryService.findEventBySlug).toHaveBeenCalledWith(
-        'bluesky-template-event',
-      );
-
-      // Verify create() was called with Bluesky source info in the DTO
-      // (create() handles Bluesky sync internally)
+      // Materialized occurrences must NOT inherit sourceType from template
       expect(eventManagementService.create).toHaveBeenCalledWith(
-        expect.objectContaining({
+        expect.not.objectContaining({
           sourceType: 'bluesky',
-          sourceId: testDid,
-          sourceData: expect.objectContaining({
-            did: testDid,
-            handle: testHandle,
-          }),
         }),
         userId,
-      );
-
-      // Verify the returned event contains the Bluesky data
-      expect(result.sourceType).toBe(EventSourceType.BLUESKY);
-      expect(result.sourceId).toContain('at://');
-      expect(result.sourceData).toEqual(
-        expect.objectContaining({
-          did: testDid,
-          handle: testHandle,
-          rkey: 'test-rkey-123',
-        }),
       );
     });
 
@@ -741,62 +699,26 @@ describe('EventSeriesOccurrenceService', () => {
       );
     });
 
-    it('should throw when Bluesky publishing fails for Bluesky template events', async () => {
-      // With the refactored approach, Bluesky sync is handled by create()
-      // If create() fails due to Bluesky issues, the error propagates to the caller
-      // This is the correct behavior - users should know if their Bluesky event wasn't created
+    it('should propagate errors from create() during materialization', async () => {
       const occurrenceDate = '2025-10-03T15:00:00Z';
       const seriesSlug = 'test-series';
       const userId = 1;
-      const testDid = 'did:plc:testuser123';
-      const testHandle = 'testuser.bsky.social';
-
-      // Create a Bluesky-sourced template event
-      const blueskyTemplateEvent = {
-        ...mockTemplateEvent,
-        slug: 'bluesky-template-event',
-        sourceType: EventSourceType.BLUESKY,
-        sourceId: `at://${testDid}/community.lexicon.calendar.event/original-rkey`,
-        sourceData: {
-          did: testDid,
-          handle: testHandle,
-          rkey: 'original-rkey',
-          collection: 'community.lexicon.calendar.event',
-        },
-        status: EventStatus.Published,
-        visibility: EventVisibility.Public,
-      };
-
-      // Setup mocks - series has the template event slug set
-      const blueskyEventSeries = {
-        ...mockEventSeries,
-        templateEventSlug: 'bluesky-template-event',
-      };
 
       recurrenceService.isDateInRecurrencePattern.mockReturnValue(true);
-      eventSeriesService.findBySlug.mockResolvedValue(blueskyEventSeries);
+      eventSeriesService.findBySlug.mockResolvedValue(mockEventSeries);
       userService.findById.mockResolvedValue(mockUser);
-
-      // Mock template event lookup to return Bluesky event - reset first, then set up new implementation
       mockEventQueryService.findEventBySlug.mockReset();
-      mockEventQueryService.findEventBySlug.mockImplementation(
-        (slug: string) => {
-          if (slug === 'bluesky-template-event') {
-            return Promise.resolve(blueskyTemplateEvent);
-          }
-          return Promise.resolve(mockTemplateEvent);
-        },
+      mockEventQueryService.findEventBySlug.mockResolvedValue(
+        mockTemplateEvent,
       );
 
-      // Mock create() to throw (simulating Bluesky failure within create())
       eventManagementService.create.mockRejectedValue(
-        new Error('Failed to create event in Bluesky'),
+        new Error('Failed to create event'),
       );
 
-      // Execute test - should throw because create() fails on Bluesky error
       await expect(
         service.materializeOccurrence(seriesSlug, occurrenceDate, userId),
-      ).rejects.toThrow('Failed to create event in Bluesky');
+      ).rejects.toThrow('Failed to create event');
     });
 
     it('should NOT pass Bluesky source info when template has incomplete Bluesky data', async () => {

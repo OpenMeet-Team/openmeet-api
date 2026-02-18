@@ -22,7 +22,6 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { CreateEventDto } from '../../event/dto/create-event.dto';
 import { OccurrenceResult } from '../interfaces/occurrence-result.interface';
-import { EventSourceType } from '../../core/constants/source-type.constant';
 
 /**
  * Service for managing event series occurrences
@@ -370,21 +369,6 @@ export class EventSeriesOccurrenceService {
         timeZone: series.timeZone || 'UTC',
       };
 
-      // Copy Bluesky source info from template if it's a Bluesky event
-      // This lets create() handle the Bluesky sync with full event data
-      if (
-        updatedTemplateEvent.sourceType === EventSourceType.BLUESKY &&
-        updatedTemplateEvent.sourceData?.did &&
-        updatedTemplateEvent.sourceData?.handle
-      ) {
-        createDto.sourceType = 'bluesky';
-        createDto.sourceId = updatedTemplateEvent.sourceData.did as string;
-        createDto.sourceData = {
-          did: updatedTemplateEvent.sourceData.did as string,
-          handle: updatedTemplateEvent.sourceData.handle as string,
-        };
-      }
-
       this.logger.debug(
         `Creating materialized occurrence with seriesSlug: ${createDto.seriesSlug}`,
       );
@@ -409,9 +393,6 @@ export class EventSeriesOccurrenceService {
           `SeriesSlug correctly preserved on materialized event ${materializedEvent.slug}: ${materializedEvent.seriesSlug}`,
         );
       }
-
-      // Bluesky sync is now handled by create() when sourceType/sourceId/sourceData
-      // are included in the createDto (see above). No separate sync step needed.
 
       return materializedEvent;
     } catch (error) {
