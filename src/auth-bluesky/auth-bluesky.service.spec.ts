@@ -9,10 +9,14 @@ import { UserService } from '../user/user.service';
 import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { RoleService } from '../role/role.service';
+import { ShadowAccountService } from '../shadow-account/shadow-account.service';
 import {
   BadRequestException,
+  InternalServerErrorException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 
 describe('AuthBlueskyService - Error Handling', () => {
   let service: AuthBlueskyService;
@@ -1656,6 +1660,7 @@ describe('AuthBlueskyService - Account Linking Login Flow', () => {
     del: jest.Mock;
   };
   let mockConfigService: { get: jest.Mock };
+  let mockShadowAccountService: { claimShadowAccount: jest.Mock };
 
   const mockLoginResponse = {
     token: 'test-token',
@@ -1675,6 +1680,7 @@ describe('AuthBlueskyService - Account Linking Login Flow', () => {
     ulid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
     email: 'existing@example.com',
     provider: 'google',
+    isShadowAccount: false,
     preferences: {},
   };
 
@@ -1684,6 +1690,7 @@ describe('AuthBlueskyService - Account Linking Login Flow', () => {
     email: 'bsky@example.com',
     provider: 'bluesky',
     socialId: 'did:plc:legacy123',
+    isShadowAccount: false,
     preferences: {},
   };
 
@@ -1735,6 +1742,10 @@ describe('AuthBlueskyService - Account Linking Login Flow', () => {
       }),
     };
 
+    mockShadowAccountService = {
+      claimShadowAccount: jest.fn().mockResolvedValue(null),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthBlueskyService,
@@ -1773,6 +1784,14 @@ describe('AuthBlueskyService - Account Linking Login Flow', () => {
         {
           provide: EventSeriesOccurrenceService,
           useValue: {},
+        },
+        {
+          provide: RoleService,
+          useValue: { findByName: jest.fn() },
+        },
+        {
+          provide: ShadowAccountService,
+          useValue: mockShadowAccountService,
         },
       ],
     }).compile();
@@ -1986,6 +2005,442 @@ describe('AuthBlueskyService - Account Linking Login Flow', () => {
 
       // validateSocialLogin was called (the email conflict came from there)
       expect(mockAuthService.validateSocialLogin).toHaveBeenCalled();
+      // createLoginSession should NOT have been called
+      expect(mockAuthService.createLoginSession).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('AuthBlueskyService - Shadow Account Conversion', () => {
+  let service: AuthBlueskyService;
+  let mockAuthService: {
+    validateSocialLogin: jest.Mock;
+    createLoginSession: jest.Mock;
+  };
+  let mockUserService: {
+    findBySocialIdAndProvider: jest.Mock;
+    findByUlid: jest.Mock;
+    findByEmail: jest.Mock;
+    update: jest.Mock;
+  };
+  let mockUserAtprotoIdentityService: {
+    findByDid: jest.Mock;
+    findByUserUlid: jest.Mock;
+    create: jest.Mock;
+  };
+  let mockBlueskyIdentityService: {
+    resolveProfile: jest.Mock;
+  };
+  let mockTenantConnectionService: { getTenantConfig: jest.Mock };
+  let mockElastiCacheService: {
+    set: jest.Mock;
+    get: jest.Mock;
+    del: jest.Mock;
+  };
+  let mockConfigService: { get: jest.Mock };
+  let mockRoleService: { findByName: jest.Mock };
+  let mockShadowAccountService: { claimShadowAccount: jest.Mock };
+
+  const mockUserRole = {
+    id: 2,
+    name: 'user',
+    permissions: ['create:event', 'create:group'],
+  };
+
+  const mockLoginResponse = {
+    token: 'test-token',
+    refreshToken: 'test-refresh',
+    tokenExpires: 123456789,
+    sessionId: 'test-session-id',
+    user: {
+      id: 1,
+      ulid: '01hqvxz6j8k9m0n1p2q3r4s5t6',
+      email: 'shadow@example.com',
+      provider: 'bluesky',
+    },
+  };
+
+  const mockShadowUser = {
+    id: 10,
+    ulid: '01shadow00000000000000000',
+    email: null,
+    provider: 'bluesky',
+    socialId: 'did:plc:shadow123',
+    isShadowAccount: true,
+    role: null,
+    preferences: {},
+  };
+
+  const mockShadowUserWithRole = {
+    id: 11,
+    ulid: '01shadow11111111111111111',
+    email: null,
+    provider: 'bluesky',
+    socialId: 'did:plc:shadow456',
+    isShadowAccount: true,
+    role: mockUserRole,
+    preferences: {},
+  };
+
+  const mockRealUser = {
+    id: 20,
+    ulid: '01real0000000000000000000',
+    email: 'real@example.com',
+    provider: 'bluesky',
+    socialId: 'did:plc:real789',
+    isShadowAccount: false,
+    role: mockUserRole,
+    preferences: {},
+  };
+
+  beforeEach(async () => {
+    mockAuthService = {
+      validateSocialLogin: jest.fn().mockResolvedValue(mockLoginResponse),
+      createLoginSession: jest.fn().mockResolvedValue(mockLoginResponse),
+    };
+
+    mockUserService = {
+      findBySocialIdAndProvider: jest.fn().mockResolvedValue(null),
+      findByUlid: jest.fn().mockResolvedValue(null),
+      findByEmail: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockImplementation((id, data, _tenantId) => {
+        // Return a merged object simulating the update
+        return Promise.resolve({ ...mockShadowUser, ...data, id });
+      }),
+    };
+
+    mockUserAtprotoIdentityService = {
+      findByDid: jest.fn().mockResolvedValue(null),
+      findByUserUlid: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue(undefined),
+    };
+
+    mockBlueskyIdentityService = {
+      resolveProfile: jest.fn().mockResolvedValue({
+        did: 'did:plc:shadow123',
+        handle: 'shadow.bsky.social',
+        pdsUrl: 'https://bsky.social',
+      }),
+    };
+
+    mockTenantConnectionService = {
+      getTenantConfig: jest.fn().mockReturnValue({
+        frontendDomain: 'https://platform.openmeet.net',
+      }),
+    };
+
+    mockElastiCacheService = {
+      set: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue(undefined),
+      del: jest.fn().mockResolvedValue(undefined),
+    };
+
+    mockConfigService = {
+      get: jest.fn((key: string) => {
+        if (key === 'MOBILE_CUSTOM_URL_SCHEME') {
+          return 'net.openmeet.platform';
+        }
+        return undefined;
+      }),
+    };
+
+    mockRoleService = {
+      findByName: jest.fn().mockResolvedValue(mockUserRole),
+    };
+
+    mockShadowAccountService = {
+      claimShadowAccount: jest.fn().mockResolvedValue(null),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthBlueskyService,
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+        {
+          provide: AuthService,
+          useValue: mockAuthService,
+        },
+        {
+          provide: ElastiCacheService,
+          useValue: mockElastiCacheService,
+        },
+        {
+          provide: BlueskyService,
+          useValue: {},
+        },
+        {
+          provide: BlueskyIdentityService,
+          useValue: mockBlueskyIdentityService,
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: mockUserAtprotoIdentityService,
+        },
+        {
+          provide: UserService,
+          useValue: mockUserService,
+        },
+        {
+          provide: EventSeriesOccurrenceService,
+          useValue: {},
+        },
+        {
+          provide: RoleService,
+          useValue: mockRoleService,
+        },
+        {
+          provide: ShadowAccountService,
+          useValue: mockShadowAccountService,
+        },
+      ],
+    }).compile();
+
+    service = module.get<AuthBlueskyService>(AuthBlueskyService);
+  });
+
+  /**
+   * Helper: Set up mocks for handleAuthCallback.
+   */
+  function setupHandleAuthCallbackMocks(opts?: { profileDid?: string }) {
+    const did = opts?.profileDid || 'did:plc:shadow123';
+
+    const mockSession = { did };
+    const mockClient = {
+      callback: jest.fn().mockResolvedValue({
+        session: mockSession,
+        state: null,
+      }),
+      restore: jest.fn().mockResolvedValue({
+        did,
+        pdsUrl: 'https://bsky.social',
+      }),
+    };
+
+    jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+    jest.spyOn(service, 'getStoredPlatform').mockResolvedValue(undefined);
+    jest
+      .spyOn(service, 'ensureAtprotoIdentityRecord')
+      .mockResolvedValue(undefined);
+
+    return { did };
+  }
+
+  describe('handleAuthCallback - shadow account conversion (Case 1)', () => {
+    it('should convert shadow account to real account with role assignment', async () => {
+      // Arrange: Shadow user with no role found via identity lookup
+      const { did } = setupHandleAuthCallbackMocks();
+
+      jest.spyOn(service, 'findUserByAtprotoIdentity').mockResolvedValue({
+        user: mockShadowUser as any,
+        foundVia: 'atproto-identity',
+      });
+
+      // Act
+      await service.handleAuthCallback(
+        { iss: 'test', state: 'test' },
+        'tenant-123',
+      );
+
+      // Assert: User should be updated with isShadowAccount=false and role assigned
+      expect(mockRoleService.findByName).toHaveBeenCalledWith(
+        'user',
+        'tenant-123',
+      );
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        mockShadowUser.id,
+        expect.objectContaining({
+          isShadowAccount: false,
+          role: mockUserRole,
+        }),
+        'tenant-123',
+      );
+      // createLoginSession should be called with the UPDATED user
+      expect(mockAuthService.createLoginSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isShadowAccount: false,
+          role: mockUserRole,
+        }),
+        'bluesky',
+        expect.objectContaining({ id: did }),
+        'tenant-123',
+      );
+    });
+
+    it('should clear shadow flag without role lookup when shadow account already has a role', async () => {
+      // Arrange: Shadow user that already has a role
+      setupHandleAuthCallbackMocks({
+        profileDid: 'did:plc:shadow456',
+      });
+
+      jest.spyOn(service, 'findUserByAtprotoIdentity').mockResolvedValue({
+        user: mockShadowUserWithRole as any,
+        foundVia: 'atproto-identity',
+      });
+
+      // Act
+      await service.handleAuthCallback(
+        { iss: 'test', state: 'test' },
+        'tenant-123',
+      );
+
+      // Assert: Should update isShadowAccount but NOT look up role
+      expect(mockRoleService.findByName).not.toHaveBeenCalled();
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        mockShadowUserWithRole.id,
+        expect.objectContaining({
+          isShadowAccount: false,
+        }),
+        'tenant-123',
+      );
+      // createLoginSession should be called with updated user
+      expect(mockAuthService.createLoginSession).toHaveBeenCalled();
+    });
+
+    it('should throw error when shadow conversion fails', async () => {
+      // Arrange: Shadow user, but role lookup fails
+      setupHandleAuthCallbackMocks();
+
+      jest.spyOn(service, 'findUserByAtprotoIdentity').mockResolvedValue({
+        user: mockShadowUser as any,
+        foundVia: 'atproto-identity',
+      });
+
+      mockRoleService.findByName.mockResolvedValue(null); // Role not found
+
+      // Act & Assert: Login MUST FAIL - shadow conversion failure is fatal
+      await expect(
+        service.handleAuthCallback(
+          { iss: 'test', state: 'test' },
+          'tenant-123',
+        ),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      // createLoginSession should NOT have been called
+      expect(mockAuthService.createLoginSession).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when user update fails during shadow conversion', async () => {
+      // Arrange: Shadow user, role found, but update fails
+      setupHandleAuthCallbackMocks();
+
+      jest.spyOn(service, 'findUserByAtprotoIdentity').mockResolvedValue({
+        user: mockShadowUser as any,
+        foundVia: 'atproto-identity',
+      });
+
+      mockUserService.update.mockRejectedValue(
+        new Error('Database connection lost'),
+      );
+
+      // Act & Assert: Login MUST FAIL
+      await expect(
+        service.handleAuthCallback(
+          { iss: 'test', state: 'test' },
+          'tenant-123',
+        ),
+      ).rejects.toThrow();
+
+      // createLoginSession should NOT have been called
+      expect(mockAuthService.createLoginSession).not.toHaveBeenCalled();
+    });
+
+    it('should not modify non-shadow users', async () => {
+      // Arrange: Regular (non-shadow) user found via identity lookup
+      setupHandleAuthCallbackMocks({
+        profileDid: 'did:plc:real789',
+      });
+
+      jest.spyOn(service, 'findUserByAtprotoIdentity').mockResolvedValue({
+        user: mockRealUser as any,
+        foundVia: 'atproto-identity',
+      });
+
+      // Act
+      await service.handleAuthCallback(
+        { iss: 'test', state: 'test' },
+        'tenant-123',
+      );
+
+      // Assert: No shadow conversion should happen
+      expect(mockRoleService.findByName).not.toHaveBeenCalled();
+      // update IS called for DID preferences, but NOT for shadow conversion
+      // We check that createLoginSession is called with the original user
+      expect(mockAuthService.createLoginSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isShadowAccount: false,
+          id: mockRealUser.id,
+        }),
+        'bluesky',
+        expect.any(Object),
+        'tenant-123',
+      );
+    });
+  });
+
+  describe('handleAuthCallback - shadow account claiming (Case 2)', () => {
+    it('should attempt to claim shadow account when real user logs in', async () => {
+      // Arrange: Real user logging in via Bluesky
+      const { did } = setupHandleAuthCallbackMocks({
+        profileDid: 'did:plc:real789',
+      });
+
+      jest.spyOn(service, 'findUserByAtprotoIdentity').mockResolvedValue({
+        user: mockRealUser as any,
+        foundVia: 'atproto-identity',
+      });
+
+      mockShadowAccountService.claimShadowAccount.mockResolvedValue({
+        id: 99,
+        ulid: 'claimed-shadow',
+      });
+
+      // Act
+      await service.handleAuthCallback(
+        { iss: 'test', state: 'test' },
+        'tenant-123',
+      );
+
+      // Assert: Shadow account claiming should be attempted
+      expect(mockShadowAccountService.claimShadowAccount).toHaveBeenCalledWith(
+        mockRealUser.id,
+        did,
+        AuthProvidersEnum.bluesky,
+        'tenant-123',
+      );
+      // Login should still succeed
+      expect(mockAuthService.createLoginSession).toHaveBeenCalled();
+    });
+
+    it('should throw error when shadow claim fails', async () => {
+      // Arrange: Real user logging in, but shadow claim throws
+      setupHandleAuthCallbackMocks({
+        profileDid: 'did:plc:real789',
+      });
+
+      jest.spyOn(service, 'findUserByAtprotoIdentity').mockResolvedValue({
+        user: mockRealUser as any,
+        foundVia: 'atproto-identity',
+      });
+
+      mockShadowAccountService.claimShadowAccount.mockRejectedValue(
+        new Error('Database constraint violation'),
+      );
+
+      // Act & Assert: Login MUST FAIL when shadow claiming fails
+      await expect(
+        service.handleAuthCallback(
+          { iss: 'test', state: 'test' },
+          'tenant-123',
+        ),
+      ).rejects.toThrow();
+
       // createLoginSession should NOT have been called
       expect(mockAuthService.createLoginSession).not.toHaveBeenCalled();
     });

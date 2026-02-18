@@ -2,6 +2,7 @@ import {
   BadRequestException,
   HttpStatus,
   Injectable,
+  InternalServerErrorException,
   Logger,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -11,12 +12,16 @@ import { ConfigService } from '@nestjs/config';
 import { Agent } from '@atproto/api';
 import * as crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
+import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { OAuthPlatform } from '../auth/types/oauth.types';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { UserService } from '../user/user.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { RoleService } from '../role/role.service';
+import { RoleEnum } from '../role/role.enum';
+import { ShadowAccountService } from '../shadow-account/shadow-account.service';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
@@ -42,6 +47,26 @@ export class AuthBlueskyService {
    */
   private async getUserService(): Promise<UserService> {
     return await this.moduleRef.resolve(UserService, undefined, {
+      strict: false,
+    });
+  }
+
+  /**
+   * Get RoleService via ModuleRef.resolve() for REQUEST-scoped providers.
+   * RoleService has Scope.REQUEST, so it must be resolved per-request.
+   */
+  private async getRoleService(): Promise<RoleService> {
+    return await this.moduleRef.resolve(RoleService, undefined, {
+      strict: false,
+    });
+  }
+
+  /**
+   * Get ShadowAccountService via ModuleRef.resolve().
+   * Using strict: false to search across all modules without adding circular imports.
+   */
+  private async getShadowAccountService(): Promise<ShadowAccountService> {
+    return await this.moduleRef.resolve(ShadowAccountService, undefined, {
       strict: false,
     });
   }
@@ -355,15 +380,78 @@ export class AuthBlueskyService {
         );
       }
 
+      // Handle shadow account conversion and claiming.
+      // This logic mirrors validateSocialLogin() in auth.service.ts (lines 290-357),
+      // which is bypassed when we call createLoginSession() directly.
+      let userForSession: UserEntity = existingUser;
+
+      if (existingUser.isShadowAccount) {
+        // Case 1: Shadow account logging in for the first time - convert to real account
+        this.logger.debug('Converting shadow account to real account', {
+          userId: existingUser.id,
+          did: profileData.did,
+        });
+
+        if (!existingUser.role) {
+          const roleService = await this.getRoleService();
+          const roleEntity = await roleService.findByName(
+            RoleEnum.User,
+            tenantId,
+          );
+
+          if (!roleEntity) {
+            throw new InternalServerErrorException(
+              `Failed to convert shadow account: role '${RoleEnum.User}' not found`,
+            );
+          }
+
+          userForSession = (await userService.update(
+            existingUser.id,
+            {
+              isShadowAccount: false,
+              role: roleEntity,
+            },
+            tenantId,
+          )) as UserEntity;
+        } else {
+          userForSession = (await userService.update(
+            existingUser.id,
+            {
+              isShadowAccount: false,
+            },
+            tenantId,
+          )) as UserEntity;
+        }
+
+        this.logger.log(
+          `Converted shadow account to real account for Bluesky user ${profileData.did} (user ID: ${existingUser.id}) in tenant ${tenantId}`,
+        );
+      } else {
+        // Case 2: Real user logging in - claim any existing shadow account
+        const shadowAccountService = await this.getShadowAccountService();
+        const claimedUser = await shadowAccountService.claimShadowAccount(
+          existingUser.id,
+          profileData.did,
+          AuthProvidersEnum.bluesky,
+          tenantId,
+        );
+
+        if (claimedUser) {
+          this.logger.log(
+            `Automatically claimed shadow account for Bluesky user ${profileData.did} in tenant ${tenantId}`,
+          );
+        }
+      }
+
       // User found via identity lookup - create session directly.
       // This bypasses findOrCreateUser, avoiding duplicate email errors
       // for users who linked their ATProto identity via Settings.
       this.logger.debug(
         'Creating login session directly for known user (bypassing findOrCreateUser)',
-        { userId: existingUser.id, foundVia },
+        { userId: userForSession.id, foundVia },
       );
       loginResponse = await this.authService.createLoginSession(
-        existingUser,
+        userForSession,
         'bluesky',
         socialData,
         tenantId,
