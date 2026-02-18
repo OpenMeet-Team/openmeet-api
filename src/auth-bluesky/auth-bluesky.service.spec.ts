@@ -434,6 +434,9 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
         if (key === 'MOBILE_CUSTOM_URL_SCHEME') {
           return 'net.openmeet.platform';
         }
+        if (key === 'ALLOWED_REDIRECT_DOMAINS') {
+          return 'roomy.chat,app.roomy.chat,localhost';
+        }
         return defaultValue;
       }),
     };
@@ -632,6 +635,34 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
       expect(result).toMatch(
         /^http:\/\/localhost:5173\/auth\/callback\?/,
       );
+    });
+
+    it('should throw BadRequestException for malformed redirect_uri', () => {
+      expect(() =>
+        service.buildRedirectUrl(
+          'tenant-123',
+          testParams,
+          'web',
+          'not-a-url',
+        ),
+      ).toThrow('Invalid redirect_uri');
+    });
+
+    it('should reject all redirect_uri when ALLOWED_REDIRECT_DOMAINS is not configured', () => {
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'ALLOWED_REDIRECT_DOMAINS') return undefined;
+        if (key === 'MOBILE_CUSTOM_URL_SCHEME') return 'net.openmeet.platform';
+        return undefined;
+      });
+
+      expect(() =>
+        service.buildRedirectUrl(
+          'tenant-123',
+          testParams,
+          'web',
+          'https://roomy.chat/callback',
+        ),
+      ).toThrow('redirect_uri domain not allowed');
     });
   });
 });

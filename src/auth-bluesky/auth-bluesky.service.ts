@@ -311,17 +311,14 @@ export class AuthBlueskyService {
     }
   }
 
-  private static ALLOWED_REDIRECT_DOMAINS = [
-    'roomy.chat',
-    'app.roomy.chat',
-    'localhost',
-  ];
-
   /**
    * Build the redirect URL for OAuth callback based on platform.
    * Mobile platforms (android/ios) use custom URL scheme for deep linking.
    * Web uses the tenant's frontend domain.
    * External redirectUri (e.g., Roomy) uses domain allowlist for security.
+   *
+   * Allowed redirect domains are configured via ALLOWED_REDIRECT_DOMAINS env var
+   * (comma-separated, e.g. "roomy.chat,app.roomy.chat,localhost").
    */
   public buildRedirectUrl(
     tenantId: string,
@@ -330,8 +327,22 @@ export class AuthBlueskyService {
     redirectUri?: string,
   ): string {
     if (redirectUri) {
-      const url = new URL(redirectUri);
-      const isAllowed = AuthBlueskyService.ALLOWED_REDIRECT_DOMAINS.some(
+      let url: URL;
+      try {
+        url = new URL(redirectUri);
+      } catch {
+        throw new BadRequestException('Invalid redirect_uri');
+      }
+
+      const allowedDomainsRaw = this.configService.get(
+        'ALLOWED_REDIRECT_DOMAINS',
+        { infer: true },
+      ) as string | undefined;
+      const allowedDomains = allowedDomainsRaw
+        ? allowedDomainsRaw.split(',').map((s) => s.trim())
+        : [];
+
+      const isAllowed = allowedDomains.some(
         (domain) =>
           url.hostname === domain || url.hostname.endsWith('.' + domain),
       );
