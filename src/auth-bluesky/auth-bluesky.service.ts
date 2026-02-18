@@ -167,6 +167,7 @@ export class AuthBlueskyService {
       handle: string;
       displayName?: string;
       email?: string;
+      emailConfirmed?: boolean;
       avatar?: string;
     },
     tenantId: string,
@@ -177,6 +178,7 @@ export class AuthBlueskyService {
     const socialData = {
       id: profileData.did,
       email: profileData.email || existingUser.email || '',
+      emailConfirmed: profileData.emailConfirmed,
       firstName: profileData.displayName || profileData.handle,
       lastName: '',
       avatar: profileData.avatar,
@@ -229,18 +231,26 @@ export class AuthBlueskyService {
         `Converted shadow account to real account for Bluesky user ${profileData.did} (user ID: ${existingUser.id}) in tenant ${tenantId}`,
       );
     } else {
-      // Case 2: Real user logging in - claim any existing shadow account
-      const shadowAccountService = await this.getShadowAccountService();
-      const claimedUser = await shadowAccountService.claimShadowAccount(
-        existingUser.id,
-        profileData.did,
-        AuthProvidersEnum.bluesky,
-        tenantId,
-      );
+      // Case 2: Real user logging in - claim any existing shadow account.
+      // This is best-effort: don't block login if claiming fails.
+      // Matches the error handling in validateSocialLogin() in auth.service.ts.
+      try {
+        const shadowAccountService = await this.getShadowAccountService();
+        const claimedUser = await shadowAccountService.claimShadowAccount(
+          existingUser.id,
+          profileData.did,
+          AuthProvidersEnum.bluesky,
+          tenantId,
+        );
 
-      if (claimedUser) {
-        this.logger.log(
-          `Automatically claimed shadow account for Bluesky user ${profileData.did} in tenant ${tenantId}`,
+        if (claimedUser) {
+          this.logger.log(
+            `Automatically claimed shadow account for Bluesky user ${profileData.did} in tenant ${tenantId}`,
+          );
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to automatically claim shadow account for user ${existingUser.id}: ${error.message}`,
         );
       }
     }
@@ -445,16 +455,6 @@ export class AuthBlueskyService {
 
     const userService = await this.getUserService();
 
-    // Build the social data object for auth service methods
-    const socialData = {
-      id: profileData.did,
-      email: profileData.email || existingUser?.email || '',
-      emailConfirmed: profileData.emailConfirmed,
-      firstName: profileData.displayName || profileData.handle,
-      lastName: '',
-      avatar: profileData.avatar,
-    };
-
     let loginResponse;
 
     if (existingUser) {
@@ -536,6 +536,14 @@ export class AuthBlueskyService {
       this.logger.debug('Creating new user via validateSocialLogin', {
         tenantId,
       });
+      const socialData = {
+        id: profileData.did,
+        email: profileData.email || '',
+        emailConfirmed: profileData.emailConfirmed,
+        firstName: profileData.displayName || profileData.handle,
+        lastName: '',
+        avatar: profileData.avatar,
+      };
       loginResponse = await this.authService.validateSocialLogin(
         'bluesky',
         socialData,

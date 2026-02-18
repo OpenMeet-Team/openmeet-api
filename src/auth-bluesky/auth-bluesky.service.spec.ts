@@ -2418,7 +2418,7 @@ describe('AuthBlueskyService - Shadow Account Conversion', () => {
       expect(mockAuthService.createLoginSession).toHaveBeenCalled();
     });
 
-    it('should throw error when shadow claim fails', async () => {
+    it('should log warning and continue login when shadow claim fails', async () => {
       // Arrange: Real user logging in, but shadow claim throws
       setupHandleAuthCallbackMocks({
         profileDid: 'did:plc:real789',
@@ -2433,16 +2433,14 @@ describe('AuthBlueskyService - Shadow Account Conversion', () => {
         new Error('Database constraint violation'),
       );
 
-      // Act & Assert: Login MUST FAIL when shadow claiming fails
-      await expect(
-        service.handleAuthCallback(
-          { iss: 'test', state: 'test' },
-          'tenant-123',
-        ),
-      ).rejects.toThrow();
+      // Act: Login should succeed despite shadow claim failure (best-effort)
+      await service.handleAuthCallback(
+        { iss: 'test', state: 'test' },
+        'tenant-123',
+      );
 
-      // createLoginSession should NOT have been called
-      expect(mockAuthService.createLoginSession).not.toHaveBeenCalled();
+      // Assert: Login should still complete
+      expect(mockAuthService.createLoginSession).toHaveBeenCalled();
     });
   });
 });
@@ -2764,23 +2762,23 @@ describe('AuthBlueskyService - loginExistingUser', () => {
       expect(result).toEqual(mockLoginResponse);
     });
 
-    it('should throw when shadow claim fails', async () => {
+    it('should log warning and continue login when shadow claim fails', async () => {
       mockShadowAccountService.claimShadowAccount.mockRejectedValue(
         new Error('Database constraint violation'),
       );
 
-      await expect(
-        service.loginExistingUser(
-          mockRealUser as any,
-          {
-            did: 'did:plc:real789',
-            handle: 'real.bsky.social',
-          },
-          'tenant-123',
-        ),
-      ).rejects.toThrow();
+      const result = await service.loginExistingUser(
+        mockRealUser as any,
+        {
+          did: 'did:plc:real789',
+          handle: 'real.bsky.social',
+        },
+        'tenant-123',
+      );
 
-      expect(mockAuthService.createLoginSession).not.toHaveBeenCalled();
+      // Login should succeed despite shadow claim failure (best-effort)
+      expect(mockAuthService.createLoginSession).toHaveBeenCalled();
+      expect(result).toEqual(mockLoginResponse);
     });
   });
 

@@ -57,26 +57,3 @@ describe('TestOnlyGuard', () => {
     });
   });
 });
-
-describe('TestHelpersModule conditional import', () => {
-  it('should be excluded from production in AppModule', () => {
-    // This test verifies the conditional import pattern used in app.module.ts:
-    //   ...(process.env.NODE_ENV !== 'production' ? [TestHelpersModule] : [])
-    //
-    // We simulate the condition to verify the logic.
-
-    // In production: empty array (module not imported)
-    const prodModules =
-      'production' !== 'production' ? ['TestHelpersModule'] : [];
-    expect(prodModules).toEqual([]);
-
-    // In test: module is imported
-    const testModules = 'test' !== 'production' ? ['TestHelpersModule'] : [];
-    expect(testModules).toEqual(['TestHelpersModule']);
-
-    // In development: module is imported
-    const devModules =
-      'development' !== 'production' ? ['TestHelpersModule'] : [];
-    expect(devModules).toEqual(['TestHelpersModule']);
-  });
-});
