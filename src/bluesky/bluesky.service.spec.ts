@@ -1700,5 +1700,59 @@ describe('BlueskyService', () => {
         );
       }
     });
+
+    it('should default createdAt to current ISO timestamp when event.createdAt is undefined', async () => {
+      // Arrange - simulate an unsaved entity where TypeORM has not populated @CreateDateColumn
+      const event = {
+        name: 'Test Event No CreatedAt',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: undefined, // TypeORM .create() does not populate @CreateDateColumn
+        slug: 'test-event-no-createdat',
+      } as unknown as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      // Use real validation to catch the missing createdAt error
+      mockAtprotoLexiconService.validate.mockImplementationOnce(
+        (_collection: string, record: Record<string, unknown>) => {
+          if (!record.createdAt) {
+            return {
+              success: false,
+              error: {
+                message: 'Record must have the property "createdAt"',
+              },
+            };
+          }
+          return { success: true, value: record };
+        },
+      );
+
+      // Act
+      await service.createEventRecord(event, did, handle, tenantId);
+
+      // Assert - the record passed to validate should have a valid createdAt string
+      const validateCall = mockAtprotoLexiconService.validate.mock.calls[0];
+      const recordData = validateCall[1];
+      expect(recordData).toHaveProperty('createdAt');
+      expect(typeof recordData.createdAt).toBe('string');
+
+      // It should be a valid ISO date string (close to "now")
+      const parsedDate = new Date(recordData.createdAt);
+      expect(parsedDate.getTime()).not.toBeNaN();
+
+      // The record should also have been passed to putRecord (validation succeeded)
+      expect(
+        mockAgentImplementation.com.atproto.repo.putRecord,
+      ).toHaveBeenCalled();
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      expect(putRecordCall.record.createdAt).toBe(recordData.createdAt);
+    });
   });
 });

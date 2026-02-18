@@ -469,7 +469,7 @@ export class BlueskyService {
         createdAt:
           event.createdAt instanceof Date
             ? event.createdAt.toISOString()
-            : event.createdAt,
+            : (event.createdAt || new Date().toISOString()),
         startsAt:
           event.startDate instanceof Date
             ? event.startDate.toISOString()
