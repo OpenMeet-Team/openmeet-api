@@ -3,6 +3,7 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { TestOnlyGuard } from '../shared/guard/test-only.guard';
 import { AuthService } from '../auth/auth.service';
 import { ShadowAccountService } from '../shadow-account/shadow-account.service';
+import { AuthBlueskyService } from '../auth-bluesky/auth-bluesky.service';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { Public } from '../core/decorators/public.decorator';
 
@@ -28,6 +29,7 @@ export class TestHelpersController {
   constructor(
     private readonly authService: AuthService,
     private readonly shadowAccountService: ShadowAccountService,
+    private readonly authBlueskyService: AuthBlueskyService,
   ) {}
 
   /**
@@ -131,6 +133,90 @@ export class TestHelpersController {
     );
 
     // Return the full login response including user details
+    return {
+      token: loginResponse.token,
+      refreshToken: loginResponse.refreshToken,
+      tokenExpires: loginResponse.tokenExpires,
+      sessionId: loginResponse.sessionId,
+      user: loginResponse.user,
+    };
+  }
+
+  /**
+   * Simulate Bluesky OAuth login via the DIRECT path (handleAuthCallback code path)
+   *
+   * POST /api/v1/test/auth/bluesky-direct
+   *
+   * This endpoint replicates the actual handleAuthCallback() code path:
+   * 1. Finds user via findUserByAtprotoIdentity() (identity table + legacy fallback)
+   * 2. Performs shadow conversion if needed (isShadowAccount=false, role assignment)
+   * 3. Calls createLoginSession() directly
+   *
+   * Unlike POST /api/v1/test/auth/bluesky which calls validateSocialLogin(),
+   * this endpoint exercises the exact code path that broke when shadow conversion
+   * was missing from handleAuthCallback.
+   *
+   * For new users (no existing shadow or identity), falls back to validateSocialLogin().
+   *
+   * @example
+   * ```typescript
+   * POST /api/v1/test/auth/bluesky-direct
+   * {
+   *   "did": "did:plc:test123",
+   *   "handle": "test.bsky.social",
+   *   "displayName": "Test User",
+   *   "email": "test@example.com"
+   * }
+   * ```
+   */
+  @Post('auth/bluesky-direct')
+  async simulateBlueskyDirectLogin(
+    @Body()
+    body: {
+      did: string;
+      handle: string;
+      displayName?: string;
+      email?: string;
+    },
+    @Req() req,
+  ) {
+    const tenantId = req.tenantId;
+
+    // Step 1: Find user via AT Protocol identity lookup (same as handleAuthCallback)
+    const { user: existingUser } =
+      await this.authBlueskyService.findUserByAtprotoIdentity(
+        tenantId,
+        body.did,
+      );
+
+    let loginResponse;
+
+    if (existingUser) {
+      // Step 2: Delegate shadow conversion + session creation to the shared method
+      loginResponse = await this.authBlueskyService.loginExistingUser(
+        existingUser,
+        {
+          did: body.did,
+          handle: body.handle,
+          displayName: body.displayName,
+          email: body.email,
+        },
+        tenantId,
+      );
+    } else {
+      // No existing user - fall back to validateSocialLogin (new user path)
+      loginResponse = await this.authService.validateSocialLogin(
+        AuthProvidersEnum.bluesky,
+        {
+          id: body.did,
+          email: body.email || '',
+          firstName: body.displayName || body.handle,
+          lastName: '',
+        },
+        tenantId,
+      );
+    }
+
     return {
       token: loginResponse.token,
       refreshToken: loginResponse.refreshToken,
