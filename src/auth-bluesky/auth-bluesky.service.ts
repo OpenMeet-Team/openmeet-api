@@ -2,6 +2,7 @@ import {
   BadRequestException,
   HttpStatus,
   Injectable,
+  InternalServerErrorException,
   Logger,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -11,14 +12,19 @@ import { ConfigService } from '@nestjs/config';
 import { Agent } from '@atproto/api';
 import * as crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
+import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { OAuthPlatform } from '../auth/types/oauth.types';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { UserService } from '../user/user.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { RoleService } from '../role/role.service';
+import { RoleEnum } from '../role/role.enum';
+import { ShadowAccountService } from '../shadow-account/shadow-account.service';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { LoginResponseDto } from '../auth/dto/login-response.dto';
 
 @Injectable()
 export class AuthBlueskyService {
@@ -42,6 +48,26 @@ export class AuthBlueskyService {
    */
   private async getUserService(): Promise<UserService> {
     return await this.moduleRef.resolve(UserService, undefined, {
+      strict: false,
+    });
+  }
+
+  /**
+   * Get RoleService via ModuleRef.resolve() for REQUEST-scoped providers.
+   * RoleService has Scope.REQUEST, so it must be resolved per-request.
+   */
+  private async getRoleService(): Promise<RoleService> {
+    return await this.moduleRef.resolve(RoleService, undefined, {
+      strict: false,
+    });
+  }
+
+  /**
+   * Get ShadowAccountService via ModuleRef.resolve().
+   * Using strict: false to search across all modules without adding circular imports.
+   */
+  private async getShadowAccountService(): Promise<ShadowAccountService> {
+    return await this.moduleRef.resolve(ShadowAccountService, undefined, {
       strict: false,
     });
   }
@@ -116,6 +142,131 @@ export class AuthBlueskyService {
     }
 
     return { user: null, foundVia: null };
+  }
+
+  /**
+   * Handle login for an existing user found via AT Protocol identity lookup.
+   *
+   * This method encapsulates:
+   * - Shadow account conversion (Case 1: shadow -> real, with role assignment)
+   * - Shadow account claiming (Case 2: real user -> claim shadow)
+   * - Building the socialData and calling createLoginSession()
+   *
+   * Used by both handleAuthCallback() and the test controller's
+   * simulateBlueskyDirectLogin endpoint to ensure consistent behavior.
+   *
+   * @param existingUser - The user found via findUserByAtprotoIdentity
+   * @param profileData - Profile data from the AT Protocol session
+   * @param tenantId - The tenant ID
+   * @returns LoginResponseDto with JWT tokens and session
+   */
+  async loginExistingUser(
+    existingUser: UserEntity,
+    profileData: {
+      did: string;
+      handle: string;
+      displayName?: string;
+      email?: string;
+      emailConfirmed?: boolean;
+      avatar?: string;
+    },
+    tenantId: string,
+  ): Promise<LoginResponseDto> {
+    const userService = await this.getUserService();
+
+    // Build the social data object for auth service methods
+    const socialData = {
+      id: profileData.did,
+      email: profileData.email || existingUser.email || '',
+      emailConfirmed: profileData.emailConfirmed,
+      firstName: profileData.displayName || profileData.handle,
+      lastName: '',
+      avatar: profileData.avatar,
+    };
+
+    // Handle shadow account conversion and claiming.
+    // This logic mirrors validateSocialLogin() in auth.service.ts,
+    // which is bypassed when we call createLoginSession() directly.
+    let userForSession: UserEntity = existingUser;
+
+    if (existingUser.isShadowAccount) {
+      // Case 1: Shadow account logging in for the first time - convert to real account
+      this.logger.debug('Converting shadow account to real account', {
+        userId: existingUser.id,
+        did: profileData.did,
+      });
+
+      if (!existingUser.role) {
+        const roleService = await this.getRoleService();
+        const roleEntity = await roleService.findByName(
+          RoleEnum.User,
+          tenantId,
+        );
+
+        if (!roleEntity) {
+          throw new InternalServerErrorException(
+            `Failed to convert shadow account: role '${RoleEnum.User}' not found`,
+          );
+        }
+
+        userForSession = (await userService.update(
+          existingUser.id,
+          {
+            isShadowAccount: false,
+            role: roleEntity,
+          },
+          tenantId,
+        )) as UserEntity;
+      } else {
+        userForSession = (await userService.update(
+          existingUser.id,
+          {
+            isShadowAccount: false,
+          },
+          tenantId,
+        )) as UserEntity;
+      }
+
+      this.logger.log(
+        `Converted shadow account to real account for Bluesky user ${profileData.did} (user ID: ${existingUser.id}) in tenant ${tenantId}`,
+      );
+    } else {
+      // Case 2: Real user logging in - claim any existing shadow account.
+      // This is best-effort: don't block login if claiming fails.
+      // Matches the error handling in validateSocialLogin() in auth.service.ts.
+      try {
+        const shadowAccountService = await this.getShadowAccountService();
+        const claimedUser = await shadowAccountService.claimShadowAccount(
+          existingUser.id,
+          profileData.did,
+          AuthProvidersEnum.bluesky,
+          tenantId,
+        );
+
+        if (claimedUser) {
+          this.logger.log(
+            `Automatically claimed shadow account for Bluesky user ${profileData.did} in tenant ${tenantId}`,
+          );
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to automatically claim shadow account for user ${existingUser.id}: ${error.message}`,
+        );
+      }
+    }
+
+    // Create session directly, bypassing findOrCreateUser to avoid
+    // duplicate email errors for users who linked their ATProto identity via Settings.
+    this.logger.debug(
+      'Creating login session directly for known user (bypassing findOrCreateUser)',
+      { userId: userForSession.id },
+    );
+    return this.authService.createLoginSession(
+      userForSession,
+      'bluesky',
+      socialData,
+      tenantId,
+    );
   }
 
   public async initializeClient(tenantId: string) {
@@ -304,16 +455,6 @@ export class AuthBlueskyService {
 
     const userService = await this.getUserService();
 
-    // Build the social data object for auth service methods
-    const socialData = {
-      id: profileData.did,
-      email: profileData.email || existingUser?.email || '',
-      emailConfirmed: profileData.emailConfirmed,
-      firstName: profileData.displayName || profileData.handle,
-      lastName: '',
-      avatar: profileData.avatar,
-    };
-
     let loginResponse;
 
     if (existingUser) {
@@ -355,17 +496,10 @@ export class AuthBlueskyService {
         );
       }
 
-      // User found via identity lookup - create session directly.
-      // This bypasses findOrCreateUser, avoiding duplicate email errors
-      // for users who linked their ATProto identity via Settings.
-      this.logger.debug(
-        'Creating login session directly for known user (bypassing findOrCreateUser)',
-        { userId: existingUser.id, foundVia },
-      );
-      loginResponse = await this.authService.createLoginSession(
+      // Delegate shadow conversion + session creation to loginExistingUser
+      loginResponse = await this.loginExistingUser(
         existingUser,
-        'bluesky',
-        socialData,
+        profileData,
         tenantId,
       );
     } else {
@@ -402,6 +536,14 @@ export class AuthBlueskyService {
       this.logger.debug('Creating new user via validateSocialLogin', {
         tenantId,
       });
+      const socialData = {
+        id: profileData.did,
+        email: profileData.email || '',
+        emailConfirmed: profileData.emailConfirmed,
+        firstName: profileData.displayName || profileData.handle,
+        lastName: '',
+        avatar: profileData.avatar,
+      };
       loginResponse = await this.authService.validateSocialLogin(
         'bluesky',
         socialData,

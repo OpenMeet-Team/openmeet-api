@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TestHelpersController } from './test-helpers.controller';
 import { AuthModule } from '../auth/auth.module';
 import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
+import { AuthBlueskyModule } from '../auth-bluesky/auth-bluesky.module';
 
 /**
  * Test Helpers Module
@@ -16,7 +17,11 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
  * - Hidden from Swagger documentation
  */
 @Module({
-  imports: [AuthModule, ShadowAccountModule],
+  imports: [
+    AuthModule,
+    ShadowAccountModule,
+    forwardRef(() => AuthBlueskyModule),
+  ],
   controllers: [TestHelpersController],
 })
 export class TestHelpersModule {}
