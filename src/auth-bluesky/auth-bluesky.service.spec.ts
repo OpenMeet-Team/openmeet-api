@@ -212,6 +212,43 @@ describe('AuthBlueskyService - Error Handling', () => {
         600,
       );
     });
+
+    it('should store redirect_uri in Redis when provided', async () => {
+      const mockUrl = new URL('https://bsky.social/oauth/authorize');
+      const mockClient = {
+        authorize: jest.fn().mockResolvedValue(mockUrl),
+      };
+      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+
+      await service.createAuthUrl(
+        'test.bsky.social',
+        'tenant-123',
+        undefined,
+        'https://app.roomy.chat/auth/callback',
+      );
+
+      expect(mockElastiCacheService.set).toHaveBeenCalledWith(
+        expect.stringMatching(/^auth:bluesky:redirect_uri:.+$/),
+        'https://app.roomy.chat/auth/callback',
+        600,
+      );
+    });
+
+    it('should not store redirect_uri in Redis when not provided', async () => {
+      const mockUrl = new URL('https://bsky.social/oauth/authorize');
+      const mockClient = {
+        authorize: jest.fn().mockResolvedValue(mockUrl),
+      };
+      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+
+      await service.createAuthUrl('test.bsky.social', 'tenant-123');
+
+      expect(mockElastiCacheService.set).not.toHaveBeenCalledWith(
+        expect.stringMatching(/^auth:bluesky:redirect_uri:.+$/),
+        expect.any(String),
+        expect.any(Number),
+      );
+    });
   });
 
   describe('getStoredPlatform', () => {

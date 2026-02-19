@@ -633,6 +633,7 @@ export class AuthBlueskyService {
     handle: string,
     tenantId: string,
     platform?: OAuthPlatform,
+    redirectUri?: string,
   ): Promise<string> {
     try {
       this.logger.debug('Creating auth URL for Bluesky OAuth', {
@@ -683,6 +684,19 @@ export class AuthBlueskyService {
         this.logger.debug('Stored platform in Redis for OAuth appState', {
           appState,
           platform,
+        });
+      }
+
+      // Store redirect_uri in Redis if provided (for third-party OAuth clients like Roomy)
+      if (redirectUri) {
+        await this.elasticacheService.set(
+          `auth:bluesky:redirect_uri:${appState}`,
+          redirectUri,
+          600, // 10 minute TTL
+        );
+        this.logger.debug('Stored redirect_uri in Redis for OAuth appState', {
+          appState,
+          redirectUri,
         });
       }
 
