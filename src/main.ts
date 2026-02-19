@@ -55,6 +55,10 @@ async function bootstrap() {
     );
 
     // Global CORS for all other routes (credentials-based with origin allowlist)
+    // Additional origins can be added via CORS_ADDITIONAL_ORIGINS env var (comma-separated)
+    const additionalOrigins = process.env.CORS_ADDITIONAL_ORIGINS
+      ? process.env.CORS_ADDITIONAL_ORIGINS.split(',').map((s) => s.trim())
+      : [];
     app.enableCors({
       origin: [
         'http://localhost:9005',
@@ -67,6 +71,8 @@ async function bootstrap() {
         'https://platform.openmeet.net',
         'https://platform-dev.openmeet.net',
         'https://platform.dev.openmeet.net',
+        /^http:\/\/(localhost|127\.0\.0\.1):\d+$/,
+        ...additionalOrigins,
       ],
       credentials: true,
       allowedHeaders: [

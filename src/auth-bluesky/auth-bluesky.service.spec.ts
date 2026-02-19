@@ -212,6 +212,43 @@ describe('AuthBlueskyService - Error Handling', () => {
         600,
       );
     });
+
+    it('should store redirect_uri in Redis when provided', async () => {
+      const mockUrl = new URL('https://bsky.social/oauth/authorize');
+      const mockClient = {
+        authorize: jest.fn().mockResolvedValue(mockUrl),
+      };
+      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+
+      await service.createAuthUrl(
+        'test.bsky.social',
+        'tenant-123',
+        undefined,
+        'https://app.roomy.chat/auth/callback',
+      );
+
+      expect(mockElastiCacheService.set).toHaveBeenCalledWith(
+        expect.stringMatching(/^auth:bluesky:redirect_uri:.+$/),
+        'https://app.roomy.chat/auth/callback',
+        600,
+      );
+    });
+
+    it('should not store redirect_uri in Redis when not provided', async () => {
+      const mockUrl = new URL('https://bsky.social/oauth/authorize');
+      const mockClient = {
+        authorize: jest.fn().mockResolvedValue(mockUrl),
+      };
+      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient);
+
+      await service.createAuthUrl('test.bsky.social', 'tenant-123');
+
+      expect(mockElastiCacheService.set).not.toHaveBeenCalledWith(
+        expect.stringMatching(/^auth:bluesky:redirect_uri:.+$/),
+        expect.any(String),
+        expect.any(Number),
+      );
+    });
   });
 
   describe('getStoredPlatform', () => {
@@ -250,6 +287,38 @@ describe('AuthBlueskyService - Error Handling', () => {
       const result = await service.getStoredPlatform('missing-state');
 
       // Assert
+      expect(result).toBeUndefined();
+      expect(mockElastiCacheService.del).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getStoredRedirectUri', () => {
+    it('should return redirect_uri from Redis when stored', async () => {
+      mockElastiCacheService.get.mockResolvedValue('https://app.roomy.chat/callback');
+
+      const result = await service.getStoredRedirectUri('test-state');
+
+      expect(result).toBe('https://app.roomy.chat/callback');
+      expect(mockElastiCacheService.get).toHaveBeenCalledWith(
+        'auth:bluesky:redirect_uri:test-state',
+      );
+    });
+
+    it('should delete redirect_uri from Redis after retrieval (single-use)', async () => {
+      mockElastiCacheService.get.mockResolvedValue('https://app.roomy.chat/callback');
+
+      await service.getStoredRedirectUri('cleanup-state');
+
+      expect(mockElastiCacheService.del).toHaveBeenCalledWith(
+        'auth:bluesky:redirect_uri:cleanup-state',
+      );
+    });
+
+    it('should return undefined when no redirect_uri is stored', async () => {
+      mockElastiCacheService.get.mockResolvedValue(undefined);
+
+      const result = await service.getStoredRedirectUri('missing-state');
+
       expect(result).toBeUndefined();
       expect(mockElastiCacheService.del).not.toHaveBeenCalled();
     });
@@ -434,6 +503,9 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
         if (key === 'MOBILE_CUSTOM_URL_SCHEME') {
           return 'net.openmeet.platform';
         }
+        if (key === 'ALLOWED_REDIRECT_DOMAINS') {
+          return 'roomy.chat,app.roomy.chat,localhost';
+        }
         return defaultValue;
       }),
     };
@@ -594,6 +666,72 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
       expect(result).toMatch(
         /^net\.openmeet\.platform:\/auth\/bluesky\/callback\?/,
       );
+    });
+
+    it('should redirect to external redirect_uri when provided', () => {
+      const result = service.buildRedirectUrl(
+        'tenant-123',
+        testParams,
+        'web',
+        'https://roomy.chat/auth/openmeet/callback',
+      );
+
+      expect(result).toMatch(
+        /^https:\/\/roomy\.chat\/auth\/openmeet\/callback\?/,
+      );
+      expect(result).toContain('token=test-token');
+    });
+
+    it('should reject redirect_uri to non-allowed domains', () => {
+      expect(() =>
+        service.buildRedirectUrl(
+          'tenant-123',
+          testParams,
+          'web',
+          'https://evil.com/steal-tokens',
+        ),
+      ).toThrow('redirect_uri domain not allowed');
+    });
+
+    it('should allow redirect_uri to localhost', () => {
+      const result = service.buildRedirectUrl(
+        'tenant-123',
+        testParams,
+        'web',
+        'http://localhost:5173/auth/callback',
+      );
+
+      expect(result).toMatch(
+        /^http:\/\/localhost:5173\/auth\/callback\?/,
+      );
+    });
+
+    it('should throw BadRequestException for malformed redirect_uri', () => {
+      expect(() =>
+        service.buildRedirectUrl(
+          'tenant-123',
+          testParams,
+          'web',
+          'not-a-url',
+        ),
+      ).toThrow('Invalid redirect_uri');
+    });
+
+    it('should reject all redirect_uri when ALLOWED_REDIRECT_DOMAINS is not configured', () => {
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'ALLOWED_REDIRECT_DOMAINS') return undefined;
+        if (key === 'MOBILE_CUSTOM_URL_SCHEME') return 'net.openmeet.platform';
+        return undefined;
+      });
+
+      expect(() =>
+        service.buildRedirectUrl(
+          'tenant-123',
+          testParams,
+          'web',
+          'https://roomy.chat/callback',
+        ),
+      ).toThrow('redirect_uri domain not allowed');
     });
   });
 });

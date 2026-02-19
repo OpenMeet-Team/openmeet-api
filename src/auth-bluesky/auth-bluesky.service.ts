@@ -315,12 +315,43 @@ export class AuthBlueskyService {
    * Build the redirect URL for OAuth callback based on platform.
    * Mobile platforms (android/ios) use custom URL scheme for deep linking.
    * Web uses the tenant's frontend domain.
+   * External redirectUri (e.g., Roomy) uses domain allowlist for security.
+   *
+   * Allowed redirect domains are configured via ALLOWED_REDIRECT_DOMAINS env var
+   * (comma-separated, e.g. "roomy.chat,app.roomy.chat,localhost").
    */
   public buildRedirectUrl(
     tenantId: string,
     params: URLSearchParams,
     platform?: OAuthPlatform,
+    redirectUri?: string,
   ): string {
+    if (redirectUri) {
+      let url: URL;
+      try {
+        url = new URL(redirectUri);
+      } catch {
+        throw new BadRequestException('Invalid redirect_uri');
+      }
+
+      const allowedDomainsRaw = this.configService.get(
+        'ALLOWED_REDIRECT_DOMAINS',
+        { infer: true },
+      ) as string | undefined;
+      const allowedDomains = allowedDomainsRaw
+        ? allowedDomainsRaw.split(',').map((s) => s.trim())
+        : [];
+
+      const isAllowed = allowedDomains.some(
+        (domain) =>
+          url.hostname === domain || url.hostname.endsWith('.' + domain),
+      );
+      if (!isAllowed) {
+        throw new BadRequestException('redirect_uri domain not allowed');
+      }
+      return `${redirectUri}?${params.toString()}`;
+    }
+
     const tenantConfig = this.tenantConnectionService.getTenantConfig(tenantId);
     const isMobile = platform === 'android' || platform === 'ios';
 
@@ -366,6 +397,11 @@ export class AuthBlueskyService {
       appState,
       platform,
     });
+
+    // Retrieve stored redirect_uri using appState (for third-party OAuth clients)
+    const redirectUri = appState
+      ? await this.getStoredRedirectUri(appState)
+      : undefined;
 
     const restoredSession = await client.restore(oauthSession.did);
     this.logger.debug('Restored session with tokens');
@@ -588,7 +624,7 @@ export class AuthBlueskyService {
       profile: Buffer.from(JSON.stringify(profileData)).toString('base64'),
     });
 
-    const redirectUrl = this.buildRedirectUrl(tenantId, newParams, platform);
+    const redirectUrl = this.buildRedirectUrl(tenantId, newParams, platform, redirectUri);
     this.logger.debug('calling redirect to', { redirectUrl, platform });
 
     // Return both the redirect URL and session ID for cookie setting
@@ -602,6 +638,7 @@ export class AuthBlueskyService {
     handle: string,
     tenantId: string,
     platform?: OAuthPlatform,
+    redirectUri?: string,
   ): Promise<string> {
     try {
       this.logger.debug('Creating auth URL for Bluesky OAuth', {
@@ -652,6 +689,19 @@ export class AuthBlueskyService {
         this.logger.debug('Stored platform in Redis for OAuth appState', {
           appState,
           platform,
+        });
+      }
+
+      // Store redirect_uri in Redis if provided (for third-party OAuth clients like Roomy)
+      if (redirectUri) {
+        await this.elasticacheService.set(
+          `auth:bluesky:redirect_uri:${appState}`,
+          redirectUri,
+          600, // 10 minute TTL
+        );
+        this.logger.debug('Stored redirect_uri in Redis for OAuth appState', {
+          appState,
+          redirectUri,
         });
       }
 
@@ -990,6 +1040,21 @@ export class AuthBlueskyService {
       await this.elasticacheService.del(`auth:bluesky:platform:${state}`);
     }
     return platform as OAuthPlatform | undefined;
+  }
+
+  /**
+   * Retrieve the stored redirect_uri for a given OAuth state.
+   * Used by the callback to redirect third-party OAuth clients (e.g., Roomy).
+   * Single-use: deletes the data after retrieval.
+   */
+  async getStoredRedirectUri(state: string): Promise<string | undefined> {
+    const redirectUri = await this.elasticacheService.get<string>(
+      `auth:bluesky:redirect_uri:${state}`,
+    );
+    if (redirectUri) {
+      await this.elasticacheService.del(`auth:bluesky:redirect_uri:${state}`);
+    }
+    return redirectUri || undefined;
   }
 
   /**

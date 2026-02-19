@@ -54,11 +54,13 @@ export class AuthBlueskyController {
     @Query('handle') handle: string,
     @Query('tenantId') tenantId: string,
     @Query('platform') platform?: OAuthPlatform,
+    @Query('redirect_uri') redirectUri?: string,
   ) {
     return await this.authBlueskyService.createAuthUrl(
       handle,
       tenantId,
       platform,
+      redirectUri,
     );
   }
 
