@@ -398,6 +398,11 @@ export class AuthBlueskyService {
       platform,
     });
 
+    // Retrieve stored redirect_uri using appState (for third-party OAuth clients)
+    const redirectUri = appState
+      ? await this.getStoredRedirectUri(appState)
+      : undefined;
+
     const restoredSession = await client.restore(oauthSession.did);
     this.logger.debug('Restored session with tokens');
 
@@ -619,7 +624,7 @@ export class AuthBlueskyService {
       profile: Buffer.from(JSON.stringify(profileData)).toString('base64'),
     });
 
-    const redirectUrl = this.buildRedirectUrl(tenantId, newParams, platform);
+    const redirectUrl = this.buildRedirectUrl(tenantId, newParams, platform, redirectUri);
     this.logger.debug('calling redirect to', { redirectUrl, platform });
 
     // Return both the redirect URL and session ID for cookie setting
@@ -1035,6 +1040,21 @@ export class AuthBlueskyService {
       await this.elasticacheService.del(`auth:bluesky:platform:${state}`);
     }
     return platform as OAuthPlatform | undefined;
+  }
+
+  /**
+   * Retrieve the stored redirect_uri for a given OAuth state.
+   * Used by the callback to redirect third-party OAuth clients (e.g., Roomy).
+   * Single-use: deletes the data after retrieval.
+   */
+  async getStoredRedirectUri(state: string): Promise<string | undefined> {
+    const redirectUri = await this.elasticacheService.get<string>(
+      `auth:bluesky:redirect_uri:${state}`,
+    );
+    if (redirectUri) {
+      await this.elasticacheService.del(`auth:bluesky:redirect_uri:${state}`);
+    }
+    return redirectUri || undefined;
   }
 
   /**

@@ -291,6 +291,38 @@ describe('AuthBlueskyService - Error Handling', () => {
       expect(mockElastiCacheService.del).not.toHaveBeenCalled();
     });
   });
+
+  describe('getStoredRedirectUri', () => {
+    it('should return redirect_uri from Redis when stored', async () => {
+      mockElastiCacheService.get.mockResolvedValue('https://app.roomy.chat/callback');
+
+      const result = await service.getStoredRedirectUri('test-state');
+
+      expect(result).toBe('https://app.roomy.chat/callback');
+      expect(mockElastiCacheService.get).toHaveBeenCalledWith(
+        'auth:bluesky:redirect_uri:test-state',
+      );
+    });
+
+    it('should delete redirect_uri from Redis after retrieval (single-use)', async () => {
+      mockElastiCacheService.get.mockResolvedValue('https://app.roomy.chat/callback');
+
+      await service.getStoredRedirectUri('cleanup-state');
+
+      expect(mockElastiCacheService.del).toHaveBeenCalledWith(
+        'auth:bluesky:redirect_uri:cleanup-state',
+      );
+    });
+
+    it('should return undefined when no redirect_uri is stored', async () => {
+      mockElastiCacheService.get.mockResolvedValue(undefined);
+
+      const result = await service.getStoredRedirectUri('missing-state');
+
+      expect(result).toBeUndefined();
+      expect(mockElastiCacheService.del).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('AuthBlueskyService - handleAuthCallback avatar pass-through', () => {
