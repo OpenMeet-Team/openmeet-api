@@ -18,10 +18,10 @@ export class DidWebController {
   })
   getDidDocument() {
     const serviceDid =
-      this.configService.get<string>('SERVICE_DID') ||
+      this.configService.get<string>('SERVICE_DID', { infer: true }) ||
       'did:web:api.openmeet.net';
     const serviceEndpoint =
-      this.configService.get<string>('BACKEND_DOMAIN') ||
+      this.configService.get<string>('BACKEND_DOMAIN', { infer: true }) ||
       'https://api.openmeet.net';
 
     return {
