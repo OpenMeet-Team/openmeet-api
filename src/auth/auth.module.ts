@@ -24,6 +24,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
 import { PdsModule } from '../pds/pds.module';
 import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+import { AtprotoServiceAuthService } from './services/atproto-service-auth.service';
 @Module({
   imports: [
     forwardRef(() => UserModule),
@@ -48,12 +49,18 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
   controllers: [AuthController],
   providers: [
     AuthService,
+    AtprotoServiceAuthService,
     JwtStrategy,
     JwtRefreshStrategy,
     AnonymousStrategy,
     TempAuthCodeService,
     EmailVerificationCodeService,
   ],
-  exports: [AuthService, TempAuthCodeService, EmailVerificationCodeService],
+  exports: [
+    AuthService,
+    AtprotoServiceAuthService,
+    TempAuthCodeService,
+    EmailVerificationCodeService,
+  ],
 })
 export class AuthModule {}

@@ -17,6 +17,7 @@ import { AuthService } from './auth.service';
 import {
   ApiBearerAuth,
   ApiOkResponse,
+  ApiOperation,
   ApiTags,
   ApiResponse,
 } from '@nestjs/swagger';
@@ -48,6 +49,9 @@ import {
   EMAIL_VERIFICATION_RATE_LIMITS,
   REQUEST_LOGIN_CODE_RATE_LIMITS,
 } from './config/rate-limits.config';
+import { AtprotoServiceAuthDto } from './dto/atproto-service-auth.dto';
+import { AtprotoServiceAuthService } from './services/atproto-service-auth.service';
+import { Public } from './decorators/public.decorator';
 
 @ApiTags('Auth')
 @Controller({
@@ -58,6 +62,7 @@ export class AuthController {
   constructor(
     private readonly service: AuthService,
     private readonly shadowAccountService: ShadowAccountService,
+    private readonly atprotoServiceAuthService: AtprotoServiceAuthService,
   ) {}
 
   @SerializeOptions({
@@ -364,6 +369,25 @@ export class AuthController {
   ): Promise<{ success: boolean; message: string }> {
     return this.service.requestLoginCode(
       requestLoginCodeDto.email,
+      request.tenantId,
+    );
+  }
+
+  @Post('atproto/service-auth')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Exchange a PDS-signed JWT for OpenMeet tokens',
+    description:
+      "Accepts a JWT from com.atproto.server.getServiceAuth, verifies it against the user's DID document, and returns OpenMeet access/refresh tokens.",
+  })
+  @ApiOkResponse({ type: LoginResponseDto })
+  async atprotoServiceAuth(
+    @Body() dto: AtprotoServiceAuthDto,
+    @Request() request,
+  ): Promise<LoginResponseDto> {
+    return this.atprotoServiceAuthService.verifyAndExchange(
+      dto.token,
       request.tenantId,
     );
   }
