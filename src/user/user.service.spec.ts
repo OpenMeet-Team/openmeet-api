@@ -2461,5 +2461,173 @@ describe('UserService', () => {
         }),
       );
     });
+
+    it('should handle null user in groupMembers when filtering for successors', async () => {
+      const userId = 123;
+      const adminUserId = 456;
+
+      // Mock an owned group with an orphaned groupMember (null user) and a valid admin
+      const mockOwnedGroup = {
+        id: 1,
+        name: 'Group With Orphan Member',
+        createdBy: { id: userId },
+        groupMembers: [
+          {
+            id: 1,
+            user: { id: userId },
+            groupRole: { name: 'owner' },
+          },
+          {
+            id: 2,
+            user: null, // Orphaned record - null user
+            groupRole: { name: 'admin' },
+          },
+          {
+            id: 3,
+            user: { id: adminUserId },
+            groupRole: { name: 'admin' },
+          },
+        ],
+      };
+
+      setupMockRepositories();
+
+      mockGroupRepository.find.mockResolvedValue([mockOwnedGroup]);
+      mockGroupRepository.save.mockResolvedValue(mockOwnedGroup);
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      // Should not crash - should skip null user and transfer to valid admin
+      await userService.remove(userId);
+
+      // Verify ownership transferred to the valid admin, skipping null user member
+      expect(mockGroupRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createdBy: expect.objectContaining({ id: adminUserId }),
+        }),
+      );
+
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
+    });
+
+    it('should delete chatRooms before deleting group with no successor', async () => {
+      const userId = 123;
+
+      // Mock an owned group with only the owner (no successor)
+      const mockOwnedGroup = {
+        id: 10,
+        name: 'Group With Chat Rooms',
+        createdBy: { id: userId },
+        groupMembers: [
+          {
+            id: 1,
+            user: { id: userId },
+            groupRole: { name: 'owner' },
+          },
+        ],
+      };
+
+      // Track the order of calls to verify chatRooms deleted before group
+      const callOrder: string[] = [];
+
+      setupMockRepositories();
+
+      // Override query to track chatRoom deletion calls
+      mockTransactionalEntityManager.query.mockImplementation(
+        (sql: string) => {
+          if (sql.includes('"chatRooms"')) {
+            callOrder.push('chatRoom.delete');
+          }
+          return Promise.resolve([]);
+        },
+      );
+
+      mockGroupRepository.find.mockResolvedValue([mockOwnedGroup]);
+      mockGroupRepository.remove.mockImplementation((group: any) => {
+        callOrder.push('group.remove');
+        return Promise.resolve(group);
+      });
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      await userService.remove(userId);
+
+      // Verify chatRooms were deleted via raw SQL for this group
+      expect(mockTransactionalEntityManager.query).toHaveBeenCalledWith(
+        'DELETE FROM "chatRooms" WHERE "groupId" = $1',
+        [10],
+      );
+
+      // Verify chatRooms deleted before group removal
+      expect(callOrder.indexOf('chatRoom.delete')).toBeLessThan(
+        callOrder.indexOf('group.remove'),
+      );
+
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
+    });
+
+    it('should delete groupUserPermissions before deleting group with no successor', async () => {
+      const userId = 123;
+
+      // Mock an owned group with only the owner (no successor)
+      const mockOwnedGroup = {
+        id: 20,
+        name: 'Group With Permissions',
+        createdBy: { id: userId },
+        groupMembers: [
+          {
+            id: 1,
+            user: { id: userId },
+            groupRole: { name: 'owner' },
+          },
+        ],
+      };
+
+      // Track the order of repository calls
+      const callOrder: string[] = [];
+
+      const mockGroupUserPermissionRepository = {
+        delete: jest.fn().mockImplementation(() => {
+          callOrder.push('groupUserPermission.delete');
+          return Promise.resolve({ affected: 3 });
+        }),
+      };
+
+      setupMockRepositories();
+
+      // Override getRepository to also handle GroupUserPermissionEntity
+      mockTransactionalEntityManager.getRepository.mockImplementation(
+        (entity: any) => {
+          if (entity.name === 'GroupEntity') return mockGroupRepository;
+          if (entity.name === 'EventEntity') return mockEventRepository;
+          if (entity.name === 'UserEntity') return mockUsersRepository;
+          if (entity.name === 'GroupRoleEntity') return mockGroupRoleRepository;
+          if (entity.name === 'GroupMemberEntity')
+            return mockGroupMemberRepository;
+          if (entity.name === 'GroupUserPermissionEntity')
+            return mockGroupUserPermissionRepository;
+          return mockUsersRepository;
+        },
+      );
+
+      mockGroupRepository.find.mockResolvedValue([mockOwnedGroup]);
+      mockGroupRepository.remove.mockImplementation((group: any) => {
+        callOrder.push('group.remove');
+        return Promise.resolve(group);
+      });
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      await userService.remove(userId);
+
+      // Verify groupUserPermissions were deleted for this group
+      expect(mockGroupUserPermissionRepository.delete).toHaveBeenCalledWith({
+        group: { id: 20 },
+      });
+
+      // Verify permissions deleted before group removal
+      expect(callOrder.indexOf('groupUserPermission.delete')).toBeLessThan(
+        callOrder.indexOf('group.remove'),
+      );
+
+      expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
+    });
   });
 });

@@ -25,6 +25,7 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { GroupRole } from '../core/constants/constant';
+import { GroupUserPermissionEntity } from '../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
@@ -1204,6 +1205,7 @@ export class UserService {
         const eligibleSuccessors = group.groupMembers
           .filter(
             (m) =>
+              m.user &&
               m.user.id !== numericId &&
               ['admin', 'moderator', 'owner'].includes(
                 m.groupRole?.name?.toLowerCase() || '',
@@ -1259,6 +1261,19 @@ export class UserService {
           const groupMemberRepo =
             transactionalEntityManager.getRepository(GroupMemberEntity);
           await groupMemberRepo.delete({ group: { id: group.id } });
+
+          // Delete chat rooms (no TypeORM entity, use raw SQL)
+          await transactionalEntityManager.query(
+            'DELETE FROM "chatRooms" WHERE "groupId" = $1',
+            [group.id],
+          );
+
+          // Delete group user permissions (FK has no CASCADE)
+          const groupUserPermissionRepo =
+            transactionalEntityManager.getRepository(
+              GroupUserPermissionEntity,
+            );
+          await groupUserPermissionRepo.delete({ group: { id: group.id } });
 
           // Finally delete the group
           await groupRepo.remove(group);
