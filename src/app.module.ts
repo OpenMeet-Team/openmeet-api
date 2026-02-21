@@ -66,6 +66,7 @@ import { MetaModule } from './meta/meta.module';
 import { EmbedModule } from './embed/embed.module';
 import { TestHelpersModule } from './test-helpers/test-helpers.module';
 import { PdsModule } from './pds/pds.module';
+import { DidWebModule } from './did-web/did-web.module';
 import { UserAtprotoIdentityModule } from './user-atproto-identity/user-atproto-identity.module';
 import { AtprotoIdentityModule } from './atproto-identity/atproto-identity.module';
 
@@ -171,6 +172,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     MetaModule,
     EmbedModule,
     PdsModule,
+    DidWebModule,
     UserAtprotoIdentityModule,
     AtprotoIdentityModule,
     // Conditionally import test helpers only in non-production environments

@@ -208,6 +208,7 @@ async function bootstrap() {
           '/',
           '/sitemap.xml',
           '/oidc/.well-known/openid-configuration',
+          '/.well-known/did.json',
         ],
       },
     );
