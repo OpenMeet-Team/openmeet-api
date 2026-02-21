@@ -262,6 +262,130 @@ describe('AtprotoServiceAuthService', () => {
       });
     });
 
+    describe('PLC fallback', () => {
+      it('should fall back to public PLC when private PLC fails and DID_PLC_URL is configured', async () => {
+        // Configure DID_PLC_URL so private PLC is used first
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'SERVICE_DID') return 'did:web:api.openmeet.net';
+          if (key === 'DID_PLC_URL') return 'http://plc:2582';
+          return undefined;
+        });
+
+        const resolvedAtprotoData = {
+          did: 'did:plc:testuser123',
+          signingKey: 'did:key:z1234mockkey',
+          handle: 'test.bsky.social',
+          pds: 'https://pds.example.com',
+        };
+
+        let callCount = 0;
+        MockedIdResolver.mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: private PLC resolver - fails
+            return {
+              did: {
+                resolveAtprotoData: jest
+                  .fn()
+                  .mockRejectedValue(new Error('DID not found on private PLC')),
+              },
+            };
+          }
+          // Second call: public PLC resolver - succeeds
+          return {
+            did: {
+              resolveAtprotoData: jest
+                .fn()
+                .mockResolvedValue(resolvedAtprotoData),
+            },
+          };
+        });
+
+        mockedVerifySignature.mockResolvedValue(true);
+
+        const mockUser = {
+          id: 1,
+          ulid: 'user-ulid-123',
+          slug: 'testuser',
+          role: { id: 2 },
+        };
+
+        mockIdentityService.findByDid.mockResolvedValue({
+          userUlid: 'user-ulid-123',
+          did: 'did:plc:testuser123',
+        });
+
+        mockUserService.findByUlid.mockResolvedValue(mockUser);
+
+        const expectedLoginResponse = {
+          token: 'jwt-token',
+          refreshToken: 'refresh-token',
+          tokenExpires: 12345,
+          user: mockUser,
+        };
+        mockAuthService.createLoginSession.mockResolvedValue(
+          expectedLoginResponse,
+        );
+
+        const token = makeJwt(validHeader, validPayload);
+        const result = await service.verifyAndExchange(token, 'tenant1');
+
+        expect(result).toEqual(expectedLoginResponse);
+        // Verify IdResolver was called twice: once with private PLC, once with no args (public)
+        expect(MockedIdResolver).toHaveBeenCalledTimes(2);
+        expect(MockedIdResolver).toHaveBeenNthCalledWith(1, {
+          plcUrl: 'http://plc:2582',
+        });
+        expect(MockedIdResolver).toHaveBeenNthCalledWith(2);
+      });
+
+      it('should throw when DID resolution fails on both private and public PLC', async () => {
+        // Configure DID_PLC_URL so private PLC is used first
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'SERVICE_DID') return 'did:web:api.openmeet.net';
+          if (key === 'DID_PLC_URL') return 'http://plc:2582';
+          return undefined;
+        });
+
+        MockedIdResolver.mockImplementation(() => ({
+          did: {
+            resolveAtprotoData: jest
+              .fn()
+              .mockRejectedValue(new Error('DID not found')),
+          },
+        }));
+
+        const token = makeJwt(validHeader, validPayload);
+
+        await expect(
+          service.verifyAndExchange(token, 'tenant1'),
+        ).rejects.toThrow(UnauthorizedException);
+
+        // Verify IdResolver was called twice (private then public)
+        expect(MockedIdResolver).toHaveBeenCalledTimes(2);
+      });
+
+      it('should not fall back to public PLC when DID_PLC_URL is not configured', async () => {
+        // DID_PLC_URL is undefined (default in beforeEach)
+        MockedIdResolver.mockImplementation(() => ({
+          did: {
+            resolveAtprotoData: jest
+              .fn()
+              .mockRejectedValue(new Error('DID not found')),
+          },
+        }));
+
+        const token = makeJwt(validHeader, validPayload);
+
+        await expect(
+          service.verifyAndExchange(token, 'tenant1'),
+        ).rejects.toThrow(UnauthorizedException);
+
+        // Verify IdResolver was called only once (no fallback without private PLC)
+        expect(MockedIdResolver).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('should return login tokens when JWT is valid and user exists', async () => {
       MockedIdResolver.mockImplementation(() => ({
         did: {
