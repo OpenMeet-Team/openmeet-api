@@ -173,12 +173,10 @@ MAS_COMPAT_TOKEN_TTL=300
 SERVICE_API_KEYS=1234567890abcdef1234567890abcdef,second-key-abcdef1234567890abcdef1234567890
 SERVICE_API_KEY=1234567890abcdef1234567890abcdef
 
-# PDS Configuration for CI (isolated - uses local PLC, not public plc.directory)
+# PDS client configuration for the API (controls how the API connects to the PDS container)
 PDS_URL=http://pds:3000
-PDS_HOSTNAME=pds.test
 PDS_SERVICE_HANDLE_DOMAINS=.pds.test
 PDS_ADMIN_PASSWORD=ci-pds-admin-password
-PDS_JWT_SECRET=ci-pds-jwt-secret-not-for-production
 PDS_CREDENTIAL_KEY_1=Y2ktcGRzLWNyZWRlbnRpYWwta2V5LW5vdC1wcm9kISE=
 
 # ATProto devnet variables (used by atproto-devnet/docker-compose.yml)

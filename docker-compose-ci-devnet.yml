@@ -29,6 +29,7 @@ services:
   pds:
     environment:
       PDS_HOSTNAME: pds.test
+      PDS_INVITE_REQUIRED: "true"
       PDS_ADMIN_PASSWORD: ci-pds-admin-password
       PDS_JWT_SECRET: ci-pds-jwt-secret-not-for-production
       PDS_EMAIL_SMTP_URL: smtp://maildev:1025
