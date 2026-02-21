@@ -39,14 +39,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: OpenMeet-Team/atproto-devnet
-          path: ../atproto-devnet
+          path: atproto-devnet
 
       - name: Run e2e tests
         id: relational
         run: >-
           docker compose
           -f docker-compose.relational.ci.yaml
-          -f ../atproto-devnet/docker-compose.yml
+          -f atproto-devnet/docker-compose.yml
           -f docker-compose-ci-devnet.yml
           --env-file env-example-relational-ci
           -p ci-relational
