@@ -1257,12 +1257,13 @@ export class UserService {
           // First delete all events in this group (FK constraint prevents direct group deletion)
           await eventRepo.delete({ group: { id: group.id } });
 
-          // Then delete all group members
+          // Delete all group members
           const groupMemberRepo =
             transactionalEntityManager.getRepository(GroupMemberEntity);
           await groupMemberRepo.delete({ group: { id: group.id } });
 
           // Delete chat rooms (no TypeORM entity, use raw SQL)
+          // userChatRooms has ON DELETE CASCADE from chatRooms, so no manual cleanup needed
           await transactionalEntityManager.query(
             'DELETE FROM "chatRooms" WHERE "groupId" = $1',
             [group.id],
@@ -1275,7 +1276,7 @@ export class UserService {
             );
           await groupUserPermissionRepo.delete({ group: { id: group.id } });
 
-          // Finally delete the group
+          // Delete the group
           await groupRepo.remove(group);
           this.logger.log(
             `Deleted group ${group.id} and its events - no eligible successor found`,
@@ -1295,7 +1296,7 @@ export class UserService {
         [numericId],
       );
 
-      // 4. Hard delete user (CASCADE handles: memberships, permissions, sessions, attendees)
+      // 4. Hard delete user (CASCADE handles: memberships, sessions, attendees)
       await userRepo.delete(numericId);
     });
 
