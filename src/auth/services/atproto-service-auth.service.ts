@@ -125,10 +125,30 @@ export class AtprotoServiceAuthService {
       const atprotoData = await idResolver.did.resolveAtprotoData(iss);
       signingKey = atprotoData.signingKey;
     } catch (error) {
-      this.logger.warn(
-        `Service auth rejected: DID resolution failed for ${iss}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new UnauthorizedException('Could not resolve DID');
+      // Fallback to public PLC for BYOD/Bluesky DIDs when using private PLC
+      const didPlcUrl = this.configService.get<string>('DID_PLC_URL', {
+        infer: true,
+      });
+      if (didPlcUrl) {
+        this.logger.debug(
+          `DID resolution failed on private PLC for ${iss}, trying public plc.directory`,
+        );
+        try {
+          const publicResolver = new IdResolver();
+          const atprotoData = await publicResolver.did.resolveAtprotoData(iss);
+          signingKey = atprotoData.signingKey;
+        } catch {
+          this.logger.warn(
+            `Service auth rejected: DID resolution failed on both private and public PLC for ${iss}`,
+          );
+          throw new UnauthorizedException('Could not resolve DID');
+        }
+      } else {
+        this.logger.warn(
+          `Service auth rejected: DID resolution failed for ${iss}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        throw new UnauthorizedException('Could not resolve DID');
+      }
     }
 
     // Step 4: Verify JWT signature
