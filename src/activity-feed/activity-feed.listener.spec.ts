@@ -3,7 +3,7 @@ import { ActivityFeedListener } from './activity-feed.listener';
 import { ActivityFeedService } from './activity-feed.service';
 import { GroupService } from '../group/group.service';
 import { UserService } from '../user/user.service';
-import { REQUEST } from '@nestjs/core';
+import { ModuleRef } from '@nestjs/core';
 import { GroupVisibility, EventVisibility } from '../core/constants/constant';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
@@ -17,7 +17,7 @@ describe('ActivityFeedListener', () => {
   let groupService: jest.Mocked<GroupService>;
   let userService: jest.Mocked<UserService>;
   let eventQueryService: jest.Mocked<EventQueryService>;
-  let mockRequest: any;
+  let mockModuleRef: jest.Mocked<ModuleRef>;
 
   const mockPublicGroup: Partial<GroupEntity> = {
     id: 42,
@@ -56,54 +56,30 @@ describe('ActivityFeedListener', () => {
   };
 
   beforeEach(async () => {
-    mockRequest = {
-      tenantId: 'test-tenant',
-    };
+    activityFeedService = { create: jest.fn() } as any;
+    groupService = { getGroupBySlug: jest.fn() } as any;
+    userService = { getUserBySlug: jest.fn(), getUserById: jest.fn() } as any;
+    eventQueryService = { findEventBySlug: jest.fn() } as any;
+
+    mockModuleRef = {
+      registerRequestByContextId: jest.fn(),
+      resolve: jest.fn().mockImplementation((serviceClass) => {
+        if (serviceClass === ActivityFeedService) return activityFeedService;
+        if (serviceClass === GroupService) return groupService;
+        if (serviceClass === UserService) return userService;
+        if (serviceClass === EventQueryService) return eventQueryService;
+        throw new Error(`Unexpected service: ${serviceClass}`);
+      }),
+    } as any;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ActivityFeedListener,
-        {
-          provide: ActivityFeedService,
-          useFactory: () => ({
-            create: jest.fn(),
-          }),
-        },
-        {
-          provide: GroupService,
-          useFactory: () => ({
-            getGroupBySlug: jest.fn(),
-          }),
-        },
-        {
-          provide: UserService,
-          useFactory: () => ({
-            getUserBySlug: jest.fn(),
-            getUserById: jest.fn(),
-          }),
-        },
-        {
-          provide: EventQueryService,
-          useFactory: () => ({
-            findEventBySlug: jest.fn(),
-          }),
-        },
-        {
-          provide: REQUEST,
-          useValue: mockRequest,
-        },
+        { provide: ModuleRef, useValue: mockModuleRef },
       ],
     }).compile();
 
     listener = module.get<ActivityFeedListener>(ActivityFeedListener);
-    activityFeedService = module.get(
-      ActivityFeedService,
-    ) as jest.Mocked<ActivityFeedService>;
-    groupService = module.get(GroupService) as jest.Mocked<GroupService>;
-    userService = module.get(UserService) as jest.Mocked<UserService>;
-    eventQueryService = module.get(
-      EventQueryService,
-    ) as jest.Mocked<EventQueryService>;
 
     jest.clearAllMocks();
   });
@@ -841,6 +817,26 @@ describe('ActivityFeedListener', () => {
       const eventNames = getEventNames('handleEventUpdated');
       expect(eventNames).toContain('event.updated');
       expect(eventNames).toContain('event.ingested.updated');
+    });
+  });
+
+  describe('Tenant context propagation', () => {
+    it('should register synthetic request with tenantId for each event', async () => {
+      const params = {
+        groupSlug: 'tech-talks',
+        userSlug: 'sarah-chen',
+        tenantId: 'firehose-tenant',
+      };
+
+      groupService.getGroupBySlug.mockResolvedValue(mockPublicGroup as GroupEntity);
+      userService.getUserBySlug.mockResolvedValue(mockUser as UserEntity);
+
+      await listener.handleGroupMemberAdded(params);
+
+      expect(mockModuleRef.registerRequestByContextId).toHaveBeenCalledWith(
+        { tenantId: 'firehose-tenant', headers: { 'x-tenant-id': 'firehose-tenant' } },
+        expect.anything(),
+      );
     });
   });
 });
