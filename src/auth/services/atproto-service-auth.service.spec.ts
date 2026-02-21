@@ -9,6 +9,8 @@ import { AtprotoServiceAuthService } from './atproto-service-auth.service';
 import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 import { AuthService } from '../auth.service';
 import { UserService } from '../../user/user.service';
+import { IdResolver } from '@atproto/identity';
+import { verifySignature } from '@atproto/crypto';
 
 // Mock @atproto/identity
 jest.mock('@atproto/identity', () => ({
@@ -23,6 +25,11 @@ jest.mock('@atproto/identity', () => ({
 jest.mock('@atproto/crypto', () => ({
   verifySignature: jest.fn(),
 }));
+
+const MockedIdResolver = IdResolver as jest.MockedClass<typeof IdResolver>;
+const mockedVerifySignature = verifySignature as jest.MockedFunction<
+  typeof verifySignature
+>;
 
 describe('AtprotoServiceAuthService', () => {
   let service: AtprotoServiceAuthService;
@@ -149,9 +156,7 @@ describe('AtprotoServiceAuthService', () => {
     });
 
     it('should reject when DID resolution fails', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IdResolver } = require('@atproto/identity');
-      IdResolver.mockImplementation(() => ({
+      MockedIdResolver.mockImplementation(() => ({
         did: {
           resolveAtprotoData: jest
             .fn()
@@ -167,9 +172,7 @@ describe('AtprotoServiceAuthService', () => {
     });
 
     it('should reject when signature verification fails', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IdResolver } = require('@atproto/identity');
-      IdResolver.mockImplementation(() => ({
+      MockedIdResolver.mockImplementation(() => ({
         did: {
           resolveAtprotoData: jest.fn().mockResolvedValue({
             did: 'did:plc:testuser123',
@@ -180,9 +183,7 @@ describe('AtprotoServiceAuthService', () => {
         },
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { verifySignature } = require('@atproto/crypto');
-      verifySignature.mockResolvedValue(false);
+      mockedVerifySignature.mockResolvedValue(false);
 
       const token = makeJwt(validHeader, validPayload);
 
@@ -192,9 +193,7 @@ describe('AtprotoServiceAuthService', () => {
     });
 
     it('should return 404 when no user found for DID', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IdResolver } = require('@atproto/identity');
-      IdResolver.mockImplementation(() => ({
+      MockedIdResolver.mockImplementation(() => ({
         did: {
           resolveAtprotoData: jest.fn().mockResolvedValue({
             did: 'did:plc:testuser123',
@@ -205,9 +204,7 @@ describe('AtprotoServiceAuthService', () => {
         },
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { verifySignature } = require('@atproto/crypto');
-      verifySignature.mockResolvedValue(true);
+      mockedVerifySignature.mockResolvedValue(true);
 
       mockIdentityService.findByDid.mockResolvedValue(null);
 
@@ -225,9 +222,7 @@ describe('AtprotoServiceAuthService', () => {
         return undefined;
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IdResolver } = require('@atproto/identity');
-      IdResolver.mockImplementation(() => ({
+      MockedIdResolver.mockImplementation(() => ({
         did: {
           resolveAtprotoData: jest.fn().mockResolvedValue({
             did: 'did:plc:testuser123',
@@ -238,9 +233,7 @@ describe('AtprotoServiceAuthService', () => {
         },
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { verifySignature } = require('@atproto/crypto');
-      verifySignature.mockResolvedValue(true);
+      mockedVerifySignature.mockResolvedValue(true);
 
       mockIdentityService.findByDid.mockResolvedValue({
         userUlid: 'user-ulid-123',
@@ -264,15 +257,13 @@ describe('AtprotoServiceAuthService', () => {
       const token = makeJwt(validHeader, validPayload);
       await service.verifyAndExchange(token, 'tenant1');
 
-      expect(IdResolver).toHaveBeenCalledWith({
+      expect(MockedIdResolver).toHaveBeenCalledWith({
         plcUrl: 'https://plc.private.example.com',
       });
     });
 
     it('should return login tokens when JWT is valid and user exists', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IdResolver } = require('@atproto/identity');
-      IdResolver.mockImplementation(() => ({
+      MockedIdResolver.mockImplementation(() => ({
         did: {
           resolveAtprotoData: jest.fn().mockResolvedValue({
             did: 'did:plc:testuser123',
@@ -283,9 +274,7 @@ describe('AtprotoServiceAuthService', () => {
         },
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { verifySignature } = require('@atproto/crypto');
-      verifySignature.mockResolvedValue(true);
+      mockedVerifySignature.mockResolvedValue(true);
 
       const mockUser = {
         id: 1,

@@ -8,6 +8,8 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { IdResolver } from '@atproto/identity';
+import { verifySignature } from '@atproto/crypto';
 import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 import { AuthService } from '../auth.service';
 import { UserService } from '../../user/user.service';
@@ -28,12 +30,9 @@ export class AtprotoServiceAuthService {
     private readonly userService: UserService,
   ) {}
 
-  // Use require() to workaround ts-jest module resolution issues
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private getIdResolver(): any {
     if (!this.idResolver) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IdResolver } = require('@atproto/identity');
       const didPlcUrl = this.configService.get<string>('DID_PLC_URL', {
         infer: true,
       });
@@ -138,8 +137,6 @@ export class AtprotoServiceAuthService {
     const signingInputBytes = new TextEncoder().encode(signingInput);
     const signatureBytes = Buffer.from(signatureB64, 'base64url');
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { verifySignature } = require('@atproto/crypto');
     const isValid = await verifySignature(
       signingKey,
       signingInputBytes,
