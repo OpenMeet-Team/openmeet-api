@@ -10,6 +10,7 @@ import {
   mockSubCategoryService,
   mockFilesS3PresignedService,
   mockUser,
+  mockGroupService,
 } from '../test/mocks';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { Repository } from 'typeorm';
@@ -21,6 +22,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { GroupService } from '../group/group.service';
 
 describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () => {
   let userService: UserService;
@@ -107,6 +109,10 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
         {
           provide: AtprotoHandleCacheService,
           useValue: atprotoHandleCache,
+        },
+        {
+          provide: GroupService,
+          useValue: mockGroupService,
         },
         {
           provide: UserAtprotoIdentityService,
