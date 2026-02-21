@@ -1,27 +1,50 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { ActivityFeedService } from './activity-feed.service';
 import { GroupService } from '../group/group.service';
 import { UserService } from '../user/user.service';
-import { REQUEST } from '@nestjs/core';
 import { GroupVisibility, EventVisibility } from '../core/constants/constant';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+
+interface ResolvedServices {
+  activityFeedService: ActivityFeedService;
+  groupService: GroupService;
+  userService: UserService;
+  eventQueryService: EventQueryService;
+}
 
 @Injectable()
 export class ActivityFeedListener {
   private readonly logger = new Logger(ActivityFeedListener.name);
 
-  constructor(
-    @Inject(REQUEST) private readonly request: any,
-    private readonly activityFeedService: ActivityFeedService,
-    private readonly groupService: GroupService,
-    private readonly userService: UserService,
-    private readonly eventQueryService: EventQueryService,
-  ) {
+  constructor(private readonly moduleRef: ModuleRef) {
     this.logger.log(
       'ActivityFeedListener constructed and ready to handle events',
     );
+  }
+
+  /**
+   * Resolve request-scoped durable services with a synthetic tenant context.
+   * Required because EventEmitter events fire outside HTTP request scope,
+   * so AggregateByTenantContextIdStrategy.attach() is never called and
+   * REQUEST would be undefined. This pattern follows AtprotoSyncScheduler.
+   */
+  private async resolveServices(tenantId: string): Promise<ResolvedServices> {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    const [activityFeedService, groupService, userService, eventQueryService] =
+      await Promise.all([
+        this.moduleRef.resolve(ActivityFeedService, contextId),
+        this.moduleRef.resolve(GroupService, contextId),
+        this.moduleRef.resolve(UserService, contextId),
+        this.moduleRef.resolve(EventQueryService, contextId),
+      ]);
+    return { activityFeedService, groupService, userService, eventQueryService };
   }
 
   @OnEvent('group.created')
@@ -32,6 +55,9 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
+      const { activityFeedService, groupService, userService } =
+        await this.resolveServices(params.tenantId);
+
       this.logger.log('group.created event received', {
         groupId: params.groupId,
         slug: params.slug,
@@ -40,7 +66,7 @@ export class ActivityFeedListener {
       });
 
       // Fetch group entity to get name, visibility
-      const group = await this.groupService.getGroupBySlug(params.slug);
+      const group = await groupService.getGroupBySlug(params.slug);
       if (!group) {
         this.logger.warn(
           `Group not found for slug ${params.slug}, skipping activity creation`,
@@ -49,7 +75,7 @@ export class ActivityFeedListener {
       }
 
       // Fetch user entity to get creator's name
-      const user = await this.userService.getUserById(params.userId);
+      const user = await userService.getUserById(params.userId);
       if (!user) {
         this.logger.warn(
           `User not found for id ${params.userId}, skipping activity creation`,
@@ -61,7 +87,7 @@ export class ActivityFeedListener {
       const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
       // Create group.created activity (always in group feed)
-      await this.activityFeedService.create({
+      await activityFeedService.create({
         activityType: 'group.created',
         feedScope: 'group',
         groupId: group.id,
@@ -81,7 +107,7 @@ export class ActivityFeedListener {
       // Create sitewide activity for discovery (only for public groups)
       if (group.visibility === GroupVisibility.Public) {
         // Public groups: show full details for discovery
-        await this.activityFeedService.create({
+        await activityFeedService.create({
           activityType: 'group.created',
           feedScope: 'sitewide',
           groupId: group.id,
@@ -114,6 +140,9 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
+      const { activityFeedService, groupService, userService } =
+        await this.resolveServices(params.tenantId);
+
       this.logger.log('chat.group.member.add event received', {
         groupSlug: params.groupSlug,
         userSlug: params.userSlug,
@@ -121,7 +150,7 @@ export class ActivityFeedListener {
       });
 
       // Fetch group entity to get id, name, visibility
-      const group = await this.groupService.getGroupBySlug(params.groupSlug);
+      const group = await groupService.getGroupBySlug(params.groupSlug);
       if (!group) {
         this.logger.warn(
           `Group not found for slug ${params.groupSlug}, skipping activity creation`,
@@ -130,7 +159,7 @@ export class ActivityFeedListener {
       }
 
       // Fetch user entity to get id, name
-      const user = await this.userService.getUserBySlug(params.userSlug);
+      const user = await userService.getUserBySlug(params.userSlug);
       if (!user) {
         this.logger.warn(
           `User not found for slug ${params.userSlug}, skipping activity creation`,
@@ -142,7 +171,7 @@ export class ActivityFeedListener {
       const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
       // Create detailed activity (always created)
-      await this.activityFeedService.create({
+      await activityFeedService.create({
         activityType: 'member.joined',
         feedScope: 'group',
         groupId: group.id,
@@ -161,7 +190,7 @@ export class ActivityFeedListener {
       );
 
       // Check for group milestones
-      await this.checkGroupMilestone(group);
+      await this.checkGroupMilestone(group, activityFeedService);
 
       // Private/unlisted groups do not appear in sitewide feed
     } catch (error) {
@@ -181,6 +210,13 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
+      const {
+        activityFeedService,
+        groupService,
+        userService,
+        eventQueryService,
+      } = await this.resolveServices(params.tenantId);
+
       this.logger.log('event created/ingested received', {
         eventId: params.eventId,
         slug: params.slug,
@@ -189,7 +225,7 @@ export class ActivityFeedListener {
       });
 
       // Fetch event entity to get name, groupId
-      const event = await this.eventQueryService.findEventBySlug(params.slug);
+      const event = await eventQueryService.findEventBySlug(params.slug);
       if (!event) {
         this.logger.warn(
           `Event not found for slug ${params.slug}, skipping activity creation`,
@@ -198,7 +234,7 @@ export class ActivityFeedListener {
       }
 
       // Fetch user entity to get creator's name
-      const user = await this.userService.getUserById(params.userId);
+      const user = await userService.getUserById(params.userId);
       if (!user) {
         this.logger.warn(
           `User not found for id ${params.userId}, skipping activity creation`,
@@ -212,7 +248,7 @@ export class ActivityFeedListener {
       // Handle events that belong to a group
       let group: GroupEntity | null = null;
       if (event.group) {
-        group = await this.groupService.getGroupBySlug(event.group.slug);
+        group = await groupService.getGroupBySlug(event.group.slug);
         if (!group) {
           this.logger.warn(
             `Group not found for event ${params.slug}, treating as standalone`,
@@ -222,7 +258,7 @@ export class ActivityFeedListener {
 
       // Create group-scoped activity if event belongs to a group
       if (group) {
-        await this.activityFeedService.create({
+        await activityFeedService.create({
           activityType: 'event.created',
           feedScope: 'group',
           groupId: group.id,
@@ -243,7 +279,7 @@ export class ActivityFeedListener {
         );
       } else {
         // Create event-scoped activity for standalone events
-        await this.activityFeedService.create({
+        await activityFeedService.create({
           activityType: 'event.created',
           feedScope: 'event',
           eventId: event.id,
@@ -272,7 +308,7 @@ export class ActivityFeedListener {
 
         if (shouldShowFullDetails) {
           // Show full details for discovery
-          await this.activityFeedService.create({
+          await activityFeedService.create({
             activityType: 'event.created',
             feedScope: 'sitewide',
             groupId: group?.id,
@@ -314,6 +350,13 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
+      const {
+        activityFeedService,
+        groupService,
+        userService,
+        eventQueryService,
+      } = await this.resolveServices(params.tenantId);
+
       this.logger.log('event rsvp added/ingested received', {
         eventId: params.eventId,
         eventSlug: params.eventSlug,
@@ -324,7 +367,7 @@ export class ActivityFeedListener {
       });
 
       // Fetch event entity to get name, groupId
-      const event = await this.eventQueryService.findEventBySlug(
+      const event = await eventQueryService.findEventBySlug(
         params.eventSlug,
       );
       if (!event) {
@@ -335,7 +378,7 @@ export class ActivityFeedListener {
       }
 
       // Fetch user entity to get actor's name
-      const user = await this.userService.getUserById(params.userId);
+      const user = await userService.getUserById(params.userId);
       if (!user) {
         this.logger.warn(
           `User not found for id ${params.userId}, skipping activity creation`,
@@ -362,7 +405,7 @@ export class ActivityFeedListener {
       // Handle group events and standalone events differently
       if (event.group) {
         // Fetch group entity to get group details
-        const group = await this.groupService.getGroupBySlug(event.group.slug);
+        const group = await groupService.getGroupBySlug(event.group.slug);
         if (!group) {
           this.logger.warn(
             `Group not found for event ${params.eventSlug}, skipping activity creation`,
@@ -371,7 +414,7 @@ export class ActivityFeedListener {
         }
 
         // Create event.rsvp activity in group feed
-        await this.activityFeedService.create({
+        await activityFeedService.create({
           ...baseActivity,
           feedScope: 'group',
           groupId: group.id,
@@ -385,7 +428,7 @@ export class ActivityFeedListener {
         );
       } else {
         // Create event.rsvp activity for standalone events in event feed
-        await this.activityFeedService.create({
+        await activityFeedService.create({
           ...baseActivity,
           feedScope: 'event',
         });
@@ -411,6 +454,9 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
+      const { activityFeedService, groupService, eventQueryService } =
+        await this.resolveServices(params.tenantId);
+
       this.logger.log('event updated/ingested received', {
         eventId: params.eventId,
         slug: params.slug,
@@ -419,7 +465,7 @@ export class ActivityFeedListener {
       });
 
       // Fetch event entity to get name, groupId
-      const event = await this.eventQueryService.findEventBySlug(params.slug);
+      const event = await eventQueryService.findEventBySlug(params.slug);
       if (!event) {
         this.logger.warn(
           `Event not found for slug ${params.slug}, skipping activity creation`,
@@ -430,7 +476,7 @@ export class ActivityFeedListener {
       // Handle group events and standalone events differently
       if (event.group) {
         // Fetch group entity to get group details
-        const group = await this.groupService.getGroupBySlug(event.group.slug);
+        const group = await groupService.getGroupBySlug(event.group.slug);
         if (!group) {
           this.logger.warn(
             `Group not found for event ${params.slug}, skipping activity creation`,
@@ -439,7 +485,7 @@ export class ActivityFeedListener {
         }
 
         // Create event.updated activity in group feed
-        await this.activityFeedService.create({
+        await activityFeedService.create({
           activityType: 'event.updated',
           feedScope: 'group',
           groupId: group.id,
@@ -457,7 +503,7 @@ export class ActivityFeedListener {
         );
       } else {
         // Create event.updated activity for standalone events
-        await this.activityFeedService.create({
+        await activityFeedService.create({
           activityType: 'event.updated',
           feedScope: 'event',
           eventId: event.id,
@@ -485,6 +531,9 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
+      const { activityFeedService, groupService } =
+        await this.resolveServices(params.tenantId);
+
       this.logger.log('group.updated event received', {
         groupId: params.groupId,
         slug: params.slug,
@@ -492,7 +541,7 @@ export class ActivityFeedListener {
       });
 
       // Fetch group entity to get name, visibility
-      const group = await this.groupService.getGroupBySlug(params.slug);
+      const group = await groupService.getGroupBySlug(params.slug);
       if (!group) {
         this.logger.warn(
           `Group not found for slug ${params.slug}, skipping activity creation`,
@@ -501,7 +550,7 @@ export class ActivityFeedListener {
       }
 
       // Create group.updated activity (no aggregation - each update is separate)
-      await this.activityFeedService.create({
+      await activityFeedService.create({
         activityType: 'group.updated',
         feedScope: 'group',
         groupId: group.id,
@@ -524,7 +573,10 @@ export class ActivityFeedListener {
    * Check if group has reached a milestone and create activity if so
    * Milestones: 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000
    */
-  private async checkGroupMilestone(group: any) {
+  private async checkGroupMilestone(
+    group: any,
+    activityFeedService: ActivityFeedService,
+  ) {
     const milestones = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
     const memberCount = group.memberCount || 0;
 
@@ -536,7 +588,7 @@ export class ActivityFeedListener {
 
       try {
         // Create milestone activity
-        await this.activityFeedService.create({
+        await activityFeedService.create({
           activityType: 'group.milestone',
           feedScope: 'group',
           groupId: group.id,
@@ -552,7 +604,7 @@ export class ActivityFeedListener {
 
         // For public groups, also create sitewide milestone activity
         if (group.visibility === GroupVisibility.Public) {
-          await this.activityFeedService.create({
+          await activityFeedService.create({
             activityType: 'group.milestone',
             feedScope: 'sitewide',
             groupId: group.id,
