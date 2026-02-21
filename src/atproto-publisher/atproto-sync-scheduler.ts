@@ -95,25 +95,36 @@ export class AtprotoSyncScheduler {
         );
 
         if (result.action === 'updated' || result.action === 'published') {
-          await eventRepository.update(
-            { id: event.id },
-            {
+          // Use QueryBuilder with raw SQL now() so that atprotoSyncedAt and
+          // @UpdateDateColumn's updatedAt get the same database timestamp.
+          // Using new Date() from JS creates a 1-7ms gap where updatedAt
+          // (set by the DB) is always slightly ahead, causing infinite re-syncs.
+          await eventRepository
+            .createQueryBuilder()
+            .update(EventEntity)
+            .set({
               atprotoUri: result.atprotoUri,
               atprotoRkey: result.atprotoRkey,
               atprotoCid: result.atprotoCid,
-              atprotoSyncedAt: new Date(),
-            },
-          );
+              atprotoSyncedAt: () => 'now()',
+            })
+            .where('id = :id', { id: event.id })
+            .execute();
           this.logger.log(`Retry-synced event ${event.slug} to ATProto`);
         }
 
         if (result.action === 'conflict') {
           // Stop retrying — accept that PDS has diverged.
           // Firehose will deliver the PDS version for reconciliation.
-          await eventRepository.update(
-            { id: event.id },
-            { atprotoSyncedAt: new Date() },
-          );
+          // Use raw SQL now() to match @UpdateDateColumn's timestamp (see above).
+          await eventRepository
+            .createQueryBuilder()
+            .update(EventEntity)
+            .set({
+              atprotoSyncedAt: () => 'now()',
+            })
+            .where('id = :id', { id: event.id })
+            .execute();
           this.logger.warn(
             `Conflict retrying event ${event.slug} — PDS record was modified externally. Marked as synced to stop retry loop.`,
             { tenantId, slug: event.slug },
