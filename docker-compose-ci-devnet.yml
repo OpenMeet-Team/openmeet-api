@@ -22,12 +22,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - default
 
   # ── Connect devnet PDS to CI's maildev + CI-specific config ──────
   pds:
     environment:
       PDS_HOSTNAME: pds.test
       PDS_ADMIN_PASSWORD: ci-pds-admin-password
+      PDS_JWT_SECRET: ci-pds-jwt-secret-not-for-production
       PDS_EMAIL_SMTP_URL: smtp://maildev:1025
       PDS_EMAIL_FROM_ADDRESS: noreply@test.invalid
       PDS_SERVICE_HANDLE_DOMAINS: .pds.test
@@ -35,6 +38,8 @@ services:
     depends_on:
       maildev:
         condition: service_started
+    networks:
+      - default
 
   # ── Suppress services not needed for CI e2e tests ────────────────
   jetstream:
