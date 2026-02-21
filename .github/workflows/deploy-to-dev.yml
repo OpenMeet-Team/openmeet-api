@@ -35,9 +35,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout atproto-devnet
+        uses: actions/checkout@v4
+        with:
+          repository: OpenMeet-Team/atproto-devnet
+          path: atproto-devnet
+          ref: v0.1.0
+
       - name: Run e2e tests
         id: relational
-        run: docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational-ci -p ci-relational up --build --exit-code-from api
+        run: >-
+          docker compose
+          -f docker-compose.relational.ci.yaml
+          -f atproto-devnet/docker-compose.yml
+          -f docker-compose-ci-devnet.yml
+          --env-file env-example-relational-ci
+          -p ci-relational
+          up --build --exit-code-from api
 
       - name: Copy prod.log from container to host
         if: ${{ failure() && steps.relational.conclusion == 'failure' }}
