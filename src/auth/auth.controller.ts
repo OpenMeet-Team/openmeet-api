@@ -375,6 +375,9 @@ export class AuthController {
 
   @Post('atproto/service-auth')
   @Public()
+  @Throttle({
+    default: { limit: 10, ttl: 60000 },
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Exchange a PDS-signed JWT for OpenMeet tokens',
@@ -384,11 +387,22 @@ export class AuthController {
   @ApiOkResponse({ type: LoginResponseDto })
   async atprotoServiceAuth(
     @Body() dto: AtprotoServiceAuthDto,
+    @Res({ passthrough: true }) response: Response,
     @Request() request,
   ): Promise<LoginResponseDto> {
-    return this.atprotoServiceAuthService.verifyAndExchange(
+    const loginResult = await this.atprotoServiceAuthService.verifyAndExchange(
       dto.token,
       request.tenantId,
     );
+
+    // Set oidc_session cookie for cross-domain OIDC authentication (Matrix, etc.)
+    if (loginResult.sessionId) {
+      const cookieOptions = getOidcCookieOptions();
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
+    }
+
+    return loginResult;
   }
 }

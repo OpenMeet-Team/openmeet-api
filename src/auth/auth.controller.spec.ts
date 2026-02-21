@@ -7,10 +7,15 @@ import { AtprotoServiceAuthService } from './services/atproto-service-auth.servi
 describe('AuthController', () => {
   let controller: AuthController;
   let mockAtprotoServiceAuthService: { verifyAndExchange: jest.Mock };
+  let mockResponse: { cookie: jest.Mock };
 
   beforeEach(async () => {
     mockAtprotoServiceAuthService = {
       verifyAndExchange: jest.fn(),
+    };
+
+    mockResponse = {
+      cookie: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -66,12 +71,45 @@ describe('AuthController', () => {
       const dto = { token: 'pds-signed-jwt' };
       const request = { tenantId: 'test-tenant' };
 
-      const result = await controller.atprotoServiceAuth(dto, request);
+      const result = await controller.atprotoServiceAuth(
+        dto,
+        mockResponse as any,
+        request,
+      );
 
       expect(result).toEqual(mockLoginResponse);
       expect(
         mockAtprotoServiceAuthService.verifyAndExchange,
       ).toHaveBeenCalledWith('pds-signed-jwt', 'test-tenant');
+    });
+
+    it('should set oidc cookies when sessionId is present', async () => {
+      const mockLoginResponse = {
+        token: 'jwt-token',
+        refreshToken: 'refresh-token',
+        tokenExpires: 12345,
+        sessionId: 'session-id-123',
+        user: { id: 1, ulid: 'user-ulid' },
+      };
+      mockAtprotoServiceAuthService.verifyAndExchange.mockResolvedValue(
+        mockLoginResponse,
+      );
+
+      const dto = { token: 'pds-signed-jwt' };
+      const request = { tenantId: 'test-tenant' };
+
+      await controller.atprotoServiceAuth(dto, mockResponse as any, request);
+
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'oidc_session',
+        'session-id-123',
+        expect.any(Object),
+      );
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'oidc_tenant',
+        'test-tenant',
+        expect.any(Object),
+      );
     });
 
     it('should propagate errors from verifyAndExchange', async () => {
@@ -82,9 +120,9 @@ describe('AuthController', () => {
       const dto = { token: 'bad-token' };
       const request = { tenantId: 'test-tenant' };
 
-      await expect(controller.atprotoServiceAuth(dto, request)).rejects.toThrow(
-        'Invalid signature',
-      );
+      await expect(
+        controller.atprotoServiceAuth(dto, mockResponse as any, request),
+      ).rejects.toThrow('Invalid signature');
     });
   });
 });
