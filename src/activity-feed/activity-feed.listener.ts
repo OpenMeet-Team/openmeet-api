@@ -39,10 +39,14 @@ export class ActivityFeedListener {
     );
     const [activityFeedService, groupService, userService, eventQueryService] =
       await Promise.all([
-        this.moduleRef.resolve(ActivityFeedService, contextId),
-        this.moduleRef.resolve(GroupService, contextId),
-        this.moduleRef.resolve(UserService, contextId),
-        this.moduleRef.resolve(EventQueryService, contextId),
+        this.moduleRef.resolve(ActivityFeedService, contextId, {
+          strict: false,
+        }),
+        this.moduleRef.resolve(GroupService, contextId, { strict: false }),
+        this.moduleRef.resolve(UserService, contextId, { strict: false }),
+        this.moduleRef.resolve(EventQueryService, contextId, {
+          strict: false,
+        }),
       ]);
     return { activityFeedService, groupService, userService, eventQueryService };
   }
