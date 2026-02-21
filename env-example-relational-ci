@@ -180,3 +180,14 @@ PDS_SERVICE_HANDLE_DOMAINS=.pds.test
 PDS_ADMIN_PASSWORD=ci-pds-admin-password
 PDS_JWT_SECRET=ci-pds-jwt-secret-not-for-production
 PDS_CREDENTIAL_KEY_1=Y2ktcGRzLWNyZWRlbnRpYWwta2V5LW5vdC1wcm9kISE=
+
+# ATProto devnet variables (used by atproto-devnet/docker-compose.yml)
+DEVNET_DB_USER=root
+DEVNET_DB_PASSWORD=secret
+DEVNET_DB_HOST=postgres
+DEVNET_DB_PORT=5432
+DEVNET_DB_NAME=plc
+DEVNET_PDS_HOSTNAME=pds.test
+DEVNET_PDS_ADMIN_PASSWORD=ci-pds-admin-password
+DEVNET_SMTP_URL=smtp://maildev:1025
+DEVNET_HANDLE_DOMAIN=.pds.test
