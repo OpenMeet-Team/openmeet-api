@@ -362,6 +362,103 @@ describe('User Hard Delete E2E Tests', () => {
 
       expect(eventDeletedResponse.status).toBe(404);
     });
+
+    it('should detach other users events when group is deleted (no successor)', async () => {
+      // Create owner user
+      const ownerUser = await createTestUser(
+        app,
+        TESTING_TENANT_ID,
+        `owner-detach-${Date.now()}@test.openmeet.net`,
+        'Owner',
+        'DetachTest',
+      );
+
+      // Create regular member (not admin/moderator — no successor)
+      const otherUser = await createTestUser(
+        app,
+        TESTING_TENANT_ID,
+        `other-detach-${Date.now()}@test.openmeet.net`,
+        'Other',
+        'DetachTest',
+      );
+
+      // Create a group as the owner
+      const group = await createGroup(app, ownerUser.token, {
+        name: `Detach Test Group ${Date.now()}`,
+        description: 'Group for testing event detachment',
+        status: GroupStatus.Published,
+        visibility: GroupVisibility.Public,
+      });
+
+      // Other user joins the group
+      const joinResult = await joinGroup(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        otherUser.token,
+      );
+      await approveMember(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        joinResult.id,
+        ownerUser.token,
+      );
+
+      // Other user creates an event in the group
+      const otherUserEvent = await createEvent(app, otherUser.token, {
+        name: `Other User Event ${Date.now()}`,
+        description: 'Event owned by other user in group',
+        type: EventType.Online,
+        locationOnline: 'https://meet.example.com',
+        status: EventStatus.Published,
+        group: group.id,
+      });
+
+      // Owner creates an event in the group
+      const ownerEvent = await createEvent(app, ownerUser.token, {
+        name: `Owner Event ${Date.now()}`,
+        description: 'Event owned by owner in group',
+        type: EventType.Online,
+        locationOnline: 'https://meet.example.com',
+        status: EventStatus.Published,
+        group: group.id,
+      });
+
+      // Delete the owner — no eligible successor, group should be deleted
+      const deleteResponse = await request(app)
+        .delete(`/api/v1/users/${ownerUser.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(deleteResponse.status).toBe(204);
+
+      // Verify group is gone
+      const groupResponse = await request(app)
+        .get(`/api/groups/${group.slug}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(groupResponse.status).toBe(404);
+
+      // Verify other user's event still exists but is detached (group is null)
+      const otherEventResponse = await request(app)
+        .get(`/api/events/${otherUserEvent.slug}`)
+        .set('Authorization', `Bearer ${otherUser.token}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(otherEventResponse.status).toBe(200);
+      expect(otherEventResponse.body.slug).toBe(otherUserEvent.slug);
+      expect(otherEventResponse.body.group).toBeNull();
+
+      // Verify owner's group event is deleted (it was detached, then
+      // cleaned up as a standalone event belonging to the deleted user)
+      const ownerEventResponse = await request(app)
+        .get(`/api/events/${ownerEvent.slug}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(ownerEventResponse.status).toBe(404);
+    });
   });
 
   describe('Deterministic Successor Selection', () => {

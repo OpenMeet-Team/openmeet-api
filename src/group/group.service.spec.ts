@@ -307,6 +307,105 @@ describe('GroupService', () => {
     });
   });
 
+  describe('removeGroupForUserDeletion', () => {
+    it('should detach events, delete members/permissions, and remove group', async () => {
+      const testGroup = {
+        ...mockGroup,
+        matrixRoomId: 'room-123',
+      } as GroupEntity;
+
+      jest
+        .spyOn(service['groupRepository'], 'save')
+        .mockResolvedValue(testGroup);
+      jest
+        .spyOn(service['groupRepository'], 'remove')
+        .mockResolvedValue(testGroup);
+      jest
+        .spyOn(service['groupMembersRepository'], 'delete')
+        .mockResolvedValue(new DeleteResult());
+      jest
+        .spyOn(service['groupMemberPermissionsRepository'], 'delete')
+        .mockResolvedValue(new DeleteResult());
+      jest
+        .spyOn(service['eventManagementService'], 'detachEventsFromGroup')
+        .mockResolvedValue(3);
+
+      await service.removeGroupForUserDeletion(testGroup);
+
+      expect(
+        service['eventManagementService'].detachEventsFromGroup,
+      ).toHaveBeenCalledWith(testGroup.id);
+      expect(service['groupMembersRepository'].delete).toHaveBeenCalledWith({
+        group: { id: testGroup.id },
+      });
+      expect(
+        service['groupMemberPermissionsRepository'].delete,
+      ).toHaveBeenCalledWith({ group: { id: testGroup.id } });
+      expect(service['groupRepository'].remove).toHaveBeenCalledWith(
+        testGroup,
+      );
+    });
+
+    it('should clear matrixRoomId before deletion', async () => {
+      const testGroup = {
+        ...mockGroup,
+        matrixRoomId: 'room-456',
+      } as GroupEntity;
+
+      jest
+        .spyOn(service['groupRepository'], 'save')
+        .mockResolvedValue(testGroup);
+      jest
+        .spyOn(service['groupRepository'], 'remove')
+        .mockResolvedValue(testGroup);
+      jest
+        .spyOn(service['groupMembersRepository'], 'delete')
+        .mockResolvedValue(new DeleteResult());
+      jest
+        .spyOn(service['groupMemberPermissionsRepository'], 'delete')
+        .mockResolvedValue(new DeleteResult());
+      jest
+        .spyOn(service['eventManagementService'], 'detachEventsFromGroup')
+        .mockResolvedValue(0);
+
+      await service.removeGroupForUserDeletion(testGroup);
+
+      expect(service['groupRepository'].save).toHaveBeenCalledWith(
+        expect.objectContaining({ matrixRoomId: '' }),
+      );
+    });
+
+    it('should emit group events', async () => {
+      const testGroup = { ...mockGroup, matrixRoomId: '' } as GroupEntity;
+
+      jest
+        .spyOn(service['groupRepository'], 'save')
+        .mockResolvedValue(testGroup);
+      jest
+        .spyOn(service['groupRepository'], 'remove')
+        .mockResolvedValue(testGroup);
+      jest
+        .spyOn(service['groupMembersRepository'], 'delete')
+        .mockResolvedValue(new DeleteResult());
+      jest
+        .spyOn(service['groupMemberPermissionsRepository'], 'delete')
+        .mockResolvedValue(new DeleteResult());
+      jest
+        .spyOn(service['eventManagementService'], 'detachEventsFromGroup')
+        .mockResolvedValue(0);
+
+      const emitSpy = jest.spyOn(service['eventEmitter'], 'emit');
+
+      await service.removeGroupForUserDeletion(testGroup);
+
+      expect(emitSpy).toHaveBeenCalledWith(
+        'group.before_delete',
+        expect.objectContaining({ groupId: testGroup.id }),
+      );
+      expect(emitSpy).toHaveBeenCalledWith('group.deleted', testGroup);
+    });
+  });
+
   describe('getHomePageFeaturedGroups', () => {
     it('should return featured groups', async () => {
       jest

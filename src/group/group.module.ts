@@ -38,7 +38,7 @@ import { ConfigModule } from '@nestjs/config';
     GroupMemberModule,
     EventAttendeeModule,
     forwardRef(() => AuthModule),
-    GroupMailModule,
+    forwardRef(() => GroupMailModule),
     forwardRef(() => EventModule),
     EventMailModule,
     BlueskyModule,

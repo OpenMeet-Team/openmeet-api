@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { MailService } from '../mail/mail.service';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { UserService } from '../user/user.service';
@@ -17,6 +17,7 @@ export class GroupMailService {
   constructor(
     private readonly mailService: MailService,
     private readonly groupMemberService: GroupMemberService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
   ) {}
 

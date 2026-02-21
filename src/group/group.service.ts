@@ -8,6 +8,7 @@ import {
   BadRequestException,
   ConflictException,
   Logger,
+  forwardRef,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
@@ -52,7 +53,6 @@ import { Trace } from '../utils/trace.decorator';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventRecommendationService } from '../event/services/event-recommendation.service';
-// import { forwardRef } from '@nestjs/common'; // Currently not used
 // ChatRoomService removed - Matrix Application Service handles room operations directly
 
 @Injectable({ scope: Scope.REQUEST })
@@ -76,6 +76,7 @@ export class GroupService {
     private readonly fileService: FilesS3PresignedService,
     private readonly groupRoleService: GroupRoleService,
     private readonly mailService: MailService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly groupMailService: GroupMailService,
@@ -749,6 +750,42 @@ export class GroupService {
       );
       throw error;
     }
+  }
+
+  async removeGroupForUserDeletion(group: GroupEntity): Promise<void> {
+    await this.getTenantSpecificGroupRepository();
+    const tenantId = this.request.tenantId;
+
+    this.eventEmitter.emit('group.before_delete', {
+      groupId: group.id,
+      groupSlug: group.slug,
+      groupName: group.name,
+      tenantId,
+    });
+
+    if (group.matrixRoomId) {
+      group.matrixRoomId = '';
+      await this.groupRepository.save(group);
+    }
+
+    await this.eventManagementService.detachEventsFromGroup(group.id);
+    await this.groupMembersRepository.delete({ group: { id: group.id } });
+    await this.groupMemberPermissionsRepository.delete({
+      group: { id: group.id },
+    });
+    await this.groupRepository.remove(group);
+
+    this.eventEmitter.emit('group.deleted', group);
+
+    this.auditLogger.log('group deleted (user deletion, no successor)', {
+      groupId: group.id,
+      groupSlug: group.slug,
+      tenantId,
+    });
+
+    this.logger.log(
+      `Deleted group ${group.slug} during user deletion - no eligible successor`,
+    );
   }
 
   async getHomePageFeaturedGroups(): Promise<GroupEntity[]> {

@@ -1568,6 +1568,31 @@ export class EventManagementService {
     });
   }
 
+  @Trace('event-management.detachEventsFromGroup')
+  async detachEventsFromGroup(groupId: number): Promise<number> {
+    await this.initializeRepository();
+
+    const result = await this.eventRepository
+      .createQueryBuilder()
+      .update(EventEntity)
+      .set({ group: null })
+      .where('"groupId" = :groupId', { groupId })
+      .execute();
+
+    const detachedCount = result.affected || 0;
+
+    this.logger.log(
+      `Detached ${detachedCount} events from group ${groupId}`,
+    );
+
+    this.auditLogger.log('events detached from group', {
+      groupId,
+      detachedCount,
+    });
+
+    return detachedCount;
+  }
+
   @Trace('event-management.attendEvent')
   async attendEvent(
     slug: string,

@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Logger,
   BadRequestException,
+  forwardRef,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
@@ -40,6 +41,7 @@ import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.servi
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { ProfileSummaryDto } from './dto/profile-summary.dto';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { GroupService } from '../group/group.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -63,6 +65,8 @@ export class UserService {
     private readonly blueskyIdentityService: BlueskyIdentityService,
     private readonly atprotoHandleCacheService: AtprotoHandleCacheService,
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
+    @Inject(forwardRef(() => GroupService))
+    private readonly groupService: GroupService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -1176,111 +1180,108 @@ export class UserService {
     // Set up tenant-specific repository
     await this.getTenantSpecificRepository();
 
-    // Wrap all database operations in a transaction
+    // 1. Handle groups owned by this user (pre-transaction)
+    // Determine successor for each group, delegate no-successor deletions to GroupService
+    const ownedGroups = await this.groupRepository.find({
+      where: { createdBy: { id: numericId } },
+      relations: [
+        'groupMembers',
+        'groupMembers.user',
+        'groupMembers.groupRole',
+      ],
+    });
+
+    // Classify groups by succession outcome
+    const rolePriority: Record<string, number> = {
+      owner: 1,
+      admin: 2,
+      moderator: 3,
+    };
+
+    const groupsWithSuccessors: Array<{
+      group: GroupEntity;
+      successor: GroupMemberEntity;
+    }> = [];
+
+    for (const group of ownedGroups) {
+      const eligibleSuccessors = group.groupMembers
+        .filter(
+          (m) =>
+            m.user &&
+            m.user.id !== numericId &&
+            ['admin', 'moderator', 'owner'].includes(
+              m.groupRole?.name?.toLowerCase() || '',
+            ),
+        )
+        .sort((a, b) => {
+          const aPriority =
+            rolePriority[a.groupRole?.name?.toLowerCase()] || 99;
+          const bPriority =
+            rolePriority[b.groupRole?.name?.toLowerCase()] || 99;
+          if (aPriority !== bPriority) return aPriority - bPriority;
+
+          const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return aDate - bDate;
+        });
+
+      const successor = eligibleSuccessors[0];
+      if (successor) {
+        groupsWithSuccessors.push({ group, successor });
+      } else {
+        // No eligible successor — delegate full group cleanup to GroupService
+        // Events are detached (groupId=null), not deleted. The departing user's
+        // detached events get cleaned up by standalone event deletion below.
+        await this.groupService.removeGroupForUserDeletion(group);
+      }
+    }
+
+    // 2. Transaction: ownership transfers + user deletion
     await this.dataSource.transaction(async (transactionalEntityManager) => {
       const groupRepo = transactionalEntityManager.getRepository(GroupEntity);
       const eventRepo = transactionalEntityManager.getRepository(EventEntity);
       const userRepo = transactionalEntityManager.getRepository(UserEntity);
 
-      // 1. Handle groups owned by this user
-      const ownedGroups = await groupRepo.find({
-        where: { createdBy: { id: numericId } },
-        relations: [
-          'groupMembers',
-          'groupMembers.user',
-          'groupMembers.groupRole',
-        ],
-      });
+      // Transfer ownership for groups with successors
+      for (const { group, successor } of groupsWithSuccessors) {
+        group.createdBy = successor.user;
+        await groupRepo.save(group);
 
-      for (const group of ownedGroups) {
-        // Find eligible successor with deterministic selection:
-        // Priority: owner > admin > moderator, then by earliest join date
-        const rolePriority: Record<string, number> = {
-          owner: 1,
-          admin: 2,
-          moderator: 3,
-        };
+        const groupRoleRepo =
+          transactionalEntityManager.getRepository(GroupRoleEntity);
+        const ownerRole = await groupRoleRepo.findOne({
+          where: { name: GroupRole.Owner },
+        });
 
-        const eligibleSuccessors = group.groupMembers
-          .filter(
-            (m) =>
-              m.user.id !== numericId &&
-              ['admin', 'moderator', 'owner'].includes(
-                m.groupRole?.name?.toLowerCase() || '',
-              ),
-          )
-          .sort((a, b) => {
-            // Sort by role priority first
-            const aPriority =
-              rolePriority[a.groupRole?.name?.toLowerCase()] || 99;
-            const bPriority =
-              rolePriority[b.groupRole?.name?.toLowerCase()] || 99;
-            if (aPriority !== bPriority) return aPriority - bPriority;
-
-            // Then by join date (earliest first)
-            const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return aDate - bDate;
-          });
-
-        const successor = eligibleSuccessors[0];
-
-        if (successor) {
-          // Transfer ownership
-          group.createdBy = successor.user;
-          await groupRepo.save(group);
-
-          // Also elevate the successor's role to owner so they have full permissions
-          const groupRoleRepo =
-            transactionalEntityManager.getRepository(GroupRoleEntity);
-          const ownerRole = await groupRoleRepo.findOne({
-            where: { name: GroupRole.Owner },
-          });
-
-          if (ownerRole) {
-            const groupMemberRepo =
-              transactionalEntityManager.getRepository(GroupMemberEntity);
-            successor.groupRole = ownerRole;
-            await groupMemberRepo.save(successor);
-            this.logger.log(
-              `Transferred ownership of group ${group.id} to user ${successor.user.id} and elevated role to owner`,
-            );
-          } else {
-            this.logger.warn(
-              `Transferred ownership of group ${group.id} to user ${successor.user.id} but could not find owner role to elevate permissions`,
-            );
-          }
-        } else {
-          // No one to take over - delete the group and all its content
-          // First delete all events in this group (FK constraint prevents direct group deletion)
-          await eventRepo.delete({ group: { id: group.id } });
-
-          // Then delete all group members
+        if (ownerRole) {
           const groupMemberRepo =
             transactionalEntityManager.getRepository(GroupMemberEntity);
-          await groupMemberRepo.delete({ group: { id: group.id } });
-
-          // Finally delete the group
-          await groupRepo.remove(group);
+          successor.groupRole = ownerRole;
+          await groupMemberRepo.save(successor);
           this.logger.log(
-            `Deleted group ${group.id} and its events - no eligible successor found`,
+            `Transferred ownership of group ${group.id} to user ${successor.user.id} and elevated role to owner`,
+          );
+        } else {
+          this.logger.warn(
+            `Transferred ownership of group ${group.id} to user ${successor.user.id} but could not find owner role to elevate permissions`,
           );
         }
       }
 
-      // 2. Delete standalone events (events not in any group)
+      // Delete standalone events (events not in any group, including those
+      // recently detached from deleted groups)
       await eventRepo.delete({
         user: { id: numericId },
         group: IsNull(),
       });
 
-      // 3. Clean up from global Matrix handle registry table
+      // Clean up from global Matrix handle registry table
       await transactionalEntityManager.query(
         'DELETE FROM "matrixHandleRegistry" WHERE "userId" = $1',
         [numericId],
       );
 
-      // 4. Hard delete user (CASCADE handles: memberships, permissions, sessions, attendees)
+      // Hard delete user (CASCADE handles: memberships, permissions, sessions, attendees)
       await userRepo.delete(numericId);
     });
 

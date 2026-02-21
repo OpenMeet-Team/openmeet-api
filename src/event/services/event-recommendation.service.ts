@@ -1,4 +1,4 @@
-import { Injectable, Scope, Inject, Logger } from '@nestjs/common';
+import { Injectable, Scope, Inject, Logger, forwardRef } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository, MoreThan } from 'typeorm';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
@@ -17,6 +17,7 @@ export class EventRecommendationService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
+    @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
   ) {
     void this.initializeRepository();

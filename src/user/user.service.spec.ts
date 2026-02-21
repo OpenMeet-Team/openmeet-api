@@ -27,6 +27,7 @@ import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.servi
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { StatusEnum } from '../status/status.enum';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { GroupService } from '../group/group.service';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -110,6 +111,12 @@ describe('UserService', () => {
             create: jest.fn(),
             deleteByUserUlid: jest.fn(),
             update: jest.fn(),
+          },
+        },
+        {
+          provide: GroupService,
+          useValue: {
+            removeGroupForUserDeletion: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -2305,7 +2312,7 @@ describe('UserService', () => {
       expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
     });
 
-    it('should delete group when no eligible successor exists', async () => {
+    it('should delegate group deletion to GroupService when no eligible successor exists', async () => {
       const userId = 123;
 
       // Mock an owned group with no other members
@@ -2325,13 +2332,16 @@ describe('UserService', () => {
       setupMockRepositories();
 
       mockGroupRepository.find.mockResolvedValue([mockOwnedGroup]);
-      mockGroupRepository.remove.mockResolvedValue(mockOwnedGroup);
       mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      const mockGroupServiceInstance = (userService as any).groupService;
 
       await userService.remove(userId);
 
-      // Verify group was deleted
-      expect(mockGroupRepository.remove).toHaveBeenCalledWith(mockOwnedGroup);
+      // Verify delegation to GroupService (not direct repo manipulation)
+      expect(
+        mockGroupServiceInstance.removeGroupForUserDeletion,
+      ).toHaveBeenCalledWith(mockOwnedGroup);
 
       // Verify user was hard deleted
       expect(mockUsersRepository.delete).toHaveBeenCalledWith(userId);
