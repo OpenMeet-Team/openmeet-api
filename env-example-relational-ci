@@ -179,6 +179,9 @@ PDS_SERVICE_HANDLE_DOMAINS=.pds.test
 PDS_ADMIN_PASSWORD=ci-pds-admin-password
 PDS_CREDENTIAL_KEY_1=Y2ktcGRzLWNyZWRlbnRpYWwta2V5LW5vdC1wcm9kISE=
 
+# ATProto DID PLC URL (tells the API where to resolve did:plc: identifiers)
+DID_PLC_URL=http://plc:2582
+
 # ATProto devnet variables (used by atproto-devnet/docker-compose.yml)
 DEVNET_DB_USER=root
 DEVNET_DB_PASSWORD=secret
