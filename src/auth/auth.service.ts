@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpStatus,
   Injectable,
   NotFoundException,
@@ -58,6 +59,9 @@ import { BlueskyService } from '../bluesky/bluesky.service';
 import { PdsApiError } from '../pds/pds.errors';
 import { MeResponse } from './dto/me-response.dto';
 import { AtprotoIdentityDto } from '../atproto-identity/dto/atproto-identity.dto';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { getTenantConfig } from '../utils/tenant-config';
+import { CreateLoginLinkResponseDto } from './dto/create-login-link-response.dto';
 
 @Injectable()
 export class AuthService {
@@ -81,6 +85,7 @@ export class AuthService {
     private userAtprotoIdentityService: UserAtprotoIdentityService,
     private blueskyIdentityService: BlueskyIdentityService,
     private blueskyService: BlueskyService,
+    private elastiCacheService: ElastiCacheService,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
@@ -1473,6 +1478,135 @@ export class AuthService {
     return {
       success: true,
       message: 'We sent a login code to your email.',
+    };
+  }
+
+  /**
+   * Create a one-time login link that opens a browser session.
+   *
+   * Used by cross-app integrations (e.g., Roomy) to generate a URL
+   * that logs the user into the OpenMeet platform when opened in a browser.
+   *
+   * @param userId - The authenticated user's ID
+   * @param tenantId - Tenant identifier
+   * @param redirectPath - Relative path to redirect to after login (must start with /)
+   * @returns URL and expiry time
+   */
+  async createLoginLink(
+    userId: number,
+    tenantId: string,
+    redirectPath: string,
+  ): Promise<CreateLoginLinkResponseDto> {
+    // Validate redirectPath to prevent open redirect attacks
+    if (!redirectPath.startsWith('/')) {
+      throw new BadRequestException('redirectPath must start with /');
+    }
+    if (redirectPath.includes('://')) {
+      throw new BadRequestException('redirectPath must not contain ://');
+    }
+
+    // Generate cryptographically secure random code
+    const code = crypto.randomBytes(32).toString('hex');
+    const redisKey = `login_link:${code}`;
+    const ttlSeconds = 60;
+
+    // Store login link data in Redis
+    await this.elastiCacheService.set(
+      redisKey,
+      {
+        userId,
+        tenantId,
+        redirectPath,
+      },
+      ttlSeconds,
+    );
+
+    // Build the URL using the tenant's frontend domain
+    const tenantConfig = getTenantConfig(tenantId);
+    const encodedRedirect = encodeURIComponent(redirectPath);
+    const url = `${tenantConfig.frontendDomain}/auth/token-login?code=${code}&redirect=${encodedRedirect}`;
+
+    return {
+      url,
+      expiresIn: ttlSeconds,
+    };
+  }
+
+  /**
+   * Exchange a one-time login link code for JWT tokens.
+   *
+   * This is a public endpoint (no auth required). The code is validated
+   * against Redis, consumed (deleted), and JWT tokens are returned.
+   *
+   * @param code - The 64-character hex code from the login link URL
+   * @param tenantId - Tenant identifier
+   * @returns Login tokens
+   */
+  async exchangeLoginLink(
+    code: string,
+    tenantId: string,
+  ): Promise<LoginResponseDto> {
+    const redisKey = `login_link:${code}`;
+
+    // Retrieve and validate the login link data
+    const linkData = await this.elastiCacheService.get<{
+      userId: number;
+      tenantId: string;
+      redirectPath: string;
+    }>(redisKey);
+
+    if (!linkData) {
+      throw new UnauthorizedException('Invalid or expired login link');
+    }
+
+    // Security: ensure tenant matches
+    if (linkData.tenantId !== tenantId) {
+      // Delete the code to prevent further attempts
+      await this.elastiCacheService.del(redisKey);
+      throw new UnauthorizedException('Invalid or expired login link');
+    }
+
+    // Consume the code (one-time use)
+    await this.elastiCacheService.del(redisKey);
+
+    // Look up the user
+    const user = await this.userService.findById(linkData.userId);
+    if (!user || !user.role) {
+      throw new UnauthorizedException('Invalid or expired login link');
+    }
+
+    // Create session and return tokens (same pattern as other login methods)
+    const hash = crypto
+      .createHash('sha256')
+      .update(randomStringGenerator())
+      .digest('hex');
+
+    const secureId = crypto.randomUUID();
+
+    const session = await this.sessionService.create(
+      {
+        user,
+        hash,
+        secureId,
+      },
+      tenantId,
+    );
+
+    const { token, refreshToken, tokenExpires } = await this.getTokensData({
+      id: user.id,
+      role: user.role,
+      slug: user.slug,
+      sessionId: session.secureId,
+      hash,
+      tenantId,
+    });
+
+    return {
+      token,
+      refreshToken,
+      tokenExpires,
+      user,
+      sessionId: session.secureId,
     };
   }
 

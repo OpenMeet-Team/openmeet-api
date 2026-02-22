@@ -52,6 +52,9 @@ import {
 import { AtprotoServiceAuthDto } from './dto/atproto-service-auth.dto';
 import { AtprotoServiceAuthService } from './services/atproto-service-auth.service';
 import { Public } from './decorators/public.decorator';
+import { CreateLoginLinkDto } from './dto/create-login-link.dto';
+import { CreateLoginLinkResponseDto } from './dto/create-login-link-response.dto';
+import { ExchangeLoginLinkDto } from './dto/exchange-login-link.dto';
 
 @ApiTags('Auth')
 @Controller({
@@ -393,5 +396,63 @@ export class AuthController {
       dto.token,
       request.tenantId,
     );
+  }
+
+  @ApiBearerAuth()
+  @Post('create-login-link')
+  @UseGuards(AuthGuard('jwt'))
+  @Throttle({
+    default: { limit: 10, ttl: 60000 },
+  })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a one-time login link for cross-app authentication',
+    description:
+      'Generates a URL that, when opened in a browser, logs the user into the OpenMeet platform. The link expires after 60 seconds and can only be used once.',
+  })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    type: CreateLoginLinkResponseDto,
+    description: 'Login link created successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid redirect path',
+  })
+  public async createLoginLink(
+    @Body() dto: CreateLoginLinkDto,
+    @Request() request,
+  ): Promise<CreateLoginLinkResponseDto> {
+    return this.service.createLoginLink(
+      request.user.id,
+      request.tenantId,
+      dto.redirectPath,
+    );
+  }
+
+  @Post('exchange-login-link')
+  @Public()
+  @Throttle({
+    default: { limit: 10, ttl: 60000 },
+  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Exchange a one-time login link code for JWT tokens',
+    description:
+      'Validates the code from a login link URL, consumes it (single use), and returns JWT tokens for the user.',
+  })
+  @ApiOkResponse({
+    type: LoginResponseDto,
+    description: 'Login successful',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid or expired login link code',
+  })
+  public async exchangeLoginLink(
+    @Body() dto: ExchangeLoginLinkDto,
+    @Request() request,
+  ): Promise<LoginResponseDto> {
+    return this.service.exchangeLoginLink(dto.code, request.tenantId);
   }
 }

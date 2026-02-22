@@ -23,6 +23,7 @@ import { PdsCredentialService } from '../pds/pds-credential.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
 
 describe('AuthService - Event Date Validation for RSVP', () => {
   let service: AuthService;
@@ -123,6 +124,10 @@ describe('AuthService - Event Date Validation for RSVP', () => {
         {
           provide: BlueskyService,
           useValue: { tryResumeSession: jest.fn() },
+        },
+        {
+          provide: ElastiCacheService,
+          useValue: {},
         },
         {
           provide: REQUEST,

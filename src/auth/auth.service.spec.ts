@@ -25,6 +25,7 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { PdsApiError } from '../pds/pds.errors';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
 
 // Mock bcryptjs for password validation tests
 jest.mock('bcryptjs', () => ({
@@ -136,6 +137,12 @@ describe('AuthService', () => {
     tryResumeSession: jest.fn(),
   };
 
+  const mockElastiCacheService = {
+    set: jest.fn(),
+    get: jest.fn(),
+    del: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -177,6 +184,7 @@ describe('AuthService', () => {
           provide: BlueskyService,
           useValue: mockBlueskyService,
         },
+        { provide: ElastiCacheService, useValue: mockElastiCacheService },
         { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();
