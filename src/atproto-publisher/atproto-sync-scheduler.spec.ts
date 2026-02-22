@@ -43,6 +43,7 @@ describe('AtprotoSyncScheduler', () => {
   let mockEventRepository: {
     createQueryBuilder: jest.Mock;
     update: jest.Mock;
+    target: typeof EventEntity;
   };
   let mockQueryBuilder: Record<string, jest.Mock>;
   let mockUpdateQueryBuilder: Record<string, jest.Mock>;
@@ -74,6 +75,7 @@ describe('AtprotoSyncScheduler', () => {
         return mockUpdateQueryBuilder;
       }),
       update: jest.fn().mockResolvedValue(undefined),
+      target: EventEntity,
     };
 
     const mockTenantConnectionService = {

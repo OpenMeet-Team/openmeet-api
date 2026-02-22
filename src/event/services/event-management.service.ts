@@ -49,6 +49,7 @@ import { GroupRole } from '../../core/constants/constant';
 import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
 import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
+import { markAtprotoSynced } from '../../atproto-publisher/atproto-sync.utils';
 import { SyncAtprotoResponseDto } from '../dto/sync-atproto-response.dto';
 import { TID } from '@atproto/common-web';
 
@@ -508,15 +509,11 @@ export class EventManagementService {
         publishResult.action === 'updated'
       ) {
         // Save AT Protocol metadata to database
-        await this.eventRepository.update(
-          { id: eventToPublish.id },
-          {
-            atprotoUri: publishResult.atprotoUri,
-            atprotoRkey: publishResult.atprotoRkey,
-            atprotoCid: publishResult.atprotoCid,
-            atprotoSyncedAt: new Date(),
-          },
-        );
+        await markAtprotoSynced(this.eventRepository, eventToPublish.id, {
+          atprotoUri: publishResult.atprotoUri,
+          atprotoRkey: publishResult.atprotoRkey,
+          atprotoCid: publishResult.atprotoCid,
+        });
 
         this.logger.debug(
           `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
@@ -1013,15 +1010,11 @@ export class EventManagementService {
           publishResult.action === 'updated'
         ) {
           // Save AT Protocol metadata to database
-          await this.eventRepository.update(
-            { id: updatedEvent.id },
-            {
-              atprotoUri: publishResult.atprotoUri,
-              atprotoRkey: publishResult.atprotoRkey,
-              atprotoCid: publishResult.atprotoCid,
-              atprotoSyncedAt: new Date(),
-            },
-          );
+          await markAtprotoSynced(this.eventRepository, updatedEvent.id, {
+            atprotoUri: publishResult.atprotoUri,
+            atprotoRkey: publishResult.atprotoRkey,
+            atprotoCid: publishResult.atprotoCid,
+          });
 
           this.logger.debug(
             `Published event ${updatedEvent.slug} to AT Protocol: ${publishResult.atprotoUri}`,
@@ -2418,15 +2411,11 @@ export class EventManagementService {
 
     // If publish succeeded, update the event with AT Protocol metadata
     if (action === 'created' || action === 'updated') {
-      await this.eventRepository.update(
-        { id: event.id },
-        {
-          atprotoUri: publishResult.atprotoUri,
-          atprotoRkey: publishResult.atprotoRkey,
-          atprotoCid: publishResult.atprotoCid,
-          atprotoSyncedAt: new Date(),
-        },
-      );
+      await markAtprotoSynced(this.eventRepository, event.id, {
+        atprotoUri: publishResult.atprotoUri,
+        atprotoRkey: publishResult.atprotoRkey,
+        atprotoCid: publishResult.atprotoCid,
+      });
 
       this.logger.debug(
         `Synced event ${slug} to AT Protocol: ${publishResult.atprotoUri}`,
