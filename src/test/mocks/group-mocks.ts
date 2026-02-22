@@ -107,6 +107,7 @@ export const mockGroupService = {
   sendGroupDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
   showGroupAbout: jest.fn().mockResolvedValue(mockGroupAboutResponse),
   showGroupDiscussions: jest.fn().mockResolvedValue(mockDiscussions),
+  removeGroupForUserDeletion: jest.fn().mockResolvedValue(undefined),
   searchAllGroups: jest.fn().mockResolvedValue(mockGroups),
   showDashboardGroups: jest.fn().mockResolvedValue(mockGroups),
   showDashboardGroupsPaginated: jest.fn().mockResolvedValue({
