@@ -48,7 +48,11 @@ export class AtprotoServiceAuthService {
    * We verify:
    *   1. JWT structure and claims (aud, lxm, exp, iss)
    *   2. Cryptographic signature against the user's DID document
-   *   3. User exists in OpenMeet
+   *   3. User exists in OpenMeet (auto-created if not)
+   *
+   * If no OpenMeet account exists for the DID, a minimal user is auto-created
+   * with an atproto identity record. When the user later does a full Bluesky
+   * OAuth login, the identity table lookup matches them to the same account.
    *
    * @param token - PDS-signed JWT
    * @param tenantId - Tenant identifier
@@ -121,9 +125,13 @@ export class AtprotoServiceAuthService {
     const idResolver = this.getIdResolver();
 
     let signingKey: string;
+    let resolvedHandle: string | undefined;
+    let resolvedPdsUrl: string | undefined;
     try {
       const atprotoData = await idResolver.did.resolveAtprotoData(iss);
       signingKey = atprotoData.signingKey;
+      resolvedHandle = atprotoData.handle;
+      resolvedPdsUrl = atprotoData.pds;
     } catch (error) {
       // Fallback to public PLC for BYOD/Bluesky DIDs when using private PLC
       const didPlcUrl = this.configService.get<string>('DID_PLC_URL', {
@@ -137,6 +145,8 @@ export class AtprotoServiceAuthService {
           const publicResolver = new IdResolver();
           const atprotoData = await publicResolver.did.resolveAtprotoData(iss);
           signingKey = atprotoData.signingKey;
+          resolvedHandle = atprotoData.handle;
+          resolvedPdsUrl = atprotoData.pds;
         } catch {
           this.logger.warn(
             `Service auth rejected: DID resolution failed on both private and public PLC for ${iss}`,
@@ -175,12 +185,35 @@ export class AtprotoServiceAuthService {
     );
 
     if (!identity) {
-      this.logger.warn(
-        `Service auth: no OpenMeet user for DID ${iss} in tenant ${tenantId}`,
+      this.logger.log(
+        `Service auth: auto-creating user for DID ${iss} in tenant ${tenantId}`,
       );
-      throw new NotFoundException(
-        'No OpenMeet account associated with this DID',
+
+      const socialData = {
+        id: iss,
+        email: '',
+        firstName: resolvedHandle || iss,
+        lastName: '',
+      };
+
+      const loginResponse = await this.authService.validateSocialLogin(
+        AuthProvidersEnum.atprotoService,
+        socialData,
+        tenantId,
       );
+
+      if (loginResponse.user?.ulid) {
+        await this.userAtprotoIdentityService.create(tenantId, {
+          userUlid: loginResponse.user.ulid,
+          did: iss,
+          handle: resolvedHandle || null,
+          pdsUrl: resolvedPdsUrl || 'https://bsky.social',
+          isCustodial: false,
+          pdsCredentials: null,
+        });
+      }
+
+      return loginResponse;
     }
 
     // Step 6: Load the full user object via userUlid and create login session

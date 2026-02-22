@@ -53,7 +53,7 @@ services:
   api:
     environment:
       - PDS_URL=http://pds:3000
-      - PDS_DID_PLC_URL=http://plc:2582
+      - DID_PLC_URL=http://plc:2582
 
   # ── Point firehose consumer at local Jetstream ─────────────────
   bsky-firehose-consumer:
