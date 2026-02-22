@@ -112,6 +112,7 @@ describe('EventManagementService', () => {
       update: jest.fn(),
       delete: jest.fn(),
       remove: jest.fn(),
+      target: EventEntity,
       createQueryBuilder: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -124,6 +125,9 @@ describe('EventManagementService', () => {
         getOne: jest.fn(),
         getMany: jest.fn(),
         getCount: jest.fn(),
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue(undefined),
       }),
     } as unknown as jest.Mocked<Repository<EventEntity>>;
 
@@ -1858,13 +1862,19 @@ describe('EventManagementService', () => {
 
       expect(result).toBeDefined();
       expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
-      expect(mockRepository.update).toHaveBeenCalledWith(
-        { id: createdEvent.id },
+      // Verify markAtprotoSynced was called via QueryBuilder
+      const qb = mockRepository.createQueryBuilder();
+      expect(qb.update).toHaveBeenCalledWith(EventEntity);
+      expect(qb.set).toHaveBeenCalledWith(
         expect.objectContaining({
           atprotoUri: 'at://did:plc:test/community.openmeet.event/xyz789',
           atprotoRkey: 'xyz789',
         }),
       );
+      expect(qb.where).toHaveBeenCalledWith('id = :id', {
+        id: createdEvent.id,
+      });
+      expect(qb.execute).toHaveBeenCalled();
     });
 
     it('should log warning when AT Protocol publish returns conflict during creation', async () => {
@@ -1990,15 +2000,20 @@ describe('EventManagementService', () => {
       // Verify publishEvent was called with the updated event
       expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
 
-      // Verify atprotoUri metadata was saved to database
-      expect(mockRepository.update).toHaveBeenCalledWith(
-        { id: updatedEvent.id },
+      // Verify atprotoUri metadata was saved via markAtprotoSynced (QueryBuilder)
+      const qb = mockRepository.createQueryBuilder();
+      expect(qb.update).toHaveBeenCalledWith(EventEntity);
+      expect(qb.set).toHaveBeenCalledWith(
         expect.objectContaining({
           atprotoUri:
             'at://did:plc:test/community.lexicon.calendar.event/retry123',
           atprotoRkey: 'retry123',
         }),
       );
+      expect(qb.where).toHaveBeenCalledWith('id = :id', {
+        id: updatedEvent.id,
+      });
+      expect(qb.execute).toHaveBeenCalled();
     });
 
     it('should not attempt ATProto publish for imported Bluesky events', async () => {
@@ -2174,16 +2189,27 @@ describe('EventManagementService', () => {
       expect(result).toBeDefined();
       expect(mockAtprotoPublisherService.publishEvent).toHaveBeenCalled();
 
-      // Verify repository.update was called with the new CID and a fresh atprotoSyncedAt
-      expect(mockRepository.update).toHaveBeenCalledWith(
-        { id: updatedEvent.id },
+      // Verify markAtprotoSynced was called via QueryBuilder with the new CID and raw SQL now()
+      const qb = mockRepository.createQueryBuilder();
+      expect(qb.update).toHaveBeenCalledWith(EventEntity);
+      expect(qb.set).toHaveBeenCalledWith(
         expect.objectContaining({
           atprotoUri: 'at://did:plc:test/community.openmeet.event/resync456',
           atprotoRkey: 'resync456',
           atprotoCid: 'bafyreinewcid',
-          atprotoSyncedAt: expect.any(Date),
         }),
       );
+      // Verify atprotoSyncedAt uses raw SQL now() instead of new Date()
+      const setArg = qb.set.mock.calls.find((call: any[]) =>
+        call[0]?.atprotoUri?.includes('resync456'),
+      );
+      expect(setArg).toBeDefined();
+      expect(typeof setArg[0].atprotoSyncedAt).toBe('function');
+      expect(setArg[0].atprotoSyncedAt()).toBe('now()');
+      expect(qb.where).toHaveBeenCalledWith('id = :id', {
+        id: updatedEvent.id,
+      });
+      expect(qb.execute).toHaveBeenCalled();
     });
 
     it('should log warning when ATProto publish returns any error action', async () => {
@@ -2386,14 +2412,20 @@ describe('EventManagementService', () => {
       expect(result.atprotoUri).toBe(
         'at://did:plc:test/community.lexicon.calendar.event/abc123',
       );
-      expect(mockRepository.update).toHaveBeenCalledWith(
-        { id: eventToSync.id },
+      // Verify markAtprotoSynced was called via QueryBuilder
+      const qb = mockRepository.createQueryBuilder();
+      expect(qb.update).toHaveBeenCalledWith(EventEntity);
+      expect(qb.set).toHaveBeenCalledWith(
         expect.objectContaining({
           atprotoUri:
             'at://did:plc:test/community.lexicon.calendar.event/abc123',
           atprotoRkey: 'abc123',
         }),
       );
+      expect(qb.where).toHaveBeenCalledWith('id = :id', {
+        id: eventToSync.id,
+      });
+      expect(qb.execute).toHaveBeenCalled();
     });
 
     it('should return updated action when event already exists on AT Protocol', async () => {
@@ -2449,7 +2481,7 @@ describe('EventManagementService', () => {
 
       expect(result.action).toBe('skipped');
       expect(result.atprotoUri).toBeUndefined();
-      // Repository update should NOT be called for skipped events
+      // markAtprotoSynced should NOT be called for skipped events
       expect(mockRepository.update).not.toHaveBeenCalled();
     });
 
