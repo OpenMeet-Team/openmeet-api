@@ -45,10 +45,11 @@ describe('AtprotoSyncScheduler', () => {
     update: jest.Mock;
   };
   let mockQueryBuilder: Record<string, jest.Mock>;
+  let mockUpdateQueryBuilder: Record<string, jest.Mock>;
   let mockElastiCacheService: { withLock: jest.Mock };
 
   beforeEach(async () => {
-    // Set up query builder chain mock
+    // Set up SELECT query builder chain mock (called with alias 'event')
     mockQueryBuilder = {
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -56,8 +57,22 @@ describe('AtprotoSyncScheduler', () => {
       getMany: jest.fn().mockResolvedValue([]),
     };
 
+    // Set up UPDATE query builder chain mock (called with no arguments)
+    mockUpdateQueryBuilder = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+
     mockEventRepository = {
-      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+      createQueryBuilder: jest.fn().mockImplementation((alias?: string) => {
+        if (alias === 'event') {
+          return mockQueryBuilder;
+        }
+        // No alias = update query builder
+        return mockUpdateQueryBuilder;
+      }),
       update: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -132,17 +147,21 @@ describe('AtprotoSyncScheduler', () => {
         'tenant1',
       );
 
-      // Verify repository.update was called with fresh metadata
-      expect(mockEventRepository.update).toHaveBeenCalledWith(
-        { id: staleEvent.id },
+      // Verify QueryBuilder update was called with fresh metadata
+      expect(mockUpdateQueryBuilder.update).toHaveBeenCalledWith(EventEntity);
+      expect(mockUpdateQueryBuilder.set).toHaveBeenCalledWith(
         expect.objectContaining({
           atprotoUri:
             'at://did:plc:abc/community.lexicon.calendar.event/rkey-new',
           atprotoRkey: 'rkey-new',
           atprotoCid: 'cid-new',
-          atprotoSyncedAt: expect.any(Date),
         }),
       );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
+        'id = :id',
+        { id: staleEvent.id },
+      );
+      expect(mockUpdateQueryBuilder.execute).toHaveBeenCalled();
     });
 
     it('should not crash if publishEvent throws for one event', async () => {
@@ -169,13 +188,16 @@ describe('AtprotoSyncScheduler', () => {
       // Both events should have been attempted
       expect(mockPublisherService.publishEvent).toHaveBeenCalledTimes(2);
 
-      // Only the second event should have been updated in the DB
-      expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
-      expect(mockEventRepository.update).toHaveBeenCalledWith(
-        { id: event2.id },
+      // Only the second event should have been updated in the DB via QueryBuilder
+      expect(mockUpdateQueryBuilder.execute).toHaveBeenCalledTimes(1);
+      expect(mockUpdateQueryBuilder.set).toHaveBeenCalledWith(
         expect.objectContaining({
           atprotoRkey: 'rkey2',
         }),
+      );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
+        'id = :id',
+        { id: event2.id },
       );
     });
 
@@ -186,7 +208,7 @@ describe('AtprotoSyncScheduler', () => {
       await scheduler.handlePendingSyncRetry();
 
       expect(mockPublisherService.publishEvent).not.toHaveBeenCalled();
-      expect(mockEventRepository.update).not.toHaveBeenCalled();
+      expect(mockUpdateQueryBuilder.execute).not.toHaveBeenCalled();
     });
 
     it('should update atprotoSyncedAt on conflict to stop retry loop', async () => {
@@ -201,12 +223,14 @@ describe('AtprotoSyncScheduler', () => {
       await scheduler.handlePendingSyncRetry();
 
       expect(mockPublisherService.publishEvent).toHaveBeenCalledTimes(1);
-      // On conflict, should update atprotoSyncedAt to stop the retry loop.
+      // On conflict, should update atprotoSyncedAt via QueryBuilder to stop the retry loop.
       // The firehose will deliver the PDS version for reconciliation.
-      expect(mockEventRepository.update).toHaveBeenCalledWith(
+      expect(mockUpdateQueryBuilder.update).toHaveBeenCalledWith(EventEntity);
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
+        'id = :id',
         { id: staleEvent.id },
-        { atprotoSyncedAt: expect.any(Date) },
       );
+      expect(mockUpdateQueryBuilder.execute).toHaveBeenCalled();
     });
 
     it('should continue processing other tenants if one tenant fails', async () => {
@@ -291,13 +315,16 @@ describe('AtprotoSyncScheduler', () => {
         'tenant1',
       );
 
-      // Only the normal event should be updated in the DB
-      expect(mockEventRepository.update).toHaveBeenCalledTimes(1);
-      expect(mockEventRepository.update).toHaveBeenCalledWith(
-        { id: normalEvent.id },
+      // Only the normal event should be updated in the DB via QueryBuilder
+      expect(mockUpdateQueryBuilder.execute).toHaveBeenCalledTimes(1);
+      expect(mockUpdateQueryBuilder.set).toHaveBeenCalledWith(
         expect.objectContaining({
           atprotoRkey: 'rkey-normal',
         }),
+      );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
+        'id = :id',
+        { id: normalEvent.id },
       );
     });
 
@@ -379,6 +406,73 @@ describe('AtprotoSyncScheduler', () => {
         staleEvent,
         'tenant1',
       );
+    });
+
+    it('should use database now() for atprotoSyncedAt on successful sync to avoid timestamp race', async () => {
+      const staleEvent = createMockStaleEvent();
+      tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant1']);
+      mockQueryBuilder.getMany.mockResolvedValue([staleEvent]);
+
+      mockPublisherService.publishEvent.mockResolvedValue({
+        action: 'updated',
+        atprotoUri:
+          'at://did:plc:abc/community.lexicon.calendar.event/rkey-new',
+        atprotoRkey: 'rkey-new',
+        atprotoCid: 'cid-new',
+      });
+
+      await scheduler.handlePendingSyncRetry();
+
+      // Should use QueryBuilder update (not repository.update) so we can use raw SQL for atprotoSyncedAt
+      expect(mockUpdateQueryBuilder.update).toHaveBeenCalledWith(EventEntity);
+      expect(mockUpdateQueryBuilder.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          atprotoUri:
+            'at://did:plc:abc/community.lexicon.calendar.event/rkey-new',
+          atprotoRkey: 'rkey-new',
+          atprotoCid: 'cid-new',
+        }),
+      );
+      // Verify atprotoSyncedAt is a function (raw SQL expression), not a Date
+      const setArg = mockUpdateQueryBuilder.set.mock.calls[0][0];
+      expect(typeof setArg.atprotoSyncedAt).toBe('function');
+      expect(setArg.atprotoSyncedAt()).toBe('now()');
+
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
+        'id = :id',
+        { id: staleEvent.id },
+      );
+      expect(mockUpdateQueryBuilder.execute).toHaveBeenCalled();
+
+      // Should NOT use the old repository.update approach
+      expect(mockEventRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should use database now() for atprotoSyncedAt on conflict to avoid timestamp race', async () => {
+      const staleEvent = createMockStaleEvent();
+      tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant1']);
+      mockQueryBuilder.getMany.mockResolvedValue([staleEvent]);
+
+      mockPublisherService.publishEvent.mockResolvedValue({
+        action: 'conflict',
+      });
+
+      await scheduler.handlePendingSyncRetry();
+
+      // Should use QueryBuilder update with raw SQL for atprotoSyncedAt
+      expect(mockUpdateQueryBuilder.update).toHaveBeenCalledWith(EventEntity);
+      const setArg = mockUpdateQueryBuilder.set.mock.calls[0][0];
+      expect(typeof setArg.atprotoSyncedAt).toBe('function');
+      expect(setArg.atprotoSyncedAt()).toBe('now()');
+
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
+        'id = :id',
+        { id: staleEvent.id },
+      );
+      expect(mockUpdateQueryBuilder.execute).toHaveBeenCalled();
+
+      // Should NOT use the old repository.update approach
+      expect(mockEventRepository.update).not.toHaveBeenCalled();
     });
   });
 });
