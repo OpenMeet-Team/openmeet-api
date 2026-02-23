@@ -50,7 +50,7 @@ describe('CategoryService', () => {
   });
 
   describe('findAll', () => {
-    it('should return all categories with minimal fields when loadRelations is false', async () => {
+    it('should return all categories with only id and name selected and no relations or cache', async () => {
       const mockCategories = [
         { id: 1, name: 'Category 1' },
         { id: 2, name: 'Category 2' },
@@ -59,31 +59,11 @@ describe('CategoryService', () => {
       (mockCategoryRepository.find as jest.Mock).mockResolvedValue(
         mockCategories,
       );
-      const result = await service.findAll(false);
-      expect(result).toEqual(mockCategories);
-    });
 
-    it('should return categories with relations when loadRelations is true', async () => {
-      const mockCategories = [
-        {
-          id: 1,
-          name: 'Category 1',
-          subCategories: [],
-          events: [],
-          groups: [],
-        },
-      ];
-
-      (mockCategoryRepository.find as jest.Mock).mockResolvedValue(
-        mockCategories,
-      );
-
-      const result = await service.findAll(true);
+      const result = await service.findAll();
 
       expect(mockCategoryRepository.find).toHaveBeenCalledWith({
         select: ['id', 'name'],
-        relations: ['subCategories', 'events', 'groups'],
-        cache: true,
       });
       expect(result).toEqual(mockCategories);
     });
@@ -92,7 +72,37 @@ describe('CategoryService', () => {
       const mockError = new Error('Database error');
       (mockCategoryRepository.find as jest.Mock).mockRejectedValue(mockError);
 
-      await expect(service.findAll(false)).rejects.toThrow(mockError);
+      await expect(service.findAll()).rejects.toThrow(mockError);
+    });
+  });
+
+  describe('findOne', () => {
+    it('should load only subCategories relation, not events or groups', async () => {
+      const mockCategory = {
+        id: 1,
+        name: 'Category 1',
+        subCategories: [],
+      };
+
+      (mockCategoryRepository.findOne as jest.Mock).mockResolvedValue(
+        mockCategory,
+      );
+
+      const result = await service.findOne(1);
+
+      expect(mockCategoryRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+        relations: ['subCategories'],
+      });
+      expect(result).toEqual(mockCategory);
+    });
+
+    it('should return null when category is not found', async () => {
+      (mockCategoryRepository.findOne as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.findOne(999);
+
+      expect(result).toBeNull();
     });
   });
 

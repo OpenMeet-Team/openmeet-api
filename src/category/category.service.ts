@@ -34,7 +34,7 @@ export class CategoryService {
   }
 
   @Trace('category.findAll')
-  async findAll(loadRelations = false): Promise<CategoryEntity[]> {
+  async findAll(): Promise<CategoryEntity[]> {
     await this.getTenantSpecificCategoryRepository();
     return await this.tracer.startActiveSpan(
       'category.service.findAll',
@@ -44,16 +44,8 @@ export class CategoryService {
             'category.service.findAll.query',
           );
 
-          // Only load relations if explicitly requested
-          const relations = loadRelations
-            ? ['subCategories', 'events', 'groups']
-            : [];
-
-          // Select only necessary fields for the filter
           const categories = await this.categoryRepository.find({
             select: ['id', 'name'],
-            relations,
-            cache: true,
           });
 
           querySpan.end();
@@ -94,7 +86,7 @@ export class CategoryService {
           );
           const category = await this.categoryRepository.findOne({
             where: { id },
-            relations: ['subCategories', 'events', 'groups'],
+            relations: ['subCategories'],
           });
           querySpan.end();
 
