@@ -235,6 +235,26 @@ describe('AtprotoHandleCacheService - Behavior', () => {
     });
   });
 
+  describe('Cache TTL', () => {
+    it('should cache resolved handles with a 4-hour TTL (14400 seconds)', async () => {
+      // Arrange
+      const did = 'did:plc:abc123';
+      blueskyIdentity.extractHandleFromDid.mockResolvedValue(
+        'alice.bsky.social',
+      );
+
+      // Act
+      await service.resolveHandle(did);
+
+      // Assert - cache.set should be called with TTL of 14400 (4 hours)
+      expect(elastiCache.set).toHaveBeenCalledWith(
+        expect.any(String),
+        'alice.bsky.social',
+        14400,
+      );
+    });
+  });
+
   describe('invalidate - Cache Invalidation', () => {
     it('should force re-resolution after cache invalidation', async () => {
       // Arrange
