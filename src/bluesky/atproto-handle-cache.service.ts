@@ -21,7 +21,7 @@ export class AtprotoHandleCacheService {
   private readonly logger = new Logger(AtprotoHandleCacheService.name);
   private readonly tracer = trace.getTracer('atproto-handle-cache');
   private readonly CACHE_PREFIX = 'atproto:handle:';
-  private readonly CACHE_TTL = 900; // 15 minutes (in seconds)
+  private readonly CACHE_TTL = 14400; // 4 hours (in seconds)
 
   // DID validation pattern (plc and web methods only)
   private readonly DID_PATTERN = /^did:(plc|web):[a-zA-Z0-9._-]{1,100}$/;
