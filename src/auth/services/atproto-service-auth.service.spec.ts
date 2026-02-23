@@ -294,6 +294,127 @@ describe('AtprotoServiceAuthService', () => {
       });
     });
 
+    it('should handle race condition when two concurrent requests create identity for same DID', async () => {
+      MockedIdResolver.mockImplementation(() => ({
+        did: {
+          resolveAtprotoData: jest.fn().mockResolvedValue({
+            did: 'did:plc:testuser123',
+            signingKey: 'did:key:z1234mockkey',
+            handle: 'test.bsky.social',
+            pds: 'https://pds.example.com',
+          }),
+        },
+      }));
+
+      mockedVerifySignature.mockResolvedValue(true);
+
+      const expectedLoginResponse = {
+        token: 'jwt-token',
+        refreshToken: 'refresh-token',
+        tokenExpires: 12345,
+        user: { ulid: 'new-user-ulid' },
+      };
+
+      // First findByDid returns null (no identity yet)
+      mockIdentityService.findByDid.mockResolvedValueOnce(null);
+      mockAuthService.validateSocialLogin.mockResolvedValue(
+        expectedLoginResponse,
+      );
+      // create throws unique constraint violation (another request won the race)
+      mockIdentityService.create.mockRejectedValue(
+        new Error('duplicate key value violates unique constraint'),
+      );
+      // Second findByDid finds the record the other request created
+      mockIdentityService.findByDid.mockResolvedValueOnce({
+        did: 'did:plc:testuser123',
+        userUlid: 'new-user-ulid',
+      });
+
+      const token = makeJwt(validHeader, validPayload);
+      const result = await service.verifyAndExchange(token, 'tenant1');
+
+      // Should succeed despite the race — returns the login response
+      expect(result).toEqual(expectedLoginResponse);
+    });
+
+    it('should throw when identity creation fails and no existing record found', async () => {
+      MockedIdResolver.mockImplementation(() => ({
+        did: {
+          resolveAtprotoData: jest.fn().mockResolvedValue({
+            did: 'did:plc:testuser123',
+            signingKey: 'did:key:z1234mockkey',
+            handle: 'test.bsky.social',
+            pds: 'https://pds.example.com',
+          }),
+        },
+      }));
+
+      mockedVerifySignature.mockResolvedValue(true);
+
+      const expectedLoginResponse = {
+        token: 'jwt-token',
+        refreshToken: 'refresh-token',
+        tokenExpires: 12345,
+        user: { ulid: 'new-user-ulid' },
+      };
+
+      mockIdentityService.findByDid.mockResolvedValueOnce(null);
+      mockAuthService.validateSocialLogin.mockResolvedValue(
+        expectedLoginResponse,
+      );
+      // create fails with a genuine error
+      mockIdentityService.create.mockRejectedValue(
+        new Error('connection refused'),
+      );
+      // Re-lookup also finds nothing — this is a real failure
+      mockIdentityService.findByDid.mockResolvedValueOnce(null);
+
+      const token = makeJwt(validHeader, validPayload);
+
+      await expect(
+        service.verifyAndExchange(token, 'tenant1'),
+      ).rejects.toThrow('connection refused');
+    });
+
+    it('should use DID as pdsUrl fallback when resolvedPdsUrl is undefined', async () => {
+      MockedIdResolver.mockImplementation(() => ({
+        did: {
+          resolveAtprotoData: jest.fn().mockResolvedValue({
+            did: 'did:plc:testuser123',
+            signingKey: 'did:key:z1234mockkey',
+            handle: 'test.bsky.social',
+            // pds intentionally omitted
+          }),
+        },
+      }));
+
+      mockedVerifySignature.mockResolvedValue(true);
+
+      mockIdentityService.findByDid.mockResolvedValue(null);
+      mockIdentityService.create.mockResolvedValue({});
+
+      const expectedLoginResponse = {
+        token: 'jwt-token',
+        refreshToken: 'refresh-token',
+        tokenExpires: 12345,
+        user: { ulid: 'new-user-ulid' },
+      };
+      mockAuthService.validateSocialLogin.mockResolvedValue(
+        expectedLoginResponse,
+      );
+
+      const token = makeJwt(validHeader, validPayload);
+      await service.verifyAndExchange(token, 'tenant1');
+
+      // pdsUrl should fall back to DID, not 'https://bsky.social'
+      expect(mockIdentityService.create).toHaveBeenCalledWith(
+        'tenant1',
+        expect.objectContaining({
+          pdsUrl: 'did:plc:testuser123',
+        }),
+      );
+    });
+
     it('should pass DID_PLC_URL to IdResolver when configured', async () => {
       mockConfigService.get.mockImplementation((key: string) => {
         if (key === 'SERVICE_DID') return 'did:web:api.openmeet.net';

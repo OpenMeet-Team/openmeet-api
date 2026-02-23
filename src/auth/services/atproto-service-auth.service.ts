@@ -203,14 +203,32 @@ export class AtprotoServiceAuthService {
       );
 
       if (loginResponse.user?.ulid) {
-        await this.userAtprotoIdentityService.create(tenantId, {
-          userUlid: loginResponse.user.ulid,
-          did: iss,
-          handle: resolvedHandle || null,
-          pdsUrl: resolvedPdsUrl || 'https://bsky.social',
-          isCustodial: false,
-          pdsCredentials: null,
-        });
+        try {
+          await this.userAtprotoIdentityService.create(tenantId, {
+            userUlid: loginResponse.user.ulid,
+            did: iss,
+            handle: resolvedHandle || null,
+            pdsUrl: resolvedPdsUrl || iss,
+            isCustodial: false,
+            pdsCredentials: null,
+          });
+        } catch (err) {
+          // Race condition: another concurrent request already created the identity
+          const existing = await this.userAtprotoIdentityService.findByDid(
+            tenantId,
+            iss,
+          );
+          if (!existing) {
+            this.logger.error(
+              `Failed to create atproto identity for DID ${iss} after user creation`,
+              err instanceof Error ? err.stack : err,
+            );
+            throw err;
+          }
+          this.logger.warn(
+            `Race condition on identity creation for DID ${iss}, using existing record`,
+          );
+        }
       }
 
       return loginResponse;
