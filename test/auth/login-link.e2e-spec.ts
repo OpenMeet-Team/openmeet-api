@@ -165,7 +165,7 @@ describe('Cross-App Login Link (e2e)', () => {
           .set('Authorization', `Bearer ${token}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
           .send({ redirectPath: '/foo://bar' })
-          .expect(400);
+          .expect(422);
       });
 
       it('should reject empty redirectPath', async () => {
