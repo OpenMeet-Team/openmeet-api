@@ -1050,15 +1050,6 @@ export class EventQueryService {
       .leftJoinAndSelect('event.attendees', 'attendees')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.image', 'image')
-      .loadRelationCountAndMap(
-        'event.attendeesCount',
-        'event.attendees',
-        'attendee',
-        (qb) =>
-          qb.where('attendee.status = :confirmedStatus', {
-            confirmedStatus: EventAttendeeStatus.Confirmed,
-          }),
-      )
       .where('event.visibility = :visibility', {
         visibility: EventVisibility.Public,
       })
@@ -1075,6 +1066,28 @@ export class EventQueryService {
       .getMany();
 
     this.logger.debug(`Found ${events.length} featured events`);
+
+    // Batch fetch attendee counts in a single query (avoids N+1)
+    if (events.length > 0) {
+      const eventIds = events.map((e) => e.id);
+      const counts = await this.eventAttendeesRepository
+        .createQueryBuilder('att')
+        .select('att.eventId', 'eventId')
+        .addSelect('COUNT(att.id)', 'count')
+        .where('att.eventId IN (:...eventIds)', { eventIds })
+        .andWhere('att.status = :status', {
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .groupBy('att.eventId')
+        .getRawMany();
+
+      const countMap = new Map(
+        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      events.forEach((event) => {
+        (event as any).attendeesCount = countMap.get(event.id) || 0;
+      });
+    }
 
     // Debug first event image before processing
     if (events.length > 0 && events[0].image) {
@@ -1135,15 +1148,6 @@ export class EventQueryService {
     const event = await this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.image', 'image')
-      .loadRelationCountAndMap(
-        'event.attendeesCount',
-        'event.attendees',
-        'attendee',
-        (qb) =>
-          qb.where('attendee.status = :confirmedStatus', {
-            confirmedStatus: EventAttendeeStatus.Confirmed,
-          }),
-      )
       .where('event.user.id = :userId', { userId })
       .andWhere(
         '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
@@ -1159,6 +1163,17 @@ export class EventQueryService {
     if (!event) {
       return null;
     }
+
+    // Batch fetch attendee count for this single event
+    const countResult = await this.eventAttendeesRepository
+      .createQueryBuilder('att')
+      .select('COUNT(att.id)', 'count')
+      .where('att.eventId = :eventId', { eventId: event.id })
+      .andWhere('att.status = :status', {
+        status: EventAttendeeStatus.Confirmed,
+      })
+      .getRawOne();
+    (event as any).attendeesCount = parseInt(countResult?.count || '0', 10);
 
     // Debug image before processing
     if (event.image) {
@@ -1196,23 +1211,35 @@ export class EventQueryService {
   ): Promise<EventEntity[]> {
     await this.initializeRepository();
 
-    // Use loadRelationCountAndMap to get attendee counts in a single query to avoid N+1
     const events = await this.eventRepository
       .createQueryBuilder('event')
-      .loadRelationCountAndMap(
-        'event.attendeesCount',
-        'event.attendees',
-        'attendee',
-        (qb) =>
-          qb.where('attendee.status = :confirmedStatus', {
-            confirmedStatus: EventAttendeeStatus.Confirmed,
-          }),
-      )
       .where('event.user.id = :userId', { userId })
       .andWhere('event.status = :status', { status: EventStatus.Draft })
       .orderBy('event.updatedAt', 'DESC')
       .limit(3)
       .getMany();
+
+    // Batch fetch attendee counts in a single query (avoids N+1)
+    if (events.length > 0) {
+      const eventIds = events.map((e) => e.id);
+      const counts = await this.eventAttendeesRepository
+        .createQueryBuilder('att')
+        .select('att.eventId', 'eventId')
+        .addSelect('COUNT(att.id)', 'count')
+        .where('att.eventId IN (:...eventIds)', { eventIds })
+        .andWhere('att.status = :status', {
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .groupBy('att.eventId')
+        .getRawMany();
+
+      const countMap = new Map(
+        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      events.forEach((event) => {
+        (event as any).attendeesCount = countMap.get(event.id) || 0;
+      });
+    }
 
     // Add recurrence descriptions
     return events.map((event) => this.addRecurrenceInformation(event));
@@ -1226,15 +1253,6 @@ export class EventQueryService {
       .leftJoinAndSelect('event.attendees', 'attendee')
       .leftJoinAndSelect('event.image', 'image')
       .leftJoinAndSelect('attendee.user', 'user')
-      .loadRelationCountAndMap(
-        'event.attendeesCount',
-        'event.attendees',
-        'attendeeCount',
-        (qb) =>
-          qb.where('attendeeCount.status = :confirmedStatus', {
-            confirmedStatus: EventAttendeeStatus.Confirmed,
-          }),
-      )
       .where('attendee.user.id = :userId', { userId })
       .andWhere(
         '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
@@ -1254,6 +1272,28 @@ export class EventQueryService {
     this.logger.debug(
       `Found ${events.length} upcoming events for user ${userId}`,
     );
+
+    // Batch fetch attendee counts in a single query (avoids N+1)
+    if (events.length > 0) {
+      const eventIds = events.map((e) => e.id);
+      const counts = await this.eventAttendeesRepository
+        .createQueryBuilder('att')
+        .select('att.eventId', 'eventId')
+        .addSelect('COUNT(att.id)', 'count')
+        .where('att.eventId IN (:...eventIds)', { eventIds })
+        .andWhere('att.status = :status', {
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .groupBy('att.eventId')
+        .getRawMany();
+
+      const countMap = new Map(
+        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      events.forEach((event) => {
+        (event as any).attendeesCount = countMap.get(event.id) || 0;
+      });
+    }
 
     // Debug first event image
     if (events.length > 0 && events[0].image) {

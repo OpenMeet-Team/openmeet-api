@@ -242,20 +242,9 @@ describe('EventQueryService', () => {
 
   describe('getHomePageFeaturedEvents', () => {
     it('should return featured events', async () => {
-      // Mock the event attendee service
-      jest
-        .spyOn(
-          service['eventAttendeeService'],
-          'showConfirmedEventAttendeesCount',
-        )
-        .mockResolvedValue(5);
-
-      // No need to mock recurrence service anymore as we now generate the description directly
-
-      const mockQueryBuilder = {
+      const mockEventQueryBuilder = {
         select: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
-        loadRelationCountAndMap: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
@@ -263,24 +252,278 @@ describe('EventQueryService', () => {
         getMany: jest.fn().mockResolvedValue([mockEventEntity]),
       };
 
+      const mockAttendeeQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ eventId: 1, count: '5' }]),
+      };
+
       jest
         .spyOn(service['tenantConnectionService'], 'getTenantConnection')
         .mockResolvedValue({
-          getRepository: jest.fn().mockReturnValue({
-            createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest
+                  .fn()
+                  .mockReturnValue(mockAttendeeQueryBuilder),
+              };
+            }
+            return {
+              createQueryBuilder: jest
+                .fn()
+                .mockReturnValue(mockEventQueryBuilder),
+            };
           }),
         } as any);
 
-      // Mock the attendee count service call which is used to enrich event data
-      jest
-        .spyOn(
-          service['eventAttendeeService'],
-          'showConfirmedEventAttendeesCount',
-        )
-        .mockResolvedValue(5);
-
       const result = await service.getHomePageFeaturedEvents();
       expect(Array.isArray(result)).toBe(true);
+    });
+
+    it('should use batch attendee count query instead of loadRelationCountAndMap', async () => {
+      const mockEvents = [
+        { ...mockEventEntity, id: 1 },
+        { ...mockEventEntity, id: 2, slug: 'event-2' },
+      ];
+
+      // Track whether loadRelationCountAndMap is called on the event query builder
+      const loadRelationCountAndMapFn = jest.fn().mockReturnThis();
+      const mockEventQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        loadRelationCountAndMap: loadRelationCountAndMapFn,
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockEvents),
+      };
+
+      // Mock the batch attendee count query builder
+      const mockGetRawMany = jest.fn().mockResolvedValue([
+        { eventId: 1, count: '3' },
+        { eventId: 2, count: '7' },
+      ]);
+      const mockAttendeeQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: mockGetRawMany,
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest
+                  .fn()
+                  .mockReturnValue(mockAttendeeQueryBuilder),
+              };
+            }
+            return {
+              createQueryBuilder: jest
+                .fn()
+                .mockReturnValue(mockEventQueryBuilder),
+            };
+          }),
+        } as any);
+
+      const result = await service.getHomePageFeaturedEvents();
+
+      // loadRelationCountAndMap should NOT be called (batch pattern used instead)
+      expect(loadRelationCountAndMapFn).not.toHaveBeenCalled();
+
+      // Batch attendee count query SHOULD be called
+      expect(mockGetRawMany).toHaveBeenCalled();
+
+      // Results should have attendeesCount set
+      expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('getHomePageUserNextHostedEvent', () => {
+    it('should use batch attendee count query instead of loadRelationCountAndMap', async () => {
+      const mockEvent = { ...mockEventEntity, id: 42 };
+
+      const loadRelationCountAndMapFn = jest.fn().mockReturnThis();
+      const mockEventQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        loadRelationCountAndMap: loadRelationCountAndMapFn,
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(mockEvent),
+      };
+
+      // Mock the batch attendee count query for a single event
+      const mockGetRawOne = jest.fn().mockResolvedValue({ count: '5' });
+      const mockAttendeeQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: mockGetRawOne,
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest
+                  .fn()
+                  .mockReturnValue(mockAttendeeQueryBuilder),
+              };
+            }
+            return {
+              createQueryBuilder: jest
+                .fn()
+                .mockReturnValue(mockEventQueryBuilder),
+            };
+          }),
+        } as any);
+
+      const result = await service.getHomePageUserNextHostedEvent(1);
+
+      // loadRelationCountAndMap should NOT be called
+      expect(loadRelationCountAndMapFn).not.toHaveBeenCalled();
+
+      // Batch attendee count query SHOULD be called
+      expect(mockGetRawOne).toHaveBeenCalled();
+
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('getHomePageUserRecentEventDrafts', () => {
+    it('should use batch attendee count query instead of loadRelationCountAndMap', async () => {
+      const mockEvents = [
+        { ...mockEventEntity, id: 1 },
+        { ...mockEventEntity, id: 2, slug: 'draft-2' },
+      ];
+
+      const loadRelationCountAndMapFn = jest.fn().mockReturnThis();
+      const mockEventQueryBuilder = {
+        loadRelationCountAndMap: loadRelationCountAndMapFn,
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockEvents),
+      };
+
+      const mockGetRawMany = jest.fn().mockResolvedValue([
+        { eventId: 1, count: '2' },
+        { eventId: 2, count: '4' },
+      ]);
+      const mockAttendeeQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: mockGetRawMany,
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest
+                  .fn()
+                  .mockReturnValue(mockAttendeeQueryBuilder),
+              };
+            }
+            return {
+              createQueryBuilder: jest
+                .fn()
+                .mockReturnValue(mockEventQueryBuilder),
+            };
+          }),
+        } as any);
+
+      const result = await service.getHomePageUserRecentEventDrafts(1);
+
+      // loadRelationCountAndMap should NOT be called
+      expect(loadRelationCountAndMapFn).not.toHaveBeenCalled();
+
+      // Batch attendee count query SHOULD be called
+      expect(mockGetRawMany).toHaveBeenCalled();
+
+      expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('getHomePageUserUpcomingEvents - batch count', () => {
+    it('should use batch attendee count query instead of loadRelationCountAndMap', async () => {
+      const mockEvents = [
+        { ...mockEventEntity, id: 10 },
+        { ...mockEventEntity, id: 20, slug: 'upcoming-2' },
+      ];
+
+      const loadRelationCountAndMapFn = jest.fn().mockReturnThis();
+      const mockEventQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        loadRelationCountAndMap: loadRelationCountAndMapFn,
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockEvents),
+      };
+
+      const mockGetRawMany = jest.fn().mockResolvedValue([
+        { eventId: 10, count: '8' },
+        { eventId: 20, count: '12' },
+      ]);
+      const mockAttendeeQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: mockGetRawMany,
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest
+                  .fn()
+                  .mockReturnValue(mockAttendeeQueryBuilder),
+              };
+            }
+            return {
+              createQueryBuilder: jest
+                .fn()
+                .mockReturnValue(mockEventQueryBuilder),
+            };
+          }),
+        } as any);
+
+      const result = await service.getHomePageUserUpcomingEvents(1);
+
+      // loadRelationCountAndMap should NOT be called
+      expect(loadRelationCountAndMapFn).not.toHaveBeenCalled();
+
+      // Batch attendee count query SHOULD be called
+      expect(mockGetRawMany).toHaveBeenCalled();
+
+      expect(result).toHaveLength(2);
     });
   });
 
@@ -351,9 +594,8 @@ describe('EventQueryService', () => {
     beforeEach(() => {
       // Set up the event repository mock to return our fixture
       const mockEvent = createMockEventWithImage();
-      const mockQueryBuilder = {
+      const mockEventQueryBuilder = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
-        loadRelationCountAndMap: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
@@ -361,20 +603,35 @@ describe('EventQueryService', () => {
         getMany: jest.fn().mockResolvedValue([mockEvent]),
       };
 
+      const mockAttendeeQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest
+          .fn()
+          .mockResolvedValue([{ eventId: mockEvent.id, count: '5' }]),
+      };
+
       jest
         .spyOn(service['tenantConnectionService'], 'getTenantConnection')
         .mockResolvedValue({
-          getRepository: jest.fn().mockReturnValue({
-            createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest
+                  .fn()
+                  .mockReturnValue(mockAttendeeQueryBuilder),
+              };
+            }
+            return {
+              createQueryBuilder: jest
+                .fn()
+                .mockReturnValue(mockEventQueryBuilder),
+            };
           }),
         } as any);
-
-      jest
-        .spyOn(
-          service['eventAttendeeService'],
-          'showConfirmedEventAttendeesCount',
-        )
-        .mockResolvedValue(5);
     });
 
     it('should properly serialize image.path in getHomePageUserUpcomingEvents', async () => {
