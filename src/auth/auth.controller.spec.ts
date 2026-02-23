@@ -125,18 +125,48 @@ describe('AuthController', () => {
         refreshToken: 'refresh-token',
         tokenExpires: 12345,
         user: { id: 42 },
+        sessionId: 'test-session-id',
       };
       mockAuthService.exchangeLoginLink.mockResolvedValue(mockLoginResponse);
 
       const request = { tenantId: 'test-tenant' };
       const dto = { code: 'a'.repeat(64) };
+      const response = { cookie: jest.fn() } as any;
 
-      const result = await controller.exchangeLoginLink(dto, request);
+      const result = await controller.exchangeLoginLink(dto, response, request);
 
       expect(result).toEqual(mockLoginResponse);
       expect(mockAuthService.exchangeLoginLink).toHaveBeenCalledWith(
         'a'.repeat(64),
         'test-tenant',
+      );
+    });
+
+    it('should set OIDC session cookies when sessionId is present', async () => {
+      const mockLoginResponse = {
+        token: 'jwt-token',
+        refreshToken: 'refresh-token',
+        tokenExpires: 12345,
+        user: { id: 42 },
+        sessionId: 'test-session-id',
+      };
+      mockAuthService.exchangeLoginLink.mockResolvedValue(mockLoginResponse);
+
+      const request = { tenantId: 'test-tenant' };
+      const dto = { code: 'a'.repeat(64) };
+      const response = { cookie: jest.fn() } as any;
+
+      await controller.exchangeLoginLink(dto, response, request);
+
+      expect(response.cookie).toHaveBeenCalledWith(
+        'oidc_session',
+        'test-session-id',
+        expect.any(Object),
+      );
+      expect(response.cookie).toHaveBeenCalledWith(
+        'oidc_tenant',
+        'test-tenant',
+        expect.any(Object),
       );
     });
   });

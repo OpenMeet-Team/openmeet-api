@@ -10,6 +10,9 @@ export class CreateLoginLinkDto {
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^\//, { message: 'redirectPath must start with /' })
+  @Matches(/^\/(?!\/)/, {
+    message: 'redirectPath must be a relative path starting with /',
+  })
+  @Matches(/^(?!.*:\/\/)/, { message: 'redirectPath must not contain ://' })
   redirectPath: string;
 }

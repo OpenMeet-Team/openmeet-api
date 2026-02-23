@@ -1492,14 +1492,18 @@ export class AuthService {
    * @param redirectPath - Relative path to redirect to after login (must start with /)
    * @returns URL and expiry time
    */
+  private static readonly LOGIN_LINK_PATH = '/auth/token-login';
+
   async createLoginLink(
     userId: number,
     tenantId: string,
     redirectPath: string,
   ): Promise<CreateLoginLinkResponseDto> {
     // Validate redirectPath to prevent open redirect attacks
-    if (!redirectPath.startsWith('/')) {
-      throw new BadRequestException('redirectPath must start with /');
+    if (!redirectPath.startsWith('/') || redirectPath.startsWith('//')) {
+      throw new BadRequestException(
+        'redirectPath must be a relative path starting with /',
+      );
     }
     if (redirectPath.includes('://')) {
       throw new BadRequestException('redirectPath must not contain ://');
@@ -1524,7 +1528,9 @@ export class AuthService {
     // Build the URL using the tenant's frontend domain
     const tenantConfig = getTenantConfig(tenantId);
     const encodedRedirect = encodeURIComponent(redirectPath);
-    const url = `${tenantConfig.frontendDomain}/auth/token-login?code=${code}&redirect=${encodedRedirect}`;
+    const url = `${tenantConfig.frontendDomain}${AuthService.LOGIN_LINK_PATH}?code=${code}&redirect=${encodedRedirect}`;
+
+    this.logger.log('Login link created', { userId, tenantId });
 
     return {
       url,
@@ -1548,8 +1554,8 @@ export class AuthService {
   ): Promise<LoginResponseDto> {
     const redisKey = `login_link:${code}`;
 
-    // Retrieve and validate the login link data
-    const linkData = await this.elastiCacheService.get<{
+    // Atomically retrieve and delete the login link data (single-use)
+    const linkData = await this.elastiCacheService.getdel<{
       userId: number;
       tenantId: string;
       redirectPath: string;
@@ -1560,54 +1566,37 @@ export class AuthService {
     }
 
     // Security: ensure tenant matches
+    // No need to delete the code — getdel already consumed it
     if (linkData.tenantId !== tenantId) {
-      // Delete the code to prevent further attempts
-      await this.elastiCacheService.del(redisKey);
+      this.logger.warn('Login link tenant mismatch', {
+        tenantId,
+        linkTenantId: linkData.tenantId,
+      });
       throw new UnauthorizedException('Invalid or expired login link');
     }
-
-    // Consume the code (one-time use)
-    await this.elastiCacheService.del(redisKey);
 
     // Look up the user
     const user = await this.userService.findById(linkData.userId);
     if (!user || !user.role) {
+      this.logger.warn('Login link user not found', {
+        userId: linkData.userId,
+        tenantId,
+      });
       throw new UnauthorizedException('Invalid or expired login link');
     }
 
-    // Create session and return tokens (same pattern as other login methods)
-    const hash = crypto
-      .createHash('sha256')
-      .update(randomStringGenerator())
-      .digest('hex');
-
-    const secureId = crypto.randomUUID();
-
-    const session = await this.sessionService.create(
-      {
-        user,
-        hash,
-        secureId,
-      },
-      tenantId,
-    );
-
-    const { token, refreshToken, tokenExpires } = await this.getTokensData({
-      id: user.id,
-      role: user.role,
-      slug: user.slug,
-      sessionId: session.secureId,
-      hash,
+    this.logger.log('Login link exchanged', {
+      userId: linkData.userId,
       tenantId,
     });
 
-    return {
-      token,
-      refreshToken,
-      tokenExpires,
+    // Delegate to shared session creation (handles ensureAtprotoIdentity, session, JWT)
+    return this.createLoginSession(
       user,
-      sessionId: session.secureId,
-    };
+      AuthProvidersEnum.email,
+      null,
+      tenantId,
+    );
   }
 
   /**

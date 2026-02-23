@@ -288,6 +288,20 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async getdel<T>(key: string): Promise<T | null> {
+    try {
+      if (!this.redis?.isOpen) {
+        this.logger.warn('Redis client is not connected, returning null');
+        return null;
+      }
+      const value = await this.redis.getDel(key);
+      return value ? JSON.parse(value as string) : null;
+    } catch (error) {
+      this.logger.error(`Failed to getdel cache key ${key}: ${error.message}`);
+      return null;
+    }
+  }
+
   async del(key: string): Promise<void> {
     try {
       if (!this.redis?.isOpen) {

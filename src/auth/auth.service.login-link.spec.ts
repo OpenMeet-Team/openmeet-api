@@ -39,6 +39,7 @@ describe('AuthService - Login Link', () => {
   const mockElastiCacheService = {
     set: jest.fn(),
     get: jest.fn(),
+    getdel: jest.fn(),
     del: jest.fn(),
   };
 
@@ -211,6 +212,12 @@ describe('AuthService - Login Link', () => {
         authService.createLoginLink(1, 'test-tenant', 'events/my-event'),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('should reject redirect paths starting with // (protocol-relative URL)', async () => {
+      await expect(
+        authService.createLoginLink(1, 'test-tenant', '//evil.com/steal'),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('exchangeLoginLink', () => {
@@ -227,12 +234,13 @@ describe('AuthService - Login Link', () => {
 
     it('should exchange a valid code for login tokens', async () => {
       const code = 'a'.repeat(64);
-      mockElastiCacheService.get.mockResolvedValue({
+      mockElastiCacheService.getdel.mockResolvedValue({
         userId: 42,
         tenantId: 'test-tenant',
         redirectPath: '/events/test',
       });
       mockUserService.findById.mockResolvedValue(mockUser);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
 
       const result = await authService.exchangeLoginLink(code, 'test-tenant');
 
@@ -242,25 +250,28 @@ describe('AuthService - Login Link', () => {
       expect(result).toHaveProperty('user');
     });
 
-    it('should delete the code from Redis after exchange (single-use)', async () => {
+    it('should atomically consume the code via getdel (single-use)', async () => {
       const code = 'b'.repeat(64);
-      mockElastiCacheService.get.mockResolvedValue({
+      mockElastiCacheService.getdel.mockResolvedValue({
         userId: 42,
         tenantId: 'test-tenant',
         redirectPath: '/events/test',
       });
       mockUserService.findById.mockResolvedValue(mockUser);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
 
       await authService.exchangeLoginLink(code, 'test-tenant');
 
-      expect(mockElastiCacheService.del).toHaveBeenCalledWith(
+      // getdel atomically retrieves and deletes - no separate del call needed
+      expect(mockElastiCacheService.getdel).toHaveBeenCalledWith(
         `login_link:${code}`,
       );
+      expect(mockElastiCacheService.del).not.toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException for invalid/expired code', async () => {
       const code = 'c'.repeat(64);
-      mockElastiCacheService.get.mockResolvedValue(null);
+      mockElastiCacheService.getdel.mockResolvedValue(null);
 
       await expect(
         authService.exchangeLoginLink(code, 'test-tenant'),
@@ -269,7 +280,7 @@ describe('AuthService - Login Link', () => {
 
     it('should throw UnauthorizedException when tenantId does not match', async () => {
       const code = 'd'.repeat(64);
-      mockElastiCacheService.get.mockResolvedValue({
+      mockElastiCacheService.getdel.mockResolvedValue({
         userId: 42,
         tenantId: 'different-tenant',
         redirectPath: '/events/test',
@@ -282,7 +293,7 @@ describe('AuthService - Login Link', () => {
 
     it('should throw UnauthorizedException when user not found', async () => {
       const code = 'e'.repeat(64);
-      mockElastiCacheService.get.mockResolvedValue({
+      mockElastiCacheService.getdel.mockResolvedValue({
         userId: 999,
         tenantId: 'test-tenant',
         redirectPath: '/events/test',
@@ -301,12 +312,13 @@ describe('AuthService - Login Link', () => {
         firstName: null,
         socialId: 'did:plc:abc123',
       };
-      mockElastiCacheService.get.mockResolvedValue({
+      mockElastiCacheService.getdel.mockResolvedValue({
         userId: 42,
         tenantId: 'test-tenant',
         redirectPath: '/events/test',
       });
       mockUserService.findById.mockResolvedValue(userWithDid);
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
 
       // Should still succeed - the user object is returned as-is
       const result = await authService.exchangeLoginLink(code, 'test-tenant');

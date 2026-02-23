@@ -48,6 +48,7 @@ import {
   QUICK_RSVP_RATE_LIMITS,
   EMAIL_VERIFICATION_RATE_LIMITS,
   REQUEST_LOGIN_CODE_RATE_LIMITS,
+  LOGIN_LINK_RATE_LIMITS,
 } from './config/rate-limits.config';
 import { AtprotoServiceAuthDto } from './dto/atproto-service-auth.dto';
 import { AtprotoServiceAuthService } from './services/atproto-service-auth.service';
@@ -402,7 +403,7 @@ export class AuthController {
   @Post('create-login-link')
   @UseGuards(AuthGuard('jwt'))
   @Throttle({
-    default: { limit: 10, ttl: 60000 },
+    default: LOGIN_LINK_RATE_LIMITS.createPerIp,
   })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -419,6 +420,10 @@ export class AuthController {
     status: HttpStatus.BAD_REQUEST,
     description: 'Invalid redirect path',
   })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Too many requests',
+  })
   public async createLoginLink(
     @Body() dto: CreateLoginLinkDto,
     @Request() request,
@@ -433,7 +438,7 @@ export class AuthController {
   @Post('exchange-login-link')
   @Public()
   @Throttle({
-    default: { limit: 10, ttl: 60000 },
+    default: LOGIN_LINK_RATE_LIMITS.exchangePerIp,
   })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -449,10 +454,28 @@ export class AuthController {
     status: HttpStatus.UNAUTHORIZED,
     description: 'Invalid or expired login link code',
   })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Too many requests',
+  })
   public async exchangeLoginLink(
     @Body() dto: ExchangeLoginLinkDto,
+    @Res({ passthrough: true }) response: Response,
     @Request() request,
   ): Promise<LoginResponseDto> {
-    return this.service.exchangeLoginLink(dto.code, request.tenantId);
+    const loginResult = await this.service.exchangeLoginLink(
+      dto.code,
+      request.tenantId,
+    );
+
+    // Set oidc_session cookie for cross-domain OIDC authentication (Matrix, etc.)
+    if (loginResult.sessionId) {
+      const cookieOptions = getOidcCookieOptions();
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
+    }
+
+    return loginResult;
   }
 }
