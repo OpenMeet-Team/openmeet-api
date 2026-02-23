@@ -94,57 +94,56 @@ export class MetricsService implements OnModuleInit {
     };
 
     try {
-      // Get schema name for the tenant
+      // Build regclass references with schema prefix for tenant tables
+      // For non-empty tenantId, tables are in schema tenant_<tenantId>
+      // For empty tenantId, tables are in the public schema
       const schemaPrefix =
-        tenantId && tenantId !== '' ? `tenant_${tenantId}.` : '';
+        tenantId && tenantId !== '' ? `"tenant_${tenantId}".` : '';
 
-      // Users
-      const userCount = await connection.query(
-        `SELECT COUNT(*) as count FROM ${schemaPrefix}"users"`,
-      );
-      metrics.users = parseInt(userCount[0].count, 10);
-      this.usersGauge.set({ tenant: tenantId }, metrics.users);
-
-      // Active users (based on last token refresh or login)
-      const activeUserQuery = `
-        SELECT COUNT(DISTINCT "userId") as count
-        FROM ${schemaPrefix}"sessions"
-        WHERE "updatedAt" > NOW() - INTERVAL '30 days'
+      // Use pg_class.reltuples for approximate row counts (essentially free,
+      // updated by ANALYZE/VACUUM) instead of expensive COUNT(*) full table scans.
+      // Only active_users needs a real COUNT since it has a WHERE clause.
+      const query = `
+        SELECT
+          (SELECT reltuples::bigint FROM pg_class
+           WHERE oid = '${schemaPrefix}"users"'::regclass) as users,
+          (SELECT reltuples::bigint FROM pg_class
+           WHERE oid = '${schemaPrefix}"events"'::regclass) as events,
+          (SELECT reltuples::bigint FROM pg_class
+           WHERE oid = '${schemaPrefix}"groups"'::regclass) as groups,
+          (SELECT reltuples::bigint FROM pg_class
+           WHERE oid = '${schemaPrefix}"eventAttendees"'::regclass) as event_attendees,
+          (SELECT reltuples::bigint FROM pg_class
+           WHERE oid = '${schemaPrefix}"groupMembers"'::regclass) as group_members,
+          (SELECT COUNT(DISTINCT "userId")
+           FROM ${schemaPrefix}"sessions"
+           WHERE "updatedAt" > NOW() - INTERVAL '30 days') as active_users
       `;
-      const activeUserCount = await connection.query(activeUserQuery);
-      metrics.activeUsers = parseInt(activeUserCount[0].count, 10);
-      this.activeUsers30dGauge.set({ tenant: tenantId }, metrics.activeUsers);
 
-      // Events
-      const eventCount = await connection.query(
-        `SELECT COUNT(*) as count FROM ${schemaPrefix}"events"`,
+      const result = await connection.query(query);
+      const row = result[0];
+
+      // pg_class.reltuples can return -1 for tables never analyzed; treat as 0
+      metrics.users = Math.max(0, parseInt(row.users, 10) || 0);
+      metrics.events = Math.max(0, parseInt(row.events, 10) || 0);
+      metrics.groups = Math.max(0, parseInt(row.groups, 10) || 0);
+      metrics.eventAttendees = Math.max(
+        0,
+        parseInt(row.event_attendees, 10) || 0,
       );
-      metrics.events = parseInt(eventCount[0].count, 10);
+      metrics.groupMembers = Math.max(0, parseInt(row.group_members, 10) || 0);
+      metrics.activeUsers = Math.max(0, parseInt(row.active_users, 10) || 0);
+
+      // Set per-tenant gauge values
+      this.usersGauge.set({ tenant: tenantId }, metrics.users);
       this.eventsGauge.set({ tenant: tenantId }, metrics.events);
-
-      // Groups
-      const groupCount = await connection.query(
-        `SELECT COUNT(*) as count FROM ${schemaPrefix}"groups"`,
-      );
-      metrics.groups = parseInt(groupCount[0].count, 10);
       this.groupsGauge.set({ tenant: tenantId }, metrics.groups);
-
-      // Event attendees
-      const attendeeCount = await connection.query(
-        `SELECT COUNT(*) as count FROM ${schemaPrefix}"eventAttendees"`,
-      );
-      metrics.eventAttendees = parseInt(attendeeCount[0].count, 10);
       this.eventAttendeesGauge.set(
         { tenant: tenantId },
         metrics.eventAttendees,
       );
-
-      // Group members
-      const memberCount = await connection.query(
-        `SELECT COUNT(*) as count FROM ${schemaPrefix}"groupMembers"`,
-      );
-      metrics.groupMembers = parseInt(memberCount[0].count, 10);
       this.groupMembersGauge.set({ tenant: tenantId }, metrics.groupMembers);
+      this.activeUsers30dGauge.set({ tenant: tenantId }, metrics.activeUsers);
     } catch (error) {
       console.error(`Error collecting metrics for tenant ${tenantId}`, error);
     }
