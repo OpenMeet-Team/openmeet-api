@@ -1,8 +1,34 @@
+import { getMetadataArgsStorage } from 'typeorm';
 import { EventEntity } from './event.entity';
 import { SLUG_REGEX } from '../../../../../core/constants/constant';
 import * as shortCodeModule from '../../../../../utils/short-code';
 
 describe('EventEntity', () => {
+  describe('index decorators', () => {
+    it('should NOT have a standalone @Index() on the slug property', () => {
+      // The slug column has unique: true on @Column, which creates a UNIQUE constraint.
+      // A separate @Index() would create a redundant non-unique index.
+      const indexMetadata = getMetadataArgsStorage().indices.filter(
+        (idx) =>
+          idx.target === EventEntity &&
+          idx.columns &&
+          (idx.columns as string[]).includes('slug'),
+      );
+
+      // There should be no standalone index targeting the slug column
+      expect(indexMetadata).toHaveLength(0);
+    });
+
+    it('should still have @Index() on other columns like name, startDate, status', () => {
+      const allEntityIndices = getMetadataArgsStorage().indices.filter(
+        (idx) => idx.target === EventEntity,
+      );
+
+      // The entity should still have indices (composite and single-column ones)
+      expect(allEntityIndices.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('generateSlug', () => {
     it('should generate a valid slug from a simple name', () => {
       const event = new EventEntity();

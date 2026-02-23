@@ -56,7 +56,6 @@ export class EventEntity
   name: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })
-  @Index()
   slug: string;
 
   @ApiProperty({

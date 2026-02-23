@@ -41,7 +41,6 @@ export class SessionEntity extends EntityRelationalHelper {
    * - Never expose the numeric 'id' field to clients
    */
   @Column({ unique: true, nullable: false })
-  @Index()
   secureId: string;
 
   @CreateDateColumn()
