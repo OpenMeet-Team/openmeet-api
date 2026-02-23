@@ -361,7 +361,7 @@ export const AppDataSource = (tenantId: string) => {
           : ['error', 'warn'],
       logger: process.env.NODE_ENV === 'development' ? 'advanced-console' : '',
       entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-      migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
+      migrations: [__dirname + '/migrations/**/!(*.spec|*.test){.ts,.js}'],
       cli: {
         migrationsDir: 'src/database/migrations', // path where migrations generated
         entitiesDir: 'src',
