@@ -87,7 +87,7 @@ describe('MetricsService', () => {
       expect(mockTenantConnection.query).toHaveBeenCalledTimes(1);
     });
 
-    it('should use pg_class for approximate counts', async () => {
+    it('should use COUNT(*) for exact counts', async () => {
       const tenantId = 'test-tenant';
       mockTenantConnection.query.mockResolvedValueOnce([
         {
@@ -110,8 +110,9 @@ describe('MetricsService', () => {
       await service.updateMetrics();
 
       const query = mockTenantConnection.query.mock.calls[0][0] as string;
-      expect(query).toContain('pg_class');
-      expect(query).toContain('reltuples');
+      expect(query).toContain('COUNT(*)');
+      expect(query).not.toContain('pg_class');
+      expect(query).not.toContain('reltuples');
     });
 
     it('should include COUNT(DISTINCT) for active users', async () => {
@@ -331,45 +332,5 @@ describe('MetricsService', () => {
       );
     });
 
-    it('should treat negative reltuples values as 0', async () => {
-      const tenantId = 'test-tenant';
-      // pg_class.reltuples can return -1 for tables that have never been analyzed
-      mockTenantConnection.query.mockResolvedValueOnce([
-        {
-          users: -1,
-          events: -1,
-          groups: 0,
-          event_attendees: -1,
-          group_members: 10,
-          active_users: 5,
-        },
-      ]);
-
-      mockTenantConnectionService.getAllTenants.mockResolvedValue([
-        { id: tenantId } as any,
-      ]);
-      mockTenantConnectionService.getTenantConnection.mockResolvedValue(
-        mockTenantConnection,
-      );
-
-      await service.updateMetrics();
-
-      // Negative reltuples should be treated as 0
-      expect(usersGauge.set).toHaveBeenCalledWith({ tenant: tenantId }, 0);
-      expect(eventsGauge.set).toHaveBeenCalledWith({ tenant: tenantId }, 0);
-      expect(groupsGauge.set).toHaveBeenCalledWith({ tenant: tenantId }, 0);
-      expect(eventAttendeesGauge.set).toHaveBeenCalledWith(
-        { tenant: tenantId },
-        0,
-      );
-      expect(groupMembersGauge.set).toHaveBeenCalledWith(
-        { tenant: tenantId },
-        10,
-      );
-      expect(activeUsers30dGauge.set).toHaveBeenCalledWith(
-        { tenant: tenantId },
-        5,
-      );
-    });
   });
 });
