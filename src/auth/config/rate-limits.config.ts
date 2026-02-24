@@ -74,3 +74,14 @@ export const REQUEST_LOGIN_CODE_RATE_LIMITS = {
     ttl: 3600000, // 1 hour
   },
 } as const;
+
+/**
+ * Login link rate limits
+ * Applied to /auth/create-login-link and /auth/exchange-login-link endpoints
+ */
+export const LOGIN_LINK_RATE_LIMITS = {
+  /** Per-IP limit for creating login links */
+  createPerIp: { limit: isProduction ? 10 : 10000, ttl: 60000 },
+  /** Per-IP limit for exchanging login links */
+  exchangePerIp: { limit: isProduction ? 10 : 10000, ttl: 60000 },
+} as const;
