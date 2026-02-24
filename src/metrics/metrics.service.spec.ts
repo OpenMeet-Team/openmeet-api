@@ -223,34 +223,29 @@ describe('MetricsService', () => {
       expect(query).toContain(`"tenant_${tenantId}"`);
     });
 
-    it('should not use schema prefix for empty tenant IDs', async () => {
-      const tenantId = '';
-      mockTenantConnection.query.mockResolvedValueOnce([
-        {
-          users: 10,
-          events: 5,
-          groups: 2,
-          event_attendees: 20,
-          group_members: 7,
-          active_users: 3,
-        },
-      ]);
+    it('should skip tenants with empty IDs (public schema)', async () => {
+      const realTenantConnection = {
+        query: jest.fn().mockResolvedValueOnce([{
+          users: 100, events: 50, groups: 25,
+          event_attendees: 200, group_members: 75, active_users: 30,
+        }]),
+      } as unknown as jest.Mocked<DataSource>;
 
       mockTenantConnectionService.getAllTenants.mockResolvedValue([
-        { id: tenantId } as any,
+        { id: '' } as any,           // public schema - should be skipped
+        { id: 'real-tenant' } as any, // real tenant - should be queried
       ]);
-      mockTenantConnectionService.getTenantConnection.mockResolvedValue(
-        mockTenantConnection,
-      );
+      mockTenantConnectionService.getTenantConnection
+        .mockResolvedValue(realTenantConnection);
 
       await service.updateMetrics();
 
-      const query = mockTenantConnection.query.mock.calls[0][0] as string;
-      // Should NOT contain tenant_ prefix for empty tenant ID
-      expect(query).not.toContain('tenant_.');
-      // But should still reference the tables
-      expect(query).toContain('"users"');
-      expect(query).toContain('"events"');
+      // getTenantConnection should only be called for the real tenant
+      expect(mockTenantConnectionService.getTenantConnection).toHaveBeenCalledTimes(1);
+      expect(mockTenantConnectionService.getTenantConnection).toHaveBeenCalledWith('real-tenant');
+
+      // Only the real tenant's data should be in the 'all' aggregate
+      expect(usersGauge.set).toHaveBeenCalledWith({ tenant: 'all' }, 100);
     });
 
     it('should handle errors gracefully without throwing', async () => {

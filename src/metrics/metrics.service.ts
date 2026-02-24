@@ -50,6 +50,8 @@ export class MetricsService implements OnModuleInit {
       // Update metrics for each tenant connection
       for (const tenant of allTenants) {
         const tenantId = tenant.id;
+        // Skip the public schema tenant - it contains no data
+        if (!tenantId) continue;
         // Get the connection for this tenant
         const connection =
           await this.tenantConnectionService.getTenantConnection(tenantId);
