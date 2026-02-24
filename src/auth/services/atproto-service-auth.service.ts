@@ -8,18 +8,20 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
 import { IdResolver } from '@atproto/identity';
 import { verifySignature } from '@atproto/crypto';
 import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 import { AuthService } from '../auth.service';
 import { UserService } from '../../user/user.service';
+import { ElastiCacheService } from '../../elasticache/elasticache.service';
 import { LoginResponseDto } from '../dto/login-response.dto';
 import { AuthProvidersEnum } from '../auth-providers.enum';
 
 @Injectable()
 export class AtprotoServiceAuthService {
   private readonly logger = new Logger(AtprotoServiceAuthService.name);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private idResolver: any;
 
   constructor(
@@ -28,9 +30,9 @@ export class AtprotoServiceAuthService {
     private readonly authService: AuthService,
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
+    private readonly elastiCacheService: ElastiCacheService,
   ) {}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private getIdResolver(): any {
     if (!this.idResolver) {
       const didPlcUrl = this.configService.get<string>('DID_PLC_URL', {
@@ -177,6 +179,30 @@ export class AtprotoServiceAuthService {
       this.logger.warn(`Service auth rejected: invalid signature for ${iss}`);
       throw new UnauthorizedException('Invalid signature');
     }
+
+    // Step 4b: Replay protection - reject tokens that have already been used
+    // Fail-closed: if Redis is unavailable, reject rather than allowing replays.
+    if (!this.elastiCacheService.isConnected()) {
+      this.logger.error(
+        'Service auth rejected: Redis unavailable for replay protection',
+      );
+      throw new UnauthorizedException('Service temporarily unavailable');
+    }
+
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const replayKey = `service-auth:used:${tenantId}:${tokenHash}`;
+
+    const alreadyUsed = await this.elastiCacheService.get<string>(replayKey);
+    if (alreadyUsed) {
+      this.logger.warn(`Service auth rejected: replayed token for ${iss}`);
+      throw new UnauthorizedException('Token already used');
+    }
+
+    await this.elastiCacheService.set(
+      replayKey,
+      '1',
+      MAX_TOKEN_LIFETIME_SECONDS,
+    );
 
     // Step 5: Look up user by DID
     const identity = await this.userAtprotoIdentityService.findByDid(

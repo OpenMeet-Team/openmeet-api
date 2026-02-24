@@ -5,6 +5,7 @@ import { AtprotoServiceAuthService } from './atproto-service-auth.service';
 import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 import { AuthService } from '../auth.service';
 import { UserService } from '../../user/user.service';
+import { ElastiCacheService } from '../../elasticache/elasticache.service';
 import { IdResolver } from '@atproto/identity';
 import { verifySignature } from '@atproto/crypto';
 
@@ -36,6 +37,7 @@ describe('AtprotoServiceAuthService', () => {
     validateSocialLogin: jest.Mock;
   };
   let mockUserService: { findByUlid: jest.Mock };
+  let mockElastiCacheService: { get: jest.Mock; set: jest.Mock };
 
   // Helper: create a JWT with given claims
   function makeJwt(
@@ -80,6 +82,12 @@ describe('AtprotoServiceAuthService', () => {
       findByUlid: jest.fn(),
     };
 
+    mockElastiCacheService = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue(undefined),
+      isConnected: jest.fn().mockReturnValue(true),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AtprotoServiceAuthService,
@@ -90,6 +98,7 @@ describe('AtprotoServiceAuthService', () => {
         },
         { provide: AuthService, useValue: mockAuthService },
         { provide: UserService, useValue: mockUserService },
+        { provide: ElastiCacheService, useValue: mockElastiCacheService },
       ],
     }).compile();
 
@@ -371,9 +380,9 @@ describe('AtprotoServiceAuthService', () => {
 
       const token = makeJwt(validHeader, validPayload);
 
-      await expect(
-        service.verifyAndExchange(token, 'tenant1'),
-      ).rejects.toThrow('connection refused');
+      await expect(service.verifyAndExchange(token, 'tenant1')).rejects.toThrow(
+        'connection refused',
+      );
     });
 
     it('should use DID as pdsUrl fallback when resolvedPdsUrl is undefined', async () => {
@@ -583,6 +592,110 @@ describe('AtprotoServiceAuthService', () => {
 
         // Verify IdResolver was called only once (no fallback without private PLC)
         expect(MockedIdResolver).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('replay protection', () => {
+      // Helper to set up mocks for a successful verification pipeline
+      function setupSuccessfulVerification() {
+        MockedIdResolver.mockImplementation(() => ({
+          did: {
+            resolveAtprotoData: jest.fn().mockResolvedValue({
+              did: 'did:plc:testuser123',
+              signingKey: 'did:key:z1234mockkey',
+              handle: 'test.bsky.social',
+              pds: 'https://pds.example.com',
+            }),
+          },
+        }));
+
+        mockedVerifySignature.mockResolvedValue(true);
+
+        mockIdentityService.findByDid.mockResolvedValue({
+          userUlid: 'user-ulid-123',
+          did: 'did:plc:testuser123',
+        });
+
+        mockUserService.findByUlid.mockResolvedValue({
+          id: 1,
+          ulid: 'user-ulid-123',
+          slug: 'testuser',
+          role: { id: 2 },
+        });
+
+        mockAuthService.createLoginSession.mockResolvedValue({
+          token: 'jwt-token',
+          refreshToken: 'refresh-token',
+          tokenExpires: 12345,
+          user: {},
+        });
+      }
+
+      it('should reject a replayed token', async () => {
+        setupSuccessfulVerification();
+
+        const token = makeJwt(validHeader, validPayload);
+
+        // First call succeeds
+        await service.verifyAndExchange(token, 'tenant1');
+
+        // Simulate Redis returning the stored hash on second call
+        mockElastiCacheService.get.mockResolvedValueOnce('1');
+
+        // Second call with same token should be rejected
+        await expect(
+          service.verifyAndExchange(token, 'tenant1'),
+        ).rejects.toThrow(new UnauthorizedException('Token already used'));
+      });
+
+      it('should allow different tokens for the same user', async () => {
+        setupSuccessfulVerification();
+
+        const token1 = makeJwt(validHeader, {
+          ...validPayload,
+          exp: Math.floor(Date.now() / 1000) + 120,
+        });
+        const token2 = makeJwt(validHeader, {
+          ...validPayload,
+          exp: Math.floor(Date.now() / 1000) + 180,
+        });
+
+        // Both calls should succeed (Redis returns null for both = not seen before)
+        const result1 = await service.verifyAndExchange(token1, 'tenant1');
+        const result2 = await service.verifyAndExchange(token2, 'tenant1');
+
+        expect(result1).toBeDefined();
+        expect(result2).toBeDefined();
+        // set should have been called twice (once per token)
+        expect(mockElastiCacheService.set).toHaveBeenCalledTimes(2);
+      });
+
+      it('should reject when Redis is unavailable (fail-closed)', async () => {
+        setupSuccessfulVerification();
+
+        // Simulate Redis being down
+        mockElastiCacheService.isConnected.mockReturnValue(false);
+
+        const token = makeJwt(validHeader, validPayload);
+
+        await expect(
+          service.verifyAndExchange(token, 'tenant1'),
+        ).rejects.toThrow(
+          new UnauthorizedException('Service temporarily unavailable'),
+        );
+      });
+
+      it('should include tenantId in the replay key', async () => {
+        setupSuccessfulVerification();
+
+        const token = makeJwt(validHeader, validPayload);
+        await service.verifyAndExchange(token, 'my-tenant');
+
+        expect(mockElastiCacheService.set).toHaveBeenCalledWith(
+          expect.stringContaining('service-auth:used:my-tenant:'),
+          '1',
+          300,
+        );
       });
     });
 
