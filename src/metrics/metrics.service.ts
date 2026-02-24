@@ -50,6 +50,8 @@ export class MetricsService implements OnModuleInit {
       // Update metrics for each tenant connection
       for (const tenant of allTenants) {
         const tenantId = tenant.id;
+        // Skip the public schema tenant - it contains no data
+        if (!tenantId) continue;
         // Get the connection for this tenant
         const connection =
           await this.tenantConnectionService.getTenantConnection(tenantId);
@@ -100,21 +102,13 @@ export class MetricsService implements OnModuleInit {
       const schemaPrefix =
         tenantId && tenantId !== '' ? `"tenant_${tenantId}".` : '';
 
-      // Use pg_class.reltuples for approximate row counts (essentially free,
-      // updated by ANALYZE/VACUUM) instead of expensive COUNT(*) full table scans.
-      // Only active_users needs a real COUNT since it has a WHERE clause.
       const query = `
         SELECT
-          (SELECT reltuples::bigint FROM pg_class
-           WHERE oid = '${schemaPrefix}"users"'::regclass) as users,
-          (SELECT reltuples::bigint FROM pg_class
-           WHERE oid = '${schemaPrefix}"events"'::regclass) as events,
-          (SELECT reltuples::bigint FROM pg_class
-           WHERE oid = '${schemaPrefix}"groups"'::regclass) as groups,
-          (SELECT reltuples::bigint FROM pg_class
-           WHERE oid = '${schemaPrefix}"eventAttendees"'::regclass) as event_attendees,
-          (SELECT reltuples::bigint FROM pg_class
-           WHERE oid = '${schemaPrefix}"groupMembers"'::regclass) as group_members,
+          (SELECT COUNT(*) FROM ${schemaPrefix}"users") as users,
+          (SELECT COUNT(*) FROM ${schemaPrefix}"events") as events,
+          (SELECT COUNT(*) FROM ${schemaPrefix}"groups") as groups,
+          (SELECT COUNT(*) FROM ${schemaPrefix}"eventAttendees") as event_attendees,
+          (SELECT COUNT(*) FROM ${schemaPrefix}"groupMembers") as group_members,
           (SELECT COUNT(DISTINCT "userId")
            FROM ${schemaPrefix}"sessions"
            WHERE "updatedAt" > NOW() - INTERVAL '30 days') as active_users
@@ -123,16 +117,12 @@ export class MetricsService implements OnModuleInit {
       const result = await connection.query(query);
       const row = result[0];
 
-      // pg_class.reltuples can return -1 for tables never analyzed; treat as 0
-      metrics.users = Math.max(0, parseInt(row.users, 10) || 0);
-      metrics.events = Math.max(0, parseInt(row.events, 10) || 0);
-      metrics.groups = Math.max(0, parseInt(row.groups, 10) || 0);
-      metrics.eventAttendees = Math.max(
-        0,
-        parseInt(row.event_attendees, 10) || 0,
-      );
-      metrics.groupMembers = Math.max(0, parseInt(row.group_members, 10) || 0);
-      metrics.activeUsers = Math.max(0, parseInt(row.active_users, 10) || 0);
+      metrics.users = parseInt(row.users, 10) || 0;
+      metrics.events = parseInt(row.events, 10) || 0;
+      metrics.groups = parseInt(row.groups, 10) || 0;
+      metrics.eventAttendees = parseInt(row.event_attendees, 10) || 0;
+      metrics.groupMembers = parseInt(row.group_members, 10) || 0;
+      metrics.activeUsers = parseInt(row.active_users, 10) || 0;
 
       // Set per-tenant gauge values
       this.usersGauge.set({ tenant: tenantId }, metrics.users);
