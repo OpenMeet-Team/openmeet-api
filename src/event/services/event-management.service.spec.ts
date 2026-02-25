@@ -365,17 +365,6 @@ describe('EventManagementService', () => {
         } as unknown as CategoryEntity,
       ]);
 
-      // Mock event attendee service
-      jest.spyOn(eventAttendeeService, 'create').mockResolvedValue({
-        id: 1,
-        userId: TESTING_USER_ID,
-        eventId: 1,
-        status: EventAttendeeStatus.Confirmed,
-        role: EventAttendeeRole.Participant,
-        event: { id: 1 } as EventEntity,
-        user: { id: TESTING_USER_ID } as UserEntity,
-      } as unknown as EventAttendeesEntity);
-
       jest
         .spyOn(mockRepository, 'save')
         .mockResolvedValue(findOneMockEventEntity);
@@ -385,6 +374,35 @@ describe('EventManagementService', () => {
       expect(mockRepository.save).toHaveBeenCalled();
     });
 
+    it('should NOT auto-RSVP the creator as Host attendee', async () => {
+      const createEventDto: CreateEventDto = {
+        name: 'Test Event',
+        description: 'Test Event Description',
+        startDate: new Date(),
+        type: EventType.Hybrid,
+        location: 'Test Location',
+        locationOnline: 'Test Location Online',
+        maxAttendees: 100,
+        categories: [],
+        lat: 1,
+        lon: 1,
+        timeZone: 'UTC',
+      };
+
+      jest
+        .spyOn(service['categoryService'], 'findByIds')
+        .mockResolvedValue([]);
+      jest
+        .spyOn(mockRepository, 'save')
+        .mockResolvedValue(findOneMockEventEntity);
+
+      const attendeeCreateSpy = jest.spyOn(eventAttendeeService, 'create');
+
+      await service.create(createEventDto, mockUser.id);
+
+      expect(attendeeCreateSpy).not.toHaveBeenCalled();
+    });
+
     // Tests for handling NaN and other problematic group values
     describe('handling problematic group values', () => {
       beforeEach(() => {
@@ -392,7 +410,6 @@ describe('EventManagementService', () => {
         jest
           .spyOn(service['categoryService'], 'findByIds')
           .mockResolvedValue([]);
-        jest.spyOn(eventAttendeeService, 'create').mockResolvedValue({} as any);
         jest
           .spyOn(mockRepository, 'save')
           .mockResolvedValue(findOneMockEventEntity);

@@ -445,18 +445,6 @@ export class EventManagementService {
       tenantId: this.request.tenantId,
     });
 
-    // Add host as first attendee
-    const hostRole = await this.eventRoleService.getRoleByName(
-      EventAttendeeRole.Host,
-    );
-
-    await this.eventAttendeeService.create({
-      role: hostRole,
-      status: EventAttendeeStatus.Confirmed,
-      user,
-      event: createdEvent,
-    });
-
     this.auditLogger.log('event created', {
       createdEvent,
       source: createEventDto.sourceType,

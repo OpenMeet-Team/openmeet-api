@@ -10,7 +10,6 @@ import {
   EventType,
   EventStatus,
   EventVisibility,
-  EventAttendeeStatus,
 } from '../../core/constants/constant';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -19,8 +18,6 @@ import { BadRequestException } from '@nestjs/common';
 import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { FileService } from '../../file/file.service';
-import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
-import { EventRoleService } from '../../event-role/event-role.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 // Add constants for metrics tokens
@@ -223,19 +220,6 @@ describe('EventIntegrationService', () => {
         {
           provide: FileService,
           useValue: fileService,
-        },
-        {
-          provide: EventAttendeeService,
-          useValue: {
-            create: jest.fn(),
-            createFromIngestion: jest.fn(),
-          },
-        },
-        {
-          provide: EventRoleService,
-          useValue: {
-            getRoleByName: jest.fn(),
-          },
         },
         {
           provide: EventEmitter2,
@@ -1014,35 +998,6 @@ describe('EventIntegrationService', () => {
       );
     });
 
-    it('should call createFromIngestion() for host attendee creation', async () => {
-      // Arrange - no existing event, so createNewEvent path is taken
-      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
-
-      const entity = new EventEntity();
-      eventRepository.create.mockReturnValue(entity);
-
-      const eventAttendeeService = module.get(EventAttendeeService);
-
-      // Mock the role lookup
-      const eventRoleService = module.get(EventRoleService);
-      const mockHostRole = { id: 1, name: 'Host' };
-      (eventRoleService.getRoleByName as jest.Mock).mockResolvedValue(
-        mockHostRole,
-      );
-
-      // Act
-      await service.processExternalEvent(mockEventDto, 'tenant1');
-
-      // Assert - should use createFromIngestion, NOT create
-      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
-        expect.objectContaining({
-          role: mockHostRole,
-          status: EventAttendeeStatus.Confirmed,
-          user: mockUser,
-        }),
-      );
-      expect(eventAttendeeService.create).not.toHaveBeenCalled();
-    });
 
     it('should emit event.ingested.updated (not event.updated) when updating from firehose', async () => {
       // Arrange - existing event found

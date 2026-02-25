@@ -196,6 +196,56 @@ describe('CalendarInviteListener - Behavior Tests', () => {
     });
   });
 
+  describe('Self-notification guard', () => {
+    it('should NOT send invite when attendee is the event creator', async () => {
+      const module = await Test.createTestingModule({
+        providers: [
+          CalendarInviteListener,
+          {
+            provide: CalendarInviteService,
+            useValue: { sendCalendarInvite: jest.fn() },
+          },
+          {
+            provide: EventAttendeeService,
+            useValue: {
+              findOne: jest.fn().mockResolvedValue({
+                id: 1,
+                status: EventAttendeeStatus.Confirmed,
+                event: {
+                  id: 1,
+                  name: 'Test Event',
+                  user: { id: 1, email: 'creator@example.com' },
+                },
+                user: { id: 1, email: 'creator@example.com' },
+              }),
+            },
+          },
+          {
+            provide: TenantConnectionService,
+            useValue: {
+              getTenantConfig: jest.fn().mockReturnValue(mockTenantConfig),
+            },
+          },
+        ],
+      }).compile();
+
+      const selfListener = module.get(CalendarInviteListener);
+      const selfSendSpy = jest.spyOn(
+        module.get(CalendarInviteService),
+        'sendCalendarInvite',
+      );
+
+      await selfListener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(selfSendSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Error resilience (must not crash event processing)', () => {
     it('should not throw when attendee lookup fails', async () => {
       const module = await Test.createTestingModule({

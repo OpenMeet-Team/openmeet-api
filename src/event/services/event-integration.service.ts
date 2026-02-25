@@ -8,8 +8,6 @@ import { EventSourceType } from '../../core/constants/source-type.constant';
 import {
   EventStatus,
   EventVisibility,
-  EventAttendeeRole,
-  EventAttendeeStatus,
 } from '../../core/constants/constant';
 import { EventQueryService } from './event-query.service';
 import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
@@ -20,8 +18,6 @@ import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 import { FileService } from '../../file/file.service';
-import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
-import { EventRoleService } from '../../event-role/event-role.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import axios from 'axios';
 
@@ -38,8 +34,6 @@ export class EventIntegrationService {
     private readonly eventQueryService: EventQueryService,
     private readonly blueskyIdService: BlueskyIdService,
     private readonly fileService: FileService,
-    private readonly eventAttendeeService: EventAttendeeService,
-    private readonly eventRoleService: EventRoleService,
     private readonly eventEmitter: EventEmitter2,
     @InjectMetric('event_integration_processed_total')
     private readonly processedCounter: Counter<string>,
@@ -629,30 +623,6 @@ export class EventIntegrationService {
     this.logger.debug(
       `Emitted event.ingested for ingested event ${savedEvent.slug}`,
     );
-
-    // Add the event creator as a host attendee
-    try {
-      const hostRole = await this.eventRoleService.getRoleByName(
-        EventAttendeeRole.Host,
-      );
-
-      await this.eventAttendeeService.createFromIngestion({
-        role: hostRole,
-        status: EventAttendeeStatus.Confirmed,
-        user,
-        event: savedEvent,
-      });
-
-      this.logger.debug(
-        `Added creator as host attendee for event ${savedEvent.id}`,
-      );
-    } catch (error) {
-      // Log error but don't fail the event creation
-      this.logger.error(
-        `Failed to add creator as attendee for event ${savedEvent.id}: ${error.message}`,
-        error.stack,
-      );
-    }
 
     return savedEvent;
   }
