@@ -335,7 +335,8 @@ export class GroupService {
     userId?: number,
   ): Promise<any> {
     await this.getTenantSpecificGroupRepository();
-    const { page, limit } = pagination;
+    const page = Number(pagination.page) || 1;
+    const limit = Number(pagination.limit) || 10;
     const { search, categories, radius, lat, lon } = query;
 
     this.logger.debug('showAll() Auth context:', {
@@ -404,7 +405,92 @@ export class GroupService {
       });
     }
 
-    return await paginate(groupQuery, { page, limit });
+    // Two-phase query: TypeORM's orderBy() cannot handle raw SQL subqueries
+    // (it parses double-quoted identifiers as aliases), and getManyAndCount()
+    // wraps in a DISTINCT subquery that strips custom addSelect aliases.
+    // So we first get ordered IDs with a lightweight query, then load full entities.
+
+    const total = await groupQuery.getCount();
+
+    // Phase 1: ordered group IDs via lightweight query with raw SQL ordering
+    const idQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .select('group.id', 'id')
+      .where('group.status = :status', { status: GroupStatus.Published });
+
+    this.applyGroupVisibilityFilter(idQuery, userId);
+
+    if (categories && categories.length > 0) {
+      idQuery
+        .innerJoin('group.categories', 'cat')
+        .andWhere(
+          `(${categories.map((_, i) => `cat.name LIKE :cat${i}`).join(' OR ')})`,
+          categories.reduce(
+            (acc, c, i) => ({ ...acc, [`cat${i}`]: `%${c}%` }),
+            {},
+          ),
+        );
+    }
+
+    if (lat && lon) {
+      const searchRadius = radius ?? DEFAULT_RADIUS;
+      idQuery.andWhere(
+        `ST_DWithin(group.locationPoint, ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}), :radius)`,
+        { lon, lat, radius: searchRadius * 1000 },
+      );
+    }
+
+    if (search) {
+      idQuery.andWhere('group.name ILIKE :search', {
+        search: `%${search}%`,
+      });
+    }
+
+    const schema = `tenant_${this.request.tenantId}`;
+    const memberCountExpr = `(SELECT COUNT(gm2.id) FROM "${schema}"."groupMembers" gm2 INNER JOIN "${schema}"."groupRoles" gr2 ON gm2."groupRoleId" = gr2.id WHERE gm2."groupId" = "group".id AND gr2.name != '${GroupRole.Guest}')`;
+    idQuery.expressionMap.orderBys = {
+      [memberCountExpr]: 'DESC',
+      '"group"."createdAt"': 'DESC',
+    };
+    idQuery.limit(limit).offset((page - 1) * limit);
+
+    const rawIds = await idQuery.getRawMany();
+    const orderedIds: number[] = rawIds.map((r) => r.id);
+
+    if (orderedIds.length === 0) {
+      return { data: [], total, page, totalPages: Math.ceil(total / limit) };
+    }
+
+    // Phase 2: load full entities with relations for selected IDs
+    const fullQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoin('group.createdBy', 'user')
+      .leftJoin('user.photo', 'photo')
+      .leftJoin('group.image', 'groupImage')
+      .addSelect(['user.name', 'user.slug', 'photo.path', 'groupImage.path'])
+      .loadRelationCountAndMap(
+        'group.groupMembersCount',
+        'group.groupMembers',
+        'groupMembers',
+        (qb) =>
+          qb
+            .innerJoin('groupMembers.groupRole', 'role')
+            .where('role.name != :roleName', {
+              roleName: GroupRole.Guest,
+            }),
+      )
+      .where('group.id IN (:...orderedIds)', { orderedIds });
+
+    const entities = await fullQuery.getMany();
+
+    // Preserve ordering from phase 1
+    const entityMap = new Map(entities.map((e) => [e.id, e]));
+    const data = orderedIds
+      .map((id) => entityMap.get(id))
+      .filter(Boolean) as GroupEntity[];
+
+    return { data, total, page, totalPages: Math.ceil(total / limit) };
   }
 
   async searchAllGroups(
