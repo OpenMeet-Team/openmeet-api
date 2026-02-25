@@ -212,6 +212,10 @@ export class EventMailService {
       ) {
         organizers.push(eventOwner);
       }
+    } else {
+      console.warn(
+        `[sendAttendeeContactToOrganizers] event.user not loaded for event ${event.id}, owner will not receive contact message`,
+      );
     }
 
     if (organizers.length === 0) {

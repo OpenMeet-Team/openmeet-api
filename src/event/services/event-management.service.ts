@@ -1601,7 +1601,7 @@ export class EventManagementService {
       );
 
       // Event creator can always RSVP to their own event
-      if (event.user?.id === userId) {
+      if (event.user && event.user.id === userId) {
         this.logger.debug(
           `[attendEvent] User ${userId} is the event creator, allowing RSVP`,
         );

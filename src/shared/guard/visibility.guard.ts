@@ -74,7 +74,7 @@ export class VisibilityGuard implements CanActivate {
           }
 
           // Check if user is the event creator
-          if (event.user?.id === user.id) {
+          if (event.user && event.user.id === user.id) {
             break;
           }
 
