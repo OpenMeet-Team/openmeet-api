@@ -575,7 +575,7 @@ export class EventController {
     @Body() contactOrganizersDto: ContactOrganizersDto,
     @AuthUser() user: User,
   ) {
-    const event = await this.eventQueryService.showEvent(slug);
+    const event = await this.eventQueryService.findEventBySlug(slug);
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }

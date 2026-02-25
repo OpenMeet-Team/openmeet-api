@@ -941,6 +941,7 @@ describe('EventManagementService', () => {
           visibility: EventVisibility.Private,
           group: null,
           groupId: null,
+          user: { id: 99999 } as UserEntity, // Different user than mockUser (not the creator)
         } as EventEntity;
 
         // Restore the original implementation for this test
@@ -1116,6 +1117,7 @@ describe('EventManagementService', () => {
           visibility: EventVisibility.Private,
           group: { id: 123, slug: 'test-group' },
           groupId: 123,
+          user: { id: 99999 } as UserEntity, // Different user than mockUser (not the creator)
         } as EventEntity;
 
         // Restore the original implementation for this test
