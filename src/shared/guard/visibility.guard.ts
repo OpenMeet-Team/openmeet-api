@@ -73,6 +73,11 @@ export class VisibilityGuard implements CanActivate {
             );
           }
 
+          // Check if user is the event creator
+          if (event.user?.id === user.id) {
+            break;
+          }
+
           // Check if user is an attendee of the private event
           const eventAttendee =
             await this.eventAttendeeService.findEventAttendeeByUserId(

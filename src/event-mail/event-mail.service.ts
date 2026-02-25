@@ -203,6 +203,17 @@ export class EventMailService {
         EventAttendeePermission.ManageEvent, // Target event organizers
       );
 
+    // Always include the event owner as an organizer (they may not be an attendee)
+    if (event.user?.id) {
+      const eventOwner = await this.userService.findById(event.user.id);
+      if (
+        eventOwner?.email &&
+        !organizers.some((o) => o.email === eventOwner.email)
+      ) {
+        organizers.push(eventOwner);
+      }
+    }
+
     if (organizers.length === 0) {
       throw new NotFoundException('No organizers found for this event');
     }
