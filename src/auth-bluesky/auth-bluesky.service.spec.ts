@@ -1512,7 +1512,7 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       expect(mockUserAtprotoIdentityService.create).not.toHaveBeenCalled();
     });
 
-    it('should update user preferences with DID and avatar', async () => {
+    it('should update user preferences, socialId, and firstName with DID and avatar', async () => {
       // Arrange
       mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
       mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
@@ -1525,6 +1525,7 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       const existingUser = {
         id: 1,
         ulid: mockLinkData.userUlid,
+        firstName: 'OldName',
         preferences: { bluesky: { autoPost: true } },
       };
       mockUserService.findByUlid.mockResolvedValue(existingUser);
@@ -1539,10 +1540,12 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
         mockProfile as any,
       );
 
-      // Assert: User preferences should be updated
+      // Assert: User socialId, firstName, and preferences should all be updated
       expect(mockUserService.update).toHaveBeenCalledWith(
         existingUser.id,
         expect.objectContaining({
+          socialId: 'did:plc:newdid123',
+          firstName: 'Alice',
           preferences: expect.objectContaining({
             bluesky: expect.objectContaining({
               did: 'did:plc:newdid123',
@@ -1552,6 +1555,102 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
               autoPost: true, // Preserved from existing
             }),
           }),
+        }),
+        'tenant-123',
+      );
+    });
+
+    it('should set firstName to handle when displayName is absent', async () => {
+      // Arrange
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 1,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:newdid123',
+      });
+
+      const existingUser = {
+        id: 1,
+        ulid: mockLinkData.userUlid,
+        firstName: 'OldName',
+        preferences: {},
+      };
+      mockUserService.findByUlid.mockResolvedValue(existingUser);
+
+      const profileWithoutDisplayName = {
+        data: {
+          did: 'did:plc:newdid123',
+          handle: 'alice.bsky.social',
+          displayName: undefined,
+          avatar: undefined,
+        },
+      };
+
+      // Act
+      await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        profileWithoutDisplayName as any,
+      );
+
+      // Assert: firstName should fall back to handle
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        existingUser.id,
+        expect.objectContaining({
+          socialId: 'did:plc:newdid123',
+          firstName: 'alice.bsky.social',
+        }),
+        'tenant-123',
+      );
+    });
+
+    it('should preserve existing firstName when profile has neither displayName nor handle', async () => {
+      // Arrange
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.findByDid.mockResolvedValue(null);
+      mockUserAtprotoIdentityService.create.mockResolvedValue({
+        id: 1,
+        userUlid: mockLinkData.userUlid,
+        did: 'did:plc:newdid123',
+      });
+
+      const existingUser = {
+        id: 1,
+        ulid: mockLinkData.userUlid,
+        firstName: 'KeepThisName',
+        preferences: {},
+      };
+      mockUserService.findByUlid.mockResolvedValue(existingUser);
+
+      const profileWithNoNames = {
+        data: {
+          did: 'did:plc:newdid123',
+          handle: '',
+          displayName: '',
+          avatar: undefined,
+        },
+      };
+
+      // Act
+      await service.handleLinkCallback(
+        mockOauthSession as any,
+        mockRestoredSession as any,
+        'test-state',
+        'tenant-123',
+        mockLinkData,
+        profileWithNoNames as any,
+      );
+
+      // Assert: firstName should preserve existing value
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        existingUser.id,
+        expect.objectContaining({
+          socialId: 'did:plc:newdid123',
+          firstName: 'KeepThisName',
         }),
         'tenant-123',
       );

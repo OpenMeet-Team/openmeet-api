@@ -969,6 +969,11 @@ export class AuthBlueskyService {
       await userService.update(
         userByUlid.id,
         {
+          socialId: did,
+          firstName:
+            profile.data.displayName ||
+            profile.data.handle ||
+            userByUlid.firstName,
           preferences: {
             ...(userByUlid.preferences || {}),
             bluesky: {
