@@ -10,7 +10,7 @@ import {
   Logger,
   forwardRef,
 } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
@@ -50,6 +50,7 @@ import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relati
 import { GroupMailService } from '../group-mail/group-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
+import { trace } from '@opentelemetry/api';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventRecommendationService } from '../event/services/event-recommendation.service';
@@ -109,7 +110,10 @@ export class GroupService {
    * @param userId - Optional user ID for authenticated users
    * @returns The query builder with visibility filters applied
    */
-  private applyGroupVisibilityFilter(queryBuilder: any, userId?: number): any {
+  private applyGroupVisibilityFilter(
+    queryBuilder: SelectQueryBuilder<GroupEntity>,
+    userId?: number,
+  ): SelectQueryBuilder<GroupEntity> {
     if (userId) {
       // Authenticated users: show Public + Unlisted (if member) + Private (if member)
       // Key: Must be an actual member, not just logged in
@@ -138,6 +142,58 @@ export class GroupService {
     }
 
     return queryBuilder;
+  }
+
+  /**
+   * Apply the shared WHERE conditions for group list queries (showAll).
+   *
+   * Applies: published status, visibility filter, category filter,
+   * location proximity filter, and text search.
+   *
+   * @param qb - The query builder to apply filters to
+   * @param query - The query parameters from the request
+   * @param userId - Optional user ID for authenticated users
+   */
+  private applyGroupListFilters(
+    qb: SelectQueryBuilder<GroupEntity>,
+    query: QueryGroupDto,
+    userId?: number,
+  ): void {
+    const { search, categories, radius, lat, lon } = query;
+
+    qb.where('group.status = :status', { status: GroupStatus.Published });
+
+    this.applyGroupVisibilityFilter(qb, userId);
+
+    if (categories && categories.length > 0) {
+      qb.innerJoin('group.categories', 'cat').andWhere(
+        `(${categories.map((_, i) => `cat.name LIKE :cat${i}`).join(' OR ')})`,
+        categories.reduce(
+          (acc, c, i) => ({ ...acc, [`cat${i}`]: `%${c}%` }),
+          {},
+        ),
+      );
+    }
+
+    if (lat && lon) {
+      if (isNaN(lon) || isNaN(lat)) {
+        throw new BadRequestException(
+          'Invalid location format. Expected "lon,lat".',
+        );
+      }
+
+      const searchRadius = radius ?? DEFAULT_RADIUS;
+      qb.andWhere(
+        `ST_DWithin(group.locationPoint, ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}), :radius)`,
+        { lon, lat, radius: searchRadius * 1000 },
+      );
+    }
+
+    if (search) {
+      qb.andWhere('group.name ILIKE :search', {
+        search: `%${search}%`,
+      });
+    }
   }
 
   async getGroupsWhereUserCanCreateEvents(
@@ -333,16 +389,25 @@ export class GroupService {
     pagination: PaginationDto,
     query: QueryGroupDto,
     userId?: number,
-  ): Promise<any> {
+  ): Promise<PaginationResult<GroupEntity>> {
     await this.getTenantSpecificGroupRepository();
-    const { page, limit } = pagination;
-    const { search, categories, radius, lat, lon } = query;
+    const page = Number(pagination.page) || 1;
+    const limit = Number(pagination.limit) || 10;
 
     this.logger.debug('showAll() Auth context:', {
       userId,
       hasUserId: !!userId,
+      sort: query.sort ?? 'members',
     });
 
+    const sortMode = query.sort ?? 'members';
+
+    if (sortMode === 'members') {
+      return this.showAllSortedByMembers(page, limit, query, userId);
+    }
+
+    // Standard sort modes: newest, name
+    // Uses paginate() utility which provides OpenTelemetry pagination telemetry
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
@@ -360,51 +425,102 @@ export class GroupService {
             .where('role.name != :roleName', {
               roleName: GroupRole.Guest,
             }),
-      )
-      .where('group.status = :status', { status: GroupStatus.Published });
-
-    // Apply visibility filtering
-    this.applyGroupVisibilityFilter(groupQuery, userId);
-
-    // Add existing query conditions
-    if (categories && categories.length > 0) {
-      const likeConditions = categories
-        .map((_, index) => `categories.name LIKE :category${index}`)
-        .join(' OR ');
-
-      const likeParameters = categories.reduce((acc, category, index) => {
-        acc[`category${index}`] = `%${category}%`;
-        return acc;
-      }, {});
-
-      groupQuery.andWhere(`(${likeConditions})`, likeParameters);
-    }
-
-    if (lat && lon) {
-      if (isNaN(lon) || isNaN(lat)) {
-        throw new BadRequestException(
-          'Invalid location format. Expected "lon,lat".',
-        );
-      }
-
-      const searchRadius = radius ?? DEFAULT_RADIUS;
-      groupQuery.andWhere(
-        `ST_DWithin(
-          group.locationPoint,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
-          :radius
-        )`,
-        { lon, lat, radius: searchRadius * 1000 },
       );
-    }
 
-    if (search) {
-      groupQuery.andWhere(`group.name ILIKE :search`, {
-        search: `%${search}%`,
-      });
+    this.applyGroupListFilters(groupQuery, query, userId);
+
+    if (sortMode === 'newest') {
+      groupQuery.orderBy('group.createdAt', 'DESC');
+    } else if (sortMode === 'name') {
+      groupQuery.orderBy('group.name', 'ASC');
     }
 
     return await paginate(groupQuery, { page, limit });
+  }
+
+  /**
+   * Two-phase query for sorting groups by non-guest member count DESC.
+   *
+   * TypeORM's orderBy() cannot handle raw SQL subqueries (it parses
+   * double-quoted identifiers as aliases), and getManyAndCount() wraps
+   * in a DISTINCT subquery that strips custom addSelect aliases.
+   * So we first get ordered IDs with a lightweight query, then load
+   * full entities.
+   */
+  private async showAllSortedByMembers(
+    page: number,
+    limit: number,
+    query: QueryGroupDto,
+    userId?: number,
+  ): Promise<PaginationResult<GroupEntity>> {
+    // Phase 1: ordered group IDs via lightweight query with raw SQL ordering
+    const idQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .select('group.id', 'id');
+
+    this.applyGroupListFilters(idQuery, query, userId);
+
+    const total = await idQuery.getCount();
+
+    const schema = `tenant_${this.request.tenantId}`;
+    const memberCountExpr = `(SELECT COUNT(gm2.id) FROM "${schema}"."groupMembers" gm2 INNER JOIN "${schema}"."groupRoles" gr2 ON gm2."groupRoleId" = gr2.id WHERE gm2."groupId" = "group".id AND gr2.name != '${GroupRole.Guest}')`;
+    idQuery.expressionMap.orderBys = {
+      [memberCountExpr]: 'DESC',
+      '"group"."createdAt"': 'DESC',
+    };
+    idQuery.limit(limit).offset((page - 1) * limit);
+
+    const rawIds = await idQuery.getRawMany();
+    const orderedIds: number[] = rawIds.map((r) => r.id);
+
+    const totalPages = Math.ceil(total / limit);
+
+    if (orderedIds.length === 0) {
+      return { data: [], total, page, totalPages };
+    }
+
+    // Phase 2: load full entities with relations for selected IDs
+    const fullQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoin('group.createdBy', 'user')
+      .leftJoin('user.photo', 'photo')
+      .leftJoin('group.image', 'groupImage')
+      .addSelect(['user.name', 'user.slug', 'photo.path', 'groupImage.path'])
+      .loadRelationCountAndMap(
+        'group.groupMembersCount',
+        'group.groupMembers',
+        'groupMembers',
+        (qb) =>
+          qb
+            .innerJoin('groupMembers.groupRole', 'role')
+            .where('role.name != :roleName', {
+              roleName: GroupRole.Guest,
+            }),
+      )
+      .where('group.id IN (:...orderedIds)', { orderedIds })
+      .andWhere('group.status = :status', { status: GroupStatus.Published });
+
+    const entities = await fullQuery.getMany();
+
+    // Preserve ordering from phase 1
+    const entityMap = new Map(entities.map((e) => [e.id, e]));
+    const data = orderedIds
+      .map((id) => entityMap.get(id))
+      .filter(Boolean) as GroupEntity[];
+
+    // Record pagination metrics on the active @Trace() span
+    const span = trace.getActiveSpan();
+    if (span) {
+      span.setAttribute('pagination.page', page);
+      span.setAttribute('pagination.limit', limit);
+      span.setAttribute('pagination.total_pages', totalPages);
+      span.setAttribute('pagination.total_records', total);
+      span.setAttribute('pagination.records_returned', data.length);
+      span.setAttribute('pagination.has_more', page < totalPages);
+    }
+
+    return { data, total, page, totalPages };
   }
 
   async searchAllGroups(

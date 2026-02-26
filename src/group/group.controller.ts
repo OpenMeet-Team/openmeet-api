@@ -19,6 +19,7 @@ import { GroupService } from './group.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { PaginationDto } from '../utils/dto/pagination.dto';
+import { PaginationResult } from '../utils/generic-pagination';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { QueryGroupDto } from './dto/group-query.dto';
@@ -73,7 +74,7 @@ export class GroupController {
     @Query() pagination: PaginationDto,
     @Query() query: QueryGroupDto,
     @Optional() @AuthUser() user?: User,
-  ): Promise<GroupEntity[]> {
+  ): Promise<PaginationResult<GroupEntity>> {
     return this.groupService.showAll(pagination, query, user?.id);
   }
 
