@@ -81,6 +81,14 @@ export class CalendarInviteListener {
         return;
       }
 
+      // Skip sending calendar invite to event creator
+      if (attendee.user.id === attendee.event.user.id) {
+        this.logger.debug(
+          `Skipping calendar invite for event creator ${attendee.user.slug || attendee.user.id}`,
+        );
+        return;
+      }
+
       // Get tenant config
       const tenantConfig = this.tenantConnectionService.getTenantConfig(
         params.tenantId,

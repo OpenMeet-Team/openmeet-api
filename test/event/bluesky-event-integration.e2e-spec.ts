@@ -254,7 +254,7 @@ describe('Bluesky Event Integration (e2e)', () => {
       // Get admin token to query attendees
       const adminToken = await loginAsAdmin();
 
-      // Query attendees for this event
+      // Query attendees for this event - creator should NOT be auto-RSVP'd
       const attendeesResponse = await request(TESTING_APP_URL)
         .get(`/api/events/${eventSlug}/attendees`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -263,19 +263,8 @@ describe('Bluesky Event Integration (e2e)', () => {
       expect(attendeesResponse.status).toBe(200);
       expect(attendeesResponse.body.data).toBeDefined();
       expect(Array.isArray(attendeesResponse.body.data)).toBe(true);
-      expect(attendeesResponse.body.data.length).toBeGreaterThan(0);
-
-      // Find the host attendee (should be the shadow account/creator)
-      const hostAttendee = attendeesResponse.body.data.find(
-        (attendee: any) => attendee.role.name === 'host',
-      );
-
-      expect(hostAttendee).toBeDefined();
-      expect(hostAttendee.user).toBeDefined();
-      // Verify the host is the shadow account created for this event
-      // The user name should match the handle we provided
-      expect(hostAttendee.user.name).toBe('attendeetest.bsky.social');
-      expect(hostAttendee.status).toBe('confirmed');
+      // Event creator is no longer auto-added as attendee
+      expect(attendeesResponse.body.data.length).toBe(0);
     });
   });
 });

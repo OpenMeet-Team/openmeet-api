@@ -445,18 +445,6 @@ export class EventManagementService {
       tenantId: this.request.tenantId,
     });
 
-    // Add host as first attendee
-    const hostRole = await this.eventRoleService.getRoleByName(
-      EventAttendeeRole.Host,
-    );
-
-    await this.eventAttendeeService.create({
-      role: hostRole,
-      status: EventAttendeeStatus.Confirmed,
-      user,
-      event: createdEvent,
-    });
-
     this.auditLogger.log('event created', {
       createdEvent,
       source: createEventDto.sourceType,
@@ -1600,7 +1588,7 @@ export class EventManagementService {
 
     const event = await this.eventRepository.findOne({
       where: { slug },
-      relations: ['group'],
+      relations: ['group', 'user'],
     });
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
@@ -1612,52 +1600,59 @@ export class EventManagementService {
         `[attendEvent] Event is private, checking access for user ${userId}`,
       );
 
-      // Check if user is already an attendee (invited, confirmed, etc.)
-      const existingAttendee =
-        await this.eventAttendeeService.findEventAttendeeByUserId(
-          event.id,
-          userId,
+      // Event creator can always RSVP to their own event
+      if (event.user && event.user.id === userId) {
+        this.logger.debug(
+          `[attendEvent] User ${userId} is the event creator, allowing RSVP`,
         );
-
-      if (!existingAttendee) {
-        // User is not an attendee, check if they're a member of the event's group
-        if (event.group?.id) {
-          this.logger.debug(
-            `[attendEvent] User is not an attendee, checking group membership for group ${event.group.id}`,
+      } else {
+        // Check if user is already an attendee (invited, confirmed, etc.)
+        const existingAttendee =
+          await this.eventAttendeeService.findEventAttendeeByUserId(
+            event.id,
+            userId,
           );
 
-          const groupMember =
-            await this.groupMemberQueryService.findGroupMemberByUserId(
-              event.group.id,
-              userId,
-              this.request.tenantId,
+        if (!existingAttendee) {
+          // User is not an attendee, check if they're a member of the event's group
+          if (event.group?.id) {
+            this.logger.debug(
+              `[attendEvent] User is not an attendee, checking group membership for group ${event.group.id}`,
             );
 
-          if (!groupMember) {
+            const groupMember =
+              await this.groupMemberQueryService.findGroupMemberByUserId(
+                event.group.id,
+                userId,
+                this.request.tenantId,
+              );
+
+            if (!groupMember) {
+              this.logger.debug(
+                `[attendEvent] User ${userId} is neither an attendee nor a group member, denying RSVP to private event`,
+              );
+              throw new ForbiddenException(
+                'You must be invited to RSVP to this private event',
+              );
+            }
+
             this.logger.debug(
-              `[attendEvent] User ${userId} is neither an attendee nor a group member, denying RSVP to private event`,
+              `[attendEvent] User ${userId} is a group member, allowing RSVP to private event`,
+            );
+          } else {
+            // Private event not in a group, and user is not invited
+            this.logger.debug(
+              `[attendEvent] Private event has no group and user is not invited, denying RSVP`,
             );
             throw new ForbiddenException(
               'You must be invited to RSVP to this private event',
             );
           }
-
-          this.logger.debug(
-            `[attendEvent] User ${userId} is a group member, allowing RSVP to private event`,
-          );
         } else {
-          // Private event not in a group, and user is not invited
           this.logger.debug(
-            `[attendEvent] Private event has no group and user is not invited, denying RSVP`,
-          );
-          throw new ForbiddenException(
-            'You must be invited to RSVP to this private event',
+            `[attendEvent] User ${userId} is already an attendee (status: ${existingAttendee.status}), allowing RSVP`,
           );
         }
-      } else {
-        this.logger.debug(
-          `[attendEvent] User ${userId} is already an attendee (status: ${existingAttendee.status}), allowing RSVP`,
-        );
       }
     }
 

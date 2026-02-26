@@ -1012,25 +1012,9 @@ export class AuthService {
   }
 
   async getEvent(slug: string) {
-    // Make sure we load the group and user relations for permission checks
-    const event = await this.eventQueryService.findEventBySlug(slug);
-
-    // Ensure we have loaded the group and user relations for permission checks
-    // These are used by the permissions guard
-    if (event && !event.group) {
-      try {
-        // Load group relation separately if needed
-        const eventWithRelations = await this.eventQueryService.showEvent(slug);
-        if (eventWithRelations) {
-          event.group = eventWithRelations.group;
-          event.user = eventWithRelations.user;
-        }
-      } catch (error) {
-        this.logger.error(`Error loading event relations for ${slug}:`, error);
-      }
-    }
-
-    return event;
+    // findEventBySlug loads ['user', 'group', 'categories', 'image'] relations
+    // which is sufficient for permission checks (user.id for ownership, group.id for group perms)
+    return this.eventQueryService.findEventBySlug(slug);
   }
 
   async getGroup(slug: string) {
