@@ -5,7 +5,7 @@ import {
   TESTING_USER_EMAIL,
   TESTING_USER_PASSWORD,
 } from '../utils/constants';
-import { getAuthToken } from '../utils/functions';
+import { createTestUser, getAuthToken } from '../utils/functions';
 
 jest.setTimeout(60000);
 
@@ -31,23 +31,18 @@ describe('AT Protocol Identity Relink (E2E)', () => {
 
   describe('Issue 1: socialId should only be updated for bluesky-provider users', () => {
     it('should NOT overwrite socialId for email-provider user when linking ATProto', async () => {
-      // 1. Register an email user
+      // 1. Register and verify an email user
       const timestamp = Date.now();
       const email = `relink-email-${timestamp}@openmeet.test`;
-      const password = 'TestPassword123!';
 
-      await serverApp
-        .post('/api/v1/auth/email/register')
-        .send({ email, password, firstName: 'EmailUser', lastName: 'Test' })
-        .expect(201);
-
-      // Login to get token
-      const loginResponse = await serverApp
-        .post('/api/v1/auth/email/login')
-        .send({ email, password })
-        .expect(200);
-
-      const token = loginResponse.body.token;
+      const testUser = await createTestUser(
+        app,
+        TESTING_TENANT_ID,
+        email,
+        'EmailUser',
+        'Test',
+      );
+      const token = testUser.token;
 
       // Get user details (ulid, socialId before link)
       const meBefore = await serverApp
@@ -137,27 +132,19 @@ describe('AT Protocol Identity Relink (E2E)', () => {
 
   describe('Issue 2: firstName should be preserved when user already has one', () => {
     it('should NOT overwrite existing firstName on relink', async () => {
-      // 1. Register email user with a specific firstName
+      // 1. Register and verify email user with a specific firstName
       const timestamp = Date.now();
       const email = `relink-name-${timestamp}@openmeet.test`;
-      const password = 'TestPassword123!';
 
-      await serverApp
-        .post('/api/v1/auth/email/register')
-        .send({
-          email,
-          password,
-          firstName: 'OriginalName',
-          lastName: 'Test',
-        })
-        .expect(201);
+      const testUser = await createTestUser(
+        app,
+        TESTING_TENANT_ID,
+        email,
+        'OriginalName',
+        'Test',
+      );
+      const token = testUser.token;
 
-      const loginResponse = await serverApp
-        .post('/api/v1/auth/email/login')
-        .send({ email, password })
-        .expect(200);
-
-      const token = loginResponse.body.token;
       const me = await serverApp
         .get('/api/v1/auth/me')
         .set('Authorization', `Bearer ${token}`)
@@ -238,22 +225,19 @@ describe('AT Protocol Identity Relink (E2E)', () => {
 
   describe('Issue 3: DID string should not be used as firstName', () => {
     it('should not set firstName to DID when handle equals DID', async () => {
-      // 1. Register email user with NO firstName
+      // 1. Register and verify email user
       const timestamp = Date.now();
       const email = `relink-did-${timestamp}@openmeet.test`;
-      const password = 'TestPassword123!';
 
-      await serverApp
-        .post('/api/v1/auth/email/register')
-        .send({ email, password, firstName: '', lastName: 'Test' })
-        .expect(201);
+      const testUser = await createTestUser(
+        app,
+        TESTING_TENANT_ID,
+        email,
+        'NoBluesky',
+        'Test',
+      );
+      const token = testUser.token;
 
-      const loginResponse = await serverApp
-        .post('/api/v1/auth/email/login')
-        .send({ email, password })
-        .expect(200);
-
-      const token = loginResponse.body.token;
       const me = await serverApp
         .get('/api/v1/auth/me')
         .set('Authorization', `Bearer ${token}`)
