@@ -10,7 +10,7 @@ import {
   Logger,
   forwardRef,
 } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
@@ -50,6 +50,7 @@ import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relati
 import { GroupMailService } from '../group-mail/group-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
+import { trace } from '@opentelemetry/api';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventRecommendationService } from '../event/services/event-recommendation.service';
@@ -109,7 +110,10 @@ export class GroupService {
    * @param userId - Optional user ID for authenticated users
    * @returns The query builder with visibility filters applied
    */
-  private applyGroupVisibilityFilter(queryBuilder: any, userId?: number): any {
+  private applyGroupVisibilityFilter(
+    queryBuilder: SelectQueryBuilder<GroupEntity>,
+    userId?: number,
+  ): SelectQueryBuilder<GroupEntity> {
     if (userId) {
       // Authenticated users: show Public + Unlisted (if member) + Private (if member)
       // Key: Must be an actual member, not just logged in
@@ -151,7 +155,7 @@ export class GroupService {
    * @param userId - Optional user ID for authenticated users
    */
   private applyGroupListFilters(
-    qb: any,
+    qb: SelectQueryBuilder<GroupEntity>,
     query: QueryGroupDto,
     userId?: number,
   ): void {
@@ -385,7 +389,7 @@ export class GroupService {
     pagination: PaginationDto,
     query: QueryGroupDto,
     userId?: number,
-  ): Promise<any> {
+  ): Promise<PaginationResult<GroupEntity>> {
     await this.getTenantSpecificGroupRepository();
     const page = Number(pagination.page) || 1;
     const limit = Number(pagination.limit) || 10;
@@ -420,8 +424,10 @@ export class GroupService {
     const rawIds = await idQuery.getRawMany();
     const orderedIds: number[] = rawIds.map((r) => r.id);
 
+    const totalPages = Math.ceil(total / limit);
+
     if (orderedIds.length === 0) {
-      return { data: [], total, page, totalPages: Math.ceil(total / limit) };
+      return { data: [], total, page, totalPages };
     }
 
     // Phase 2: load full entities with relations for selected IDs
@@ -443,7 +449,8 @@ export class GroupService {
               roleName: GroupRole.Guest,
             }),
       )
-      .where('group.id IN (:...orderedIds)', { orderedIds });
+      .where('group.id IN (:...orderedIds)', { orderedIds })
+      .andWhere('group.status = :status', { status: GroupStatus.Published });
 
     const entities = await fullQuery.getMany();
 
@@ -453,7 +460,18 @@ export class GroupService {
       .map((id) => entityMap.get(id))
       .filter(Boolean) as GroupEntity[];
 
-    return { data, total, page, totalPages: Math.ceil(total / limit) };
+    // Record pagination metrics on the active @Trace() span
+    const span = trace.getActiveSpan();
+    if (span) {
+      span.setAttribute('pagination.page', page);
+      span.setAttribute('pagination.limit', limit);
+      span.setAttribute('pagination.total_pages', totalPages);
+      span.setAttribute('pagination.total_records', total);
+      span.setAttribute('pagination.records_returned', data.length);
+      span.setAttribute('pagination.has_more', page < totalPages);
+    }
+
+    return { data, total, page, totalPages };
   }
 
   async searchAllGroups(
