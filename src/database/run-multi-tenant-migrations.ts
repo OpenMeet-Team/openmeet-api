@@ -4,7 +4,10 @@ import { fetchTenants } from '../utils/tenant-config';
 
 async function runMigrationsForAllTenants() {
   const tenants = fetchTenants();
-  console.log('Tenants:', tenants);
+  console.log(
+    'Tenants:',
+    tenants.map((t) => t.id),
+  );
   console.log('Starting migrations for all tenants:', tenants.length);
 
   // First do a dry run to check if migrations would succeed
