@@ -140,6 +140,58 @@ export class GroupService {
     return queryBuilder;
   }
 
+  /**
+   * Apply the shared WHERE conditions for group list queries (showAll).
+   *
+   * Applies: published status, visibility filter, category filter,
+   * location proximity filter, and text search.
+   *
+   * @param qb - The query builder to apply filters to
+   * @param query - The query parameters from the request
+   * @param userId - Optional user ID for authenticated users
+   */
+  private applyGroupListFilters(
+    qb: any,
+    query: QueryGroupDto,
+    userId?: number,
+  ): void {
+    const { search, categories, radius, lat, lon } = query;
+
+    qb.where('group.status = :status', { status: GroupStatus.Published });
+
+    this.applyGroupVisibilityFilter(qb, userId);
+
+    if (categories && categories.length > 0) {
+      qb.innerJoin('group.categories', 'cat').andWhere(
+        `(${categories.map((_, i) => `cat.name LIKE :cat${i}`).join(' OR ')})`,
+        categories.reduce(
+          (acc, c, i) => ({ ...acc, [`cat${i}`]: `%${c}%` }),
+          {},
+        ),
+      );
+    }
+
+    if (lat && lon) {
+      if (isNaN(lon) || isNaN(lat)) {
+        throw new BadRequestException(
+          'Invalid location format. Expected "lon,lat".',
+        );
+      }
+
+      const searchRadius = radius ?? DEFAULT_RADIUS;
+      qb.andWhere(
+        `ST_DWithin(group.locationPoint, ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}), :radius)`,
+        { lon, lat, radius: searchRadius * 1000 },
+      );
+    }
+
+    if (search) {
+      qb.andWhere('group.name ILIKE :search', {
+        search: `%${search}%`,
+      });
+    }
+  }
+
   async getGroupsWhereUserCanCreateEvents(
     userId: number,
   ): Promise<GroupEntity[]> {
@@ -337,114 +389,25 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const page = Number(pagination.page) || 1;
     const limit = Number(pagination.limit) || 10;
-    const { search, categories, radius, lat, lon } = query;
 
     this.logger.debug('showAll() Auth context:', {
       userId,
       hasUserId: !!userId,
     });
 
-    const groupQuery = this.groupRepository
-      .createQueryBuilder('group')
-      .leftJoinAndSelect('group.categories', 'categories')
-      .leftJoin('group.createdBy', 'user')
-      .leftJoin('user.photo', 'photo')
-      .leftJoin('group.image', 'groupImage')
-      .addSelect(['user.name', 'user.slug', 'photo.path', 'groupImage.path'])
-      .loadRelationCountAndMap(
-        'group.groupMembersCount',
-        'group.groupMembers',
-        'groupMembers',
-        (qb) =>
-          qb
-            .innerJoin('groupMembers.groupRole', 'role')
-            .where('role.name != :roleName', {
-              roleName: GroupRole.Guest,
-            }),
-      )
-      .where('group.status = :status', { status: GroupStatus.Published });
-
-    // Apply visibility filtering
-    this.applyGroupVisibilityFilter(groupQuery, userId);
-
-    // Add existing query conditions
-    if (categories && categories.length > 0) {
-      const likeConditions = categories
-        .map((_, index) => `categories.name LIKE :category${index}`)
-        .join(' OR ');
-
-      const likeParameters = categories.reduce((acc, category, index) => {
-        acc[`category${index}`] = `%${category}%`;
-        return acc;
-      }, {});
-
-      groupQuery.andWhere(`(${likeConditions})`, likeParameters);
-    }
-
-    if (lat && lon) {
-      if (isNaN(lon) || isNaN(lat)) {
-        throw new BadRequestException(
-          'Invalid location format. Expected "lon,lat".',
-        );
-      }
-
-      const searchRadius = radius ?? DEFAULT_RADIUS;
-      groupQuery.andWhere(
-        `ST_DWithin(
-          group.locationPoint,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
-          :radius
-        )`,
-        { lon, lat, radius: searchRadius * 1000 },
-      );
-    }
-
-    if (search) {
-      groupQuery.andWhere(`group.name ILIKE :search`, {
-        search: `%${search}%`,
-      });
-    }
-
     // Two-phase query: TypeORM's orderBy() cannot handle raw SQL subqueries
     // (it parses double-quoted identifiers as aliases), and getManyAndCount()
     // wraps in a DISTINCT subquery that strips custom addSelect aliases.
     // So we first get ordered IDs with a lightweight query, then load full entities.
 
-    const total = await groupQuery.getCount();
-
     // Phase 1: ordered group IDs via lightweight query with raw SQL ordering
     const idQuery = this.groupRepository
       .createQueryBuilder('group')
-      .select('group.id', 'id')
-      .where('group.status = :status', { status: GroupStatus.Published });
+      .select('group.id', 'id');
 
-    this.applyGroupVisibilityFilter(idQuery, userId);
+    this.applyGroupListFilters(idQuery, query, userId);
 
-    if (categories && categories.length > 0) {
-      idQuery
-        .innerJoin('group.categories', 'cat')
-        .andWhere(
-          `(${categories.map((_, i) => `cat.name LIKE :cat${i}`).join(' OR ')})`,
-          categories.reduce(
-            (acc, c, i) => ({ ...acc, [`cat${i}`]: `%${c}%` }),
-            {},
-          ),
-        );
-    }
-
-    if (lat && lon) {
-      const searchRadius = radius ?? DEFAULT_RADIUS;
-      idQuery.andWhere(
-        `ST_DWithin(group.locationPoint, ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}), :radius)`,
-        { lon, lat, radius: searchRadius * 1000 },
-      );
-    }
-
-    if (search) {
-      idQuery.andWhere('group.name ILIKE :search', {
-        search: `%${search}%`,
-      });
-    }
+    const total = await idQuery.getCount();
 
     const schema = `tenant_${this.request.tenantId}`;
     const memberCountExpr = `(SELECT COUNT(gm2.id) FROM "${schema}"."groupMembers" gm2 INNER JOIN "${schema}"."groupRoles" gr2 ON gm2."groupRoleId" = gr2.id WHERE gm2."groupId" = "group".id AND gr2.name != '${GroupRole.Guest}')`;
