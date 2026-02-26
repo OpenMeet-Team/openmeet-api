@@ -1716,11 +1716,14 @@ export class EventManagementService {
       );
     }
 
-    // Determine the appropriate role based on group membership
+    // Determine the appropriate role based on event ownership and group membership
     let attendeeRole = EventAttendeeRole.Participant; // Default role
 
-    // If event belongs to a group, check if user is owner/admin
-    if (event.group && event.group.id) {
+    // Event creator always gets host role
+    if (event.user && event.user.id === userId) {
+      attendeeRole = EventAttendeeRole.Host;
+    } else if (event.group && event.group.id) {
+      // If event belongs to a group, check if user is owner/admin
       const userGroupMember =
         await this.groupMemberQueryService.findGroupMemberByUserId(
           event.group.id,
