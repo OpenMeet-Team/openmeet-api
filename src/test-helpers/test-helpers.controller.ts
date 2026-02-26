@@ -226,4 +226,83 @@ export class TestHelpersController {
       user: loginResponse.user,
     };
   }
+
+  /**
+   * Simulate Bluesky OAuth link callback (bypassing actual OAuth)
+   *
+   * POST /api/v1/test/auth/bluesky-link
+   *
+   * Simulates the OAuth callback for the AT Protocol identity linking flow.
+   * Calls handleLinkCallback directly with injected profile data, bypassing
+   * the OAuth session/code exchange.
+   *
+   * Requires an authenticated user (JWT). The authenticated user's ULID is
+   * used as the linking target.
+   *
+   * @example
+   * ```typescript
+   * POST /api/v1/test/auth/bluesky-link
+   * Authorization: Bearer <jwt>
+   * {
+   *   "did": "did:plc:test123",
+   *   "handle": "test.bsky.social",
+   *   "displayName": "Test User",
+   *   "pdsUrl": "https://pds.example.com"
+   * }
+   * ```
+   */
+  @Post('auth/bluesky-link')
+  async simulateBlueskyLink(
+    @Body()
+    body: {
+      userUlid: string;
+      did: string;
+      handle: string;
+      displayName?: string;
+      avatar?: string;
+      pdsUrl?: string;
+    },
+    @Req() req,
+  ) {
+    const tenantId = req.tenantId;
+    const targetUlid = body.userUlid;
+
+    // Build mock OAuth session (handleLinkCallback only reads .did)
+    const mockOauthSession = { did: body.did };
+
+    // Build mock restored session (handleLinkCallback reads .pdsUrl or .serviceUrl)
+    const mockRestoredSession = {
+      pdsUrl: body.pdsUrl || 'https://pds.test',
+    };
+
+    // Build profile object
+    const profile = {
+      data: {
+        did: body.did,
+        handle: body.handle,
+        displayName: body.displayName,
+        avatar: body.avatar,
+      },
+    };
+
+    // Build link data
+    const linkData = {
+      userUlid: targetUlid,
+      tenantId,
+    };
+
+    const result = await this.authBlueskyService.handleLinkCallback(
+      mockOauthSession,
+      mockRestoredSession,
+      `test-link-${Date.now()}`, // appState — not used beyond logging
+      tenantId,
+      linkData,
+      profile,
+    );
+
+    return {
+      redirectUrl: result.redirectUrl,
+      success: result.redirectUrl.includes('linkSuccess=true'),
+    };
+  }
 }
