@@ -969,6 +969,18 @@ export class AuthBlueskyService {
       await userService.update(
         userByUlid.id,
         {
+          // Only update socialId for native Bluesky users (preserves Google/GitHub socialId)
+          ...(userByUlid.provider === 'bluesky' ? { socialId: did } : {}),
+          // Only set firstName if user doesn't already have one
+          ...(!userByUlid.firstName
+            ? {
+                firstName:
+                  profile.data.displayName ||
+                  (profile.data.handle && profile.data.handle !== did
+                    ? profile.data.handle
+                    : null),
+              }
+            : {}),
           preferences: {
             ...(userByUlid.preferences || {}),
             bluesky: {
