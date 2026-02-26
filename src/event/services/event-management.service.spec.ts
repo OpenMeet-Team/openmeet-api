@@ -211,6 +211,7 @@ describe('EventManagementService', () => {
               .fn()
               .mockImplementation((attendee) => Promise.resolve(attendee)),
             reactivateEventAttendance: jest.fn(),
+            reactivateEventAttendanceBySlug: jest.fn(),
             findOne: jest.fn(),
           },
         },
@@ -1024,6 +1025,7 @@ describe('EventManagementService', () => {
           visibility: EventVisibility.Private,
           group: { id: 123, slug: 'test-group' },
           groupId: 123,
+          user: { id: 99999 } as UserEntity, // Different user than mockUser (not the creator)
         } as EventEntity;
 
         const currentMockEventAttendee = {
@@ -1144,6 +1146,205 @@ describe('EventManagementService', () => {
         await expect(
           service.attendEvent(privateGroupEvent.slug, mockUser.id, attendeeDto),
         ).rejects.toThrow('You must be invited to RSVP to this private event');
+      });
+    });
+
+    describe('Creator host role preservation', () => {
+      it('should assign host role when event creator RSVPs to their own event', async () => {
+        // findOneMockEventEntity.user.id === TESTING_USER_ID === mockUser.id
+        // so the creator IS the user RSVPing
+        const targetEvent = findOneMockEventEntity;
+
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        mockRepository.findOne.mockResolvedValueOnce(targetEvent);
+
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+        const mockEventAttendeeService = service[
+          'eventAttendeeService'
+        ] as jest.Mocked<EventAttendeeService>;
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          null,
+        );
+
+        const mockEventRoleService = service[
+          'eventRoleService'
+        ] as jest.Mocked<EventRoleService>;
+        mockEventRoleService.getRoleByName.mockResolvedValueOnce({
+          id: 2,
+          name: EventAttendeeRole.Host,
+          attendees: [],
+          permissions: [],
+        } as any);
+
+        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+
+        const createdAttendee = {
+          id: 1,
+          status: EventAttendeeStatus.Confirmed,
+          role: { id: 2, name: EventAttendeeRole.Host },
+        } as any;
+        mockEventAttendeeService.create.mockResolvedValueOnce(createdAttendee);
+
+        const mockEventMailService = service[
+          'eventMailService'
+        ] as jest.Mocked<EventMailService>;
+        mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
+
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          createdAttendee,
+        );
+
+        const attendeeDto = {};
+
+        await service.attendEvent(targetEvent.slug, mockUser.id, attendeeDto);
+
+        // The key assertion: getRoleByName should be called with Host, not Participant
+        expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
+          EventAttendeeRole.Host,
+        );
+      });
+
+      it('should assign host role when event creator re-RSVPs after cancellation', async () => {
+        const targetEvent = findOneMockEventEntity;
+
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        mockRepository.findOne.mockResolvedValueOnce(targetEvent);
+
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce({
+          ...mockUser,
+          slug: 'test-user',
+        } as any);
+
+        // Existing cancelled attendee record
+        const cancelledAttendee = {
+          id: 1,
+          status: EventAttendeeStatus.Cancelled,
+          role: { id: 1, name: EventAttendeeRole.Participant },
+        } as any;
+
+        const mockEventAttendeeService = service[
+          'eventAttendeeService'
+        ] as jest.Mocked<EventAttendeeService>;
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          cancelledAttendee,
+        );
+
+        const mockEventRoleService = service[
+          'eventRoleService'
+        ] as jest.Mocked<EventRoleService>;
+        mockEventRoleService.getRoleByName.mockResolvedValueOnce({
+          id: 2,
+          name: EventAttendeeRole.Host,
+          attendees: [],
+          permissions: [],
+        } as any);
+
+        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+
+        const reactivatedAttendee = {
+          id: 1,
+          status: EventAttendeeStatus.Confirmed,
+          role: { id: 2, name: EventAttendeeRole.Host },
+        } as any;
+        mockEventAttendeeService.reactivateEventAttendanceBySlug.mockResolvedValueOnce(
+          reactivatedAttendee,
+        );
+
+        const mockEventMailService = service[
+          'eventMailService'
+        ] as jest.Mocked<EventMailService>;
+        mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
+
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          reactivatedAttendee,
+        );
+
+        const attendeeDto = {};
+
+        await service.attendEvent(targetEvent.slug, mockUser.id, attendeeDto);
+
+        // The key assertion: getRoleByName should be called with Host
+        expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
+          EventAttendeeRole.Host,
+        );
+        // And reactivation should use the host role id
+        expect(
+          mockEventAttendeeService.reactivateEventAttendanceBySlug,
+        ).toHaveBeenCalledWith(
+          targetEvent.slug,
+          'test-user',
+          EventAttendeeStatus.Confirmed,
+          2, // host role id
+        );
+      });
+
+      it('should assign participant role when non-creator RSVPs to an event', async () => {
+        const nonCreatorEvent = {
+          ...findOneMockEventEntity,
+          user: { id: 99999 } as UserEntity, // Different user than mockUser
+        } as EventEntity;
+
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        mockRepository.findOne.mockResolvedValueOnce(nonCreatorEvent);
+
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+        const mockEventAttendeeService = service[
+          'eventAttendeeService'
+        ] as jest.Mocked<EventAttendeeService>;
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          null,
+        );
+
+        const mockEventRoleService = service[
+          'eventRoleService'
+        ] as jest.Mocked<EventRoleService>;
+        mockEventRoleService.getRoleByName.mockResolvedValueOnce({
+          id: 1,
+          name: EventAttendeeRole.Participant,
+          attendees: [],
+          permissions: [],
+        } as any);
+
+        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+
+        const createdAttendee = {
+          id: 1,
+          status: EventAttendeeStatus.Confirmed,
+          role: { id: 1, name: EventAttendeeRole.Participant },
+        } as any;
+        mockEventAttendeeService.create.mockResolvedValueOnce(createdAttendee);
+
+        const mockEventMailService = service[
+          'eventMailService'
+        ] as jest.Mocked<EventMailService>;
+        mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
+
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          createdAttendee,
+        );
+
+        const attendeeDto = {};
+
+        await service.attendEvent(nonCreatorEvent.slug, mockUser.id, attendeeDto);
+
+        // The key assertion: getRoleByName should be called with Participant, not Host
+        expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
+          EventAttendeeRole.Participant,
+        );
       });
     });
   });
