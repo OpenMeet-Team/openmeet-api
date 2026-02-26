@@ -397,13 +397,62 @@ export class GroupService {
     this.logger.debug('showAll() Auth context:', {
       userId,
       hasUserId: !!userId,
+      sort: query.sort ?? 'members',
     });
 
-    // Two-phase query: TypeORM's orderBy() cannot handle raw SQL subqueries
-    // (it parses double-quoted identifiers as aliases), and getManyAndCount()
-    // wraps in a DISTINCT subquery that strips custom addSelect aliases.
-    // So we first get ordered IDs with a lightweight query, then load full entities.
+    const sortMode = query.sort ?? 'members';
 
+    if (sortMode === 'members') {
+      return this.showAllSortedByMembers(page, limit, query, userId);
+    }
+
+    // Standard sort modes: newest, name
+    // Uses paginate() utility which provides OpenTelemetry pagination telemetry
+    const groupQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoin('group.createdBy', 'user')
+      .leftJoin('user.photo', 'photo')
+      .leftJoin('group.image', 'groupImage')
+      .addSelect(['user.name', 'user.slug', 'photo.path', 'groupImage.path'])
+      .loadRelationCountAndMap(
+        'group.groupMembersCount',
+        'group.groupMembers',
+        'groupMembers',
+        (qb) =>
+          qb
+            .innerJoin('groupMembers.groupRole', 'role')
+            .where('role.name != :roleName', {
+              roleName: GroupRole.Guest,
+            }),
+      );
+
+    this.applyGroupListFilters(groupQuery, query, userId);
+
+    if (sortMode === 'newest') {
+      groupQuery.orderBy('group.createdAt', 'DESC');
+    } else if (sortMode === 'name') {
+      groupQuery.orderBy('group.name', 'ASC');
+    }
+
+    return await paginate(groupQuery, { page, limit });
+  }
+
+  /**
+   * Two-phase query for sorting groups by non-guest member count DESC.
+   *
+   * TypeORM's orderBy() cannot handle raw SQL subqueries (it parses
+   * double-quoted identifiers as aliases), and getManyAndCount() wraps
+   * in a DISTINCT subquery that strips custom addSelect aliases.
+   * So we first get ordered IDs with a lightweight query, then load
+   * full entities.
+   */
+  private async showAllSortedByMembers(
+    page: number,
+    limit: number,
+    query: QueryGroupDto,
+    userId?: number,
+  ): Promise<PaginationResult<GroupEntity>> {
     // Phase 1: ordered group IDs via lightweight query with raw SQL ordering
     const idQuery = this.groupRepository
       .createQueryBuilder('group')

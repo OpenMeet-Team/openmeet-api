@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -46,4 +46,13 @@ export class QueryGroupDto {
       : value,
   )
   categories: string[];
+
+  @ApiPropertyOptional({
+    enum: ['members', 'newest', 'name'],
+    default: 'members',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['members', 'newest', 'name'])
+  sort?: 'members' | 'newest' | 'name';
 }

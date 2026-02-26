@@ -222,19 +222,138 @@ describe('GroupService', () => {
     });
   });
 
-  describe.skip('showAll', () => {
-    it('should return all paginated groups', async () => {
+  describe('showAll', () => {
+    // Helper: build a chainable mock query builder with all methods showAll uses
+    function createMockQueryBuilder() {
+      const qb: Record<string, jest.Mock> = {};
+      const chainable = [
+        'select',
+        'leftJoinAndSelect',
+        'leftJoin',
+        'addSelect',
+        'where',
+        'andWhere',
+        'innerJoin',
+        'limit',
+        'offset',
+        'skip',
+        'take',
+        'orderBy',
+        'loadRelationCountAndMap',
+      ];
+      chainable.forEach((m) => {
+        qb[m] = jest.fn().mockReturnValue(qb);
+      });
+      qb.getCount = jest.fn().mockResolvedValue(1);
+      qb.getRawMany = jest.fn().mockResolvedValue([{ id: 1 }]);
+      qb.getMany = jest.fn().mockResolvedValue([mockGroup]);
+      qb.getManyAndCount = jest
+        .fn()
+        .mockResolvedValue([[mockGroup], 1]);
+      qb.getQuery = jest.fn().mockReturnValue('SELECT ...');
+      qb.getParameters = jest.fn().mockReturnValue({});
+      // expressionMap is accessed directly for the members sort hack
+      (qb as any).expressionMap = {
+        orderBys: {},
+        mainAlias: { metadata: { name: 'GroupEntity' } },
+      };
+      return qb;
+    }
+
+    it('should use member-count sort by default (no sort param)', async () => {
+      const qb = createMockQueryBuilder();
       jest
         .spyOn(service['groupRepository'], 'createQueryBuilder')
-        .mockReturnValue(mockRepository as any);
-      jest.spyOn(mockRepository, 'getMany').mockResolvedValue([mockGroup]);
-      const result = await service.showAll(mockPagination, mockGroupsQuery);
-      expect(result).toEqual({
-        data: [mockGroup],
-        total: 1,
-        page: mockPagination.page,
-        limit: mockPagination.limit,
+        .mockReturnValue(qb as any);
+
+      const result = await service.showAll(mockPagination, {
+        ...mockGroupsQuery,
       });
+
+      // The two-phase member count sort sets expressionMap.orderBys directly
+      // and uses getRawMany for phase 1, then getMany for phase 2
+      expect(qb.getRawMany).toHaveBeenCalled();
+      expect(qb.getMany).toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({
+          data: [mockGroup],
+          total: 1,
+          page: 1,
+        }),
+      );
+    });
+
+    it('should use member-count sort when sort=members', async () => {
+      const qb = createMockQueryBuilder();
+      jest
+        .spyOn(service['groupRepository'], 'createQueryBuilder')
+        .mockReturnValue(qb as any);
+
+      const result = await service.showAll(mockPagination, {
+        ...mockGroupsQuery,
+        sort: 'members',
+      });
+
+      // Same two-phase approach as default
+      expect(qb.getRawMany).toHaveBeenCalled();
+      expect(qb.getMany).toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({
+          data: [mockGroup],
+          total: 1,
+          page: 1,
+        }),
+      );
+    });
+
+    it('should sort by createdAt DESC when sort=newest', async () => {
+      const qb = createMockQueryBuilder();
+      jest
+        .spyOn(service['groupRepository'], 'createQueryBuilder')
+        .mockReturnValue(qb as any);
+
+      const result = await service.showAll(mockPagination, {
+        ...mockGroupsQuery,
+        sort: 'newest',
+      });
+
+      // The newest sort uses orderBy and the paginate() utility (getManyAndCount)
+      expect(qb.orderBy).toHaveBeenCalledWith('group.createdAt', 'DESC');
+      expect(qb.getManyAndCount).toHaveBeenCalled();
+      // Should NOT use the two-phase raw ID approach
+      expect(qb.getRawMany).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({
+          data: [mockGroup],
+          total: 1,
+          page: 1,
+        }),
+      );
+    });
+
+    it('should sort by name ASC when sort=name', async () => {
+      const qb = createMockQueryBuilder();
+      jest
+        .spyOn(service['groupRepository'], 'createQueryBuilder')
+        .mockReturnValue(qb as any);
+
+      const result = await service.showAll(mockPagination, {
+        ...mockGroupsQuery,
+        sort: 'name',
+      });
+
+      // The name sort uses orderBy and the paginate() utility (getManyAndCount)
+      expect(qb.orderBy).toHaveBeenCalledWith('group.name', 'ASC');
+      expect(qb.getManyAndCount).toHaveBeenCalled();
+      // Should NOT use the two-phase raw ID approach
+      expect(qb.getRawMany).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({
+          data: [mockGroup],
+          total: 1,
+          page: 1,
+        }),
+      );
     });
   });
 
