@@ -599,20 +599,28 @@ export class AuthBlueskyService {
       foundVia !== 'atproto-identity';
 
     if (shouldCreateIdentityRecord) {
-      // Try to get the PDS URL from the session, otherwise resolve it
-      // The restoredSession's serviceUrl contains the PDS URL
-      const pdsUrl =
-        (restoredSession as any).pdsUrl ||
-        (restoredSession as any).serviceUrl?.toString() ||
-        (await this.resolvePdsUrlFromDid(profileData.did));
+      try {
+        const pdsUrl = await this.resolvePdsUrlForIdentity(
+          profileData.did,
+          restoredSession,
+        );
 
-      await this.ensureAtprotoIdentityRecord(
-        tenantId,
-        loginResponse.user.ulid,
-        profileData.did,
-        profileData.handle,
-        pdsUrl,
-      );
+        await this.ensureAtprotoIdentityRecord(
+          tenantId,
+          loginResponse.user.ulid,
+          profileData.did,
+          profileData.handle,
+          pdsUrl,
+        );
+      } catch (error) {
+        this.logger.error(
+          'Failed to resolve PDS URL for identity record — skipping identity creation',
+          {
+            did: profileData.did,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
     }
 
     // Only send minimal data in callback URL to avoid 414 Request-URI Too Large errors
@@ -872,25 +880,17 @@ export class AuthBlueskyService {
         linkData.userUlid,
       );
 
-    // Resolve PDS URL
-    const pdsUrl =
-      (restoredSession as any).pdsUrl ||
-      (restoredSession as any).serviceUrl?.toString() ||
-      (await this.resolvePdsUrlFromDid(did));
-
     // Perform identity operations with error handling
     try {
+      // Resolve PDS URL from DID document (source of truth)
+      const pdsUrl = await this.resolvePdsUrlForIdentity(did, restoredSession);
       if (existingIdentity) {
         if (existingIdentity.did === did) {
           // Same DID - update to non-custodial
           // Use resolved handle only if it's an actual handle (not a DID fallback)
           const resolvedHandle =
             handle !== did ? handle : existingIdentity.handle || handle;
-          // Use resolved pdsUrl only if it was actually resolved (not the bsky.social fallback)
-          const resolvedPdsUrl =
-            pdsUrl !== 'https://bsky.social'
-              ? pdsUrl
-              : existingIdentity.pdsUrl || pdsUrl;
+          const resolvedPdsUrl = pdsUrl;
 
           this.logger.debug('Updating existing identity to non-custodial', {
             identityId: existingIdentity.id,
@@ -1164,5 +1164,51 @@ export class AuthBlueskyService {
       const configuredPdsUrl = this.configService.get<string>('PDS_URL');
       return configuredPdsUrl || 'https://bsky.social';
     }
+  }
+
+  /**
+   * Resolve PDS URL for storing in an identity record.
+   *
+   * Uses the DID document as the canonical source of truth for PDS location.
+   * Falls back to the OAuth session URL only when DID resolution fails
+   * (e.g. test environments with fake DIDs). Never falls back to the
+   * configured PDS_URL env var, which would silently store the wrong address.
+   */
+  async resolvePdsUrlForIdentity(
+    did: string,
+    restoredSession?: any,
+  ): Promise<string> {
+    // Primary: resolve from DID document (canonical source of truth)
+    try {
+      const profile = await this.blueskyIdentityService.resolveProfile(did);
+      this.logger.debug('Resolved PDS URL from DID document', {
+        did,
+        pdsUrl: profile.pdsUrl,
+      });
+      return profile.pdsUrl;
+    } catch (error) {
+      this.logger.warn(
+        'Failed to resolve PDS URL from DID document',
+        {
+          did,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
+
+    // Fallback: use session URL (supports test environments with fake DIDs)
+    const sessionPdsUrl =
+      restoredSession?.pdsUrl || restoredSession?.serviceUrl?.toString();
+    if (sessionPdsUrl) {
+      this.logger.warn(
+        'Using PDS URL from OAuth session (DID resolution failed)',
+        { did, pdsUrl: sessionPdsUrl },
+      );
+      return sessionPdsUrl;
+    }
+
+    throw new Error(
+      `Cannot resolve PDS URL for ${did}: DID document resolution failed and no session URL available`,
+    );
   }
 }

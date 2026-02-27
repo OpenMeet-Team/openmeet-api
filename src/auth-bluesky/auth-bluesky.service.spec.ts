@@ -1334,6 +1334,16 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       },
     };
 
+    beforeEach(() => {
+      // resolvePdsUrlForIdentity resolves PDS URL from DID document
+      mockBlueskyIdentityService.resolveProfile.mockResolvedValue({
+        did: 'did:plc:newdid123',
+        handle: 'alice.bsky.social',
+        pdsUrl: 'https://morel.us-east.host.bsky.network',
+        source: 'atprotocol-public',
+      });
+    });
+
     it('should create new identity when user has none', async () => {
       // Arrange: No existing identity for the user
       mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
@@ -1797,6 +1807,7 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       );
 
       // Assert: Should preserve existing handle, not overwrite with DID
+      // PDS URL now comes from DID document resolution (source of truth)
       expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
         'tenant-123',
         existingIdentity.id,
@@ -1804,7 +1815,7 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
           isCustodial: false,
           pdsCredentials: null,
           handle: 'alice.dev.opnmt.me', // Preserved, not 'did:plc:newdid123'
-          pdsUrl: 'https://pds.dev.opnmt.me', // Preserved, not 'https://bsky.social'
+          pdsUrl: 'https://morel.us-east.host.bsky.network', // From DID document, not session fallback
         }),
       );
     });
