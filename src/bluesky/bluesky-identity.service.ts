@@ -350,19 +350,57 @@ export class BlueskyIdentityService {
           const agent = new Agent(pdsEndpoint);
 
           // Fetch profile data using DID or handle with timeout
-          const profileStartTime = Date.now();
-          const response = await Promise.race([
-            agent.getProfile({ actor: did }),
-            this.createTimeout(this.TIMEOUT_PROFILE_FETCH, 'profile fetch'),
-          ]);
-          span.setAttribute(
-            'atproto.profile_fetch_ms',
-            Date.now() - profileStartTime,
-          );
+          // This is optional enrichment - if it fails, we still have
+          // valid data from the DID document (did, handle, pdsUrl)
+          let response;
+          try {
+            const profileStartTime = Date.now();
+            response = await Promise.race([
+              agent.getProfile({ actor: did }),
+              this.createTimeout(this.TIMEOUT_PROFILE_FETCH, 'profile fetch'),
+            ]);
+            span.setAttribute(
+              'atproto.profile_fetch_ms',
+              Date.now() - profileStartTime,
+            );
 
-          this.logger.debug(
-            `Profile API response - did: ${response.data.did}, handle: ${response.data.handle}, handleFromDoc: ${handle}`,
-          );
+            this.logger.debug(
+              `Profile API response - did: ${response.data.did}, handle: ${response.data.handle}, handleFromDoc: ${handle}`,
+            );
+          } catch (profileError) {
+            this.logger.warn(
+              `Profile fetch failed for ${did}, returning DID document data only`,
+              {
+                error: profileError.message,
+                pdsEndpoint,
+                handleOrDid,
+              },
+            );
+
+            const resolvedHandle = handle || did;
+            span.setAttribute('atproto.handle', resolvedHandle);
+            span.setAttribute('atproto.profile_fetch_failed', true);
+            span.setAttribute(
+              'atproto.total_duration_ms',
+              Date.now() - overallStartTime,
+            );
+            span.end();
+
+            return {
+              did,
+              handle: resolvedHandle,
+              pdsUrl: pdsEndpoint,
+              displayName: undefined,
+              avatar: undefined,
+              followersCount: 0,
+              followingCount: 0,
+              postsCount: 0,
+              description: undefined,
+              indexedAt: undefined,
+              labels: [],
+              source: 'atprotocol-did-document',
+            };
+          }
 
           // Format the response, using handle from DID document as fallback
           const resolvedHandle = response.data.handle || handle || did;

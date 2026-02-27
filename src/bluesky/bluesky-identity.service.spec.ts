@@ -165,6 +165,51 @@ describe('BlueskyIdentityService', () => {
       expect(idResolverCallCount).toBe(1);
     });
 
+    it('should return partial result when profile fetch fails but DID document resolved successfully', async () => {
+      // Arrange: DID document resolves fine, but getProfile throws "Authentication Required"
+      mockConfigService.get.mockReturnValue(undefined);
+      mockResolveNoCheck.mockResolvedValue(mockDidDoc);
+      mockGetPds.mockReturnValue('https://pds.example.com');
+      mockGetHandle.mockReturnValue('test.bsky.social');
+      mockGetProfile.mockRejectedValue(new Error('Authentication Required'));
+
+      // Act
+      const result = await service.resolveProfile('did:plc:test123');
+
+      // Assert: Should still return a result with PDS URL from DID document
+      expect(result).toEqual({
+        did: 'did:plc:test123',
+        handle: 'test.bsky.social',
+        pdsUrl: 'https://pds.example.com',
+        displayName: undefined,
+        avatar: undefined,
+        followersCount: 0,
+        followingCount: 0,
+        postsCount: 0,
+        description: undefined,
+        indexedAt: undefined,
+        labels: [],
+        source: 'atprotocol-did-document',
+      });
+    });
+
+    it('should return partial result with DID as handle when profile fetch fails and no handle in DID doc', async () => {
+      // Arrange: DID document resolves but has no handle, and getProfile fails
+      mockConfigService.get.mockReturnValue(undefined);
+      mockResolveNoCheck.mockResolvedValue(mockDidDoc);
+      mockGetPds.mockReturnValue('https://pds.example.com');
+      mockGetHandle.mockReturnValue(null);
+      mockGetProfile.mockRejectedValue(new Error('Authentication Required'));
+
+      // Act
+      const result = await service.resolveProfile('did:plc:test123');
+
+      // Assert: Should use DID as handle fallback
+      expect(result.handle).toBe('did:plc:test123');
+      expect(result.pdsUrl).toBe('https://pds.example.com');
+      expect(result.source).toBe('atprotocol-did-document');
+    });
+
     it('should throw when DID not found on either private or public PLC', async () => {
       // Arrange: Private PLC configured, DID not found anywhere
       mockConfigService.get.mockImplementation((key: string) => {
