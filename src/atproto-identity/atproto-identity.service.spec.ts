@@ -57,7 +57,6 @@ describe('AtprotoIdentityService', () => {
       createAccount: jest.fn(),
       createSession: jest.fn(),
       isHandleAvailable: jest.fn(),
-      updateHandle: jest.fn(),
     };
 
     const mockPdsCredentialService = {
