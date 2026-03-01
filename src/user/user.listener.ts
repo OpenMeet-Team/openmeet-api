@@ -1,11 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { ModuleRef } from '@nestjs/core';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 
 @Injectable()
 export class UserListener {
-  constructor(private readonly moduleRef: ModuleRef) {}
 
   @OnEvent('user.created')
   handleUserCreatedEvent(user: UserEntity) {

@@ -403,7 +403,7 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
   });
 
   describe('handleEventAttendeeAddedEvent', () => {
-    it('should emit chat.event.member.add when status is confirmed', async () => {
+    it('should emit chat.event.member.add when status is confirmed', () => {
       // Arrange
       const params = {
         eventId: 1,
@@ -415,7 +415,7 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
       };
 
       // Act
-      await listener.handleEventAttendeeAddedEvent(params);
+      listener.handleEventAttendeeAddedEvent(params);
 
       // Assert
       expect(eventEmitter.emit).toHaveBeenCalledWith('chat.event.member.add', {
@@ -425,7 +425,7 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
       });
     });
 
-    it('should not emit events when status is not confirmed', async () => {
+    it('should not emit events when status is not confirmed', () => {
       // Arrange
       const params = {
         eventId: 1,
@@ -437,7 +437,7 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
       };
 
       // Act
-      await listener.handleEventAttendeeAddedEvent(params);
+      listener.handleEventAttendeeAddedEvent(params);
 
       // Assert
       expect(eventEmitter.emit).not.toHaveBeenCalled();
