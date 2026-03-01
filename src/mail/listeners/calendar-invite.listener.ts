@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { CalendarInviteService } from '../services/calendar-invite.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventAttendeeStatus } from '../../core/constants/constant';
@@ -11,9 +12,28 @@ export class CalendarInviteListener {
 
   constructor(
     private readonly calendarInviteService: CalendarInviteService,
-    private readonly eventAttendeeService: EventAttendeeService,
+    private readonly moduleRef: ModuleRef,
     private readonly tenantConnectionService: TenantConnectionService,
   ) {}
+
+  /**
+   * Resolve request-scoped durable services with a synthetic tenant context.
+   * Required because EventEmitter events fire outside HTTP request scope,
+   * so AggregateByTenantContextIdStrategy.attach() is never called and
+   * REQUEST would be undefined. This pattern follows ActivityFeedListener.
+   */
+  private async resolveEventAttendeeService(
+    tenantId: string,
+  ): Promise<EventAttendeeService> {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    return this.moduleRef.resolve(EventAttendeeService, contextId, {
+      strict: false,
+    });
+  }
 
   @OnEvent('event.rsvp.added')
   async handleEventRsvpAdded(params: {
@@ -25,7 +45,7 @@ export class CalendarInviteListener {
     tenantId: string;
   }): Promise<void> {
     this.logger.log(
-      `🎫 Calendar invite listener triggered for event ${params.eventId}, user ${params.userId}, status: ${params.status}`,
+      `Calendar invite listener triggered for event ${params.eventId}, user ${params.userId}, status: ${params.status}`,
     );
 
     // Business rule: Only send calendar invites for confirmed RSVPs
@@ -37,8 +57,13 @@ export class CalendarInviteListener {
     }
 
     try {
+      // Dynamically resolve EventAttendeeService with tenant context
+      const eventAttendeeService = await this.resolveEventAttendeeService(
+        params.tenantId,
+      );
+
       // Fetch attendee with event and user relations in one query
-      const attendee = await this.eventAttendeeService.findOne({
+      const attendee = await eventAttendeeService.findOne({
         where: {
           event: { id: params.eventId },
           user: { id: params.userId },

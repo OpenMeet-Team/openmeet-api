@@ -1,21 +1,45 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { REQUEST } from '@nestjs/core';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventAttendeeStatus } from '../core/constants/constant';
 import { UserService } from '../user/user.service';
+
+interface ResolvedServices {
+  eventAttendeeService: EventAttendeeService;
+  userService: UserService;
+}
 
 @Injectable()
 export class EventListener {
   private readonly logger = new Logger(EventListener.name);
 
   constructor(
-    private readonly eventAttendeeService: EventAttendeeService,
+    private readonly moduleRef: ModuleRef,
     private readonly eventEmitter: EventEmitter2,
-    private readonly userService: UserService,
-    @Inject(REQUEST) private readonly request: any,
   ) {}
+
+  /**
+   * Resolve request-scoped durable services with a synthetic tenant context.
+   * Required because EventEmitter events fire outside HTTP request scope,
+   * so AggregateByTenantContextIdStrategy.attach() is never called and
+   * REQUEST would be undefined. This pattern follows ActivityFeedListener.
+   */
+  private async resolveServices(tenantId: string): Promise<ResolvedServices> {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    const [eventAttendeeService, userService] = await Promise.all([
+      this.moduleRef.resolve(EventAttendeeService, contextId, {
+        strict: false,
+      }),
+      this.moduleRef.resolve(UserService, contextId, { strict: false }),
+    ]);
+    return { eventAttendeeService, userService };
+  }
 
   @OnEvent('event.created')
   handleEventCreatedEvent(params: {
@@ -29,9 +53,6 @@ export class EventListener {
       slug: params.slug,
       tenantId: params.tenantId,
     });
-
-    // Use the tenant ID from the event payload (provided by event service)
-    // const tenantId = params.tenantId; // Currently not used
 
     // Matrix-native approach: Rooms are created on-demand via Application Service
     // No longer emit chat.event.created events - rooms are created when first accessed
@@ -61,8 +82,19 @@ export class EventListener {
     this.logger.log('event.attendee.created', params);
 
     try {
+      if (!params.tenantId) {
+        this.logger.error(
+          'No tenantId available in event parameters for event.attendee.created',
+        );
+        return;
+      }
+
+      const { eventAttendeeService } = await this.resolveServices(
+        params.tenantId,
+      );
+
       // Only add users to the chat room if they're approved
-      const attendee = await this.eventAttendeeService.findOne({
+      const attendee = await eventAttendeeService.findOne({
         where: {
           event: { id: params.eventId },
           user: { id: params.userId },
@@ -71,9 +103,7 @@ export class EventListener {
       });
 
       if (attendee && attendee.status === EventAttendeeStatus.Confirmed) {
-        // Emit an event for the chat module to handle using slugs
-        // Get tenantId from params or request context
-        const tenantId = params.tenantId || this.request?.tenantId;
+        const tenantId = params.tenantId;
 
         this.eventEmitter.emit('chat.event.member.add', {
           eventSlug: params.eventSlug || attendee.event.slug,
@@ -104,8 +134,7 @@ export class EventListener {
 
     try {
       if (params.status === EventAttendeeStatus.Confirmed) {
-        // Get tenantId from params or request context
-        const tenantId = params.tenantId || this.request?.tenantId;
+        const tenantId = params.tenantId;
 
         // Emit an event for the chat module to handle using slugs
         this.eventEmitter.emit('chat.event.member.add', {
@@ -138,12 +167,21 @@ export class EventListener {
     this.logger.log('event.attendee.status.changed received', params);
 
     try {
+      const tenantId = params.tenantId;
+
+      if (!tenantId) {
+        this.logger.error('No tenantId available in event parameters');
+        return;
+      }
+
       // Get the attendee to fetch slugs if they weren't provided
       let eventSlug = params.eventSlug;
       let userSlug = params.userSlug;
 
       if (!eventSlug || !userSlug) {
-        const attendee = await this.eventAttendeeService.findOne({
+        const { eventAttendeeService } = await this.resolveServices(tenantId);
+
+        const attendee = await eventAttendeeService.findOne({
           where: {
             event: { id: params.eventId },
             user: { id: params.userId },
@@ -155,16 +193,6 @@ export class EventListener {
           eventSlug = attendee.event.slug;
           userSlug = attendee.user.slug;
         }
-      }
-
-      // Get tenantId from params or request context
-      const tenantId = params.tenantId || this.request?.tenantId;
-
-      if (!tenantId) {
-        this.logger.error(
-          'No tenantId available in event parameters or request context',
-        );
-        return;
       }
 
       // Handle status parameter (for backward compatibility)
@@ -219,8 +247,19 @@ export class EventListener {
     this.logger.log('event.attendee.deleted', params);
 
     try {
+      if (!params.tenantId) {
+        this.logger.error(
+          'No tenantId available in event parameters for event.attendee.deleted',
+        );
+        return;
+      }
+
+      const { eventAttendeeService } = await this.resolveServices(
+        params.tenantId,
+      );
+
       // Find event and user to get slugs
-      const attendee = await this.eventAttendeeService.findOne({
+      const attendee = await eventAttendeeService.findOne({
         where: {
           event: { id: params.eventId },
           user: { id: params.userId },
@@ -229,8 +268,7 @@ export class EventListener {
       });
 
       if (attendee && attendee.event && attendee.user) {
-        // Get tenantId from params or request context
-        const tenantId = params.tenantId || this.request?.tenantId;
+        const tenantId = params.tenantId;
 
         // Emit an event for the chat module to handle using slugs
         this.eventEmitter.emit('chat.event.member.remove', {
@@ -268,8 +306,12 @@ export class EventListener {
         `Matrix handle registered for user ${params.userId}, reprocessing pending event invitations`,
       );
 
+      const { userService, eventAttendeeService } = await this.resolveServices(
+        params.tenantId,
+      );
+
       // Get user to retrieve slug
-      const user = await this.userService.findById(params.userId);
+      const user = await userService.findById(params.userId);
       if (!user) {
         this.logger.warn(
           `User ${params.userId} not found, cannot reprocess invitations`,
@@ -278,9 +320,7 @@ export class EventListener {
       }
 
       // Find all attendances for this user
-      const attendances = await this.eventAttendeeService.findByUserSlug(
-        user.slug,
-      );
+      const attendances = await eventAttendeeService.findByUserSlug(user.slug);
 
       // Filter to attendances that allow chat access (confirmed, cancelled)
       const chatAllowedStatuses = [
