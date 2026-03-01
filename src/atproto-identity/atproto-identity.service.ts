@@ -14,7 +14,9 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 import { PdsApiError } from '../pds/pds.errors';
+import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.service';
 import { AllConfigType } from '../config/config.type';
 
 interface CreateIdentityUser {
@@ -38,6 +40,8 @@ export class AtprotoIdentityService {
     private readonly pdsAccountService: PdsAccountService,
     private readonly pdsCredentialService: PdsCredentialService,
     private readonly configService: ConfigService<AllConfigType>,
+    private readonly pdsSessionService: PdsSessionService,
+    private readonly atprotoHandleCacheService: AtprotoHandleCacheService,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
@@ -186,20 +190,21 @@ export class AtprotoIdentityService {
       throw new ConflictException('Handle is already taken');
     }
 
-    // 5. Get a PDS session for the custodial identity
-    if (!identity.pdsCredentials) {
+    // 5. Get authenticated session (works for both custodial and OAuth users)
+    const sessionResult = await this.pdsSessionService.getSessionForUser(
+      tenantId,
+      userUlid,
+    );
+    if (!sessionResult) {
       throw new BadRequestException(
-        'Cannot update handle: no stored credentials for this identity',
+        'Cannot update handle: no authenticated session available. Please link your AT Protocol account to enable handle changes.',
       );
     }
-    const password = this.pdsCredentialService.decrypt(identity.pdsCredentials);
-    const session = await this.pdsAccountService.createSession(
-      identity.did,
-      password,
-    );
 
-    // 6. Call com.atproto.identity.updateHandle on PDS
-    await this.pdsAccountService.updateHandle(session.accessJwt, newHandle);
+    // 6. Call com.atproto.identity.updateHandle via the agent
+    await sessionResult.agent.com.atproto.identity.updateHandle({
+      handle: newHandle,
+    });
 
     // 7. Update handle in database
     const updated = await this.userAtprotoIdentityService.update(
@@ -213,6 +218,9 @@ export class AtprotoIdentityService {
         'Failed to update identity - record not found',
       );
     }
+
+    // Invalidate handle cache so the new handle is immediately visible
+    await this.atprotoHandleCacheService.invalidate(identity.did);
 
     this.logger.log(
       `Updated handle for user ${userUlid}: ${identity.handle} -> ${newHandle}`,
