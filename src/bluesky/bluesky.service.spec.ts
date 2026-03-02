@@ -904,6 +904,44 @@ describe('BlueskyService', () => {
       expect(geoLocation).not.toHaveProperty('description');
     });
 
+    it('should include geo location when lat=0 or lon=0 (falsy but valid)', async () => {
+      const event = {
+        name: 'Test Event at Origin',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        location: 'Gulf of Guinea',
+        lat: 0,
+        lon: 0,
+      } as EventEntity;
+
+      mockAgentImplementation.com.atproto.repo.getRecord.mockRejectedValueOnce({
+        status: 404,
+      });
+
+      await service.createEventRecord(event, 'test-did', 'test.handle', 'test-tenant');
+
+      expect(
+        mockAgentImplementation.com.atproto.repo.putRecord,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          record: expect.objectContaining({
+            locations: expect.arrayContaining([
+              expect.objectContaining({
+                $type: 'community.lexicon.location.geo',
+                latitude: '0',
+                longitude: '0',
+                name: 'Gulf of Guinea',
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
     it('should use correct ATProto schema for URI locations ($type)', async () => {
       // Arrange
       const event = {

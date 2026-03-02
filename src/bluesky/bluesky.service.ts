@@ -363,7 +363,7 @@ export class BlueskyService {
 
       // Add physical location if exists
       // ATProto schema: $type discriminator, latitude/longitude as strings, name field
-      if (event.location && event.lat && event.lon) {
+      if (event.location && event.lat != null && event.lon != null) {
         locations.push({
           $type: 'community.lexicon.location.geo',
           latitude: String(event.lat),
