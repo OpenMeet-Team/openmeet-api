@@ -346,6 +346,32 @@ export class PdsAccountService {
   }
 
   /**
+   * Update an account's email using the admin API.
+   *
+   * @param did - The DID of the account to update
+   * @param email - The new email address to set
+   * @throws PdsApiError if the request fails
+   */
+  async adminUpdateAccountEmail(did: string, email: string): Promise<void> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.admin.updateAccountEmail`;
+
+    return this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          { account: did, email },
+          {
+            headers: {
+              Authorization: this.getBasicAuthHeader(),
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+    });
+  }
+
+  /**
    * Request a password reset email for an account.
    * This is a public endpoint and does not require admin authentication.
    *

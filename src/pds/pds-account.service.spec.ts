@@ -827,6 +827,98 @@ describe('PdsAccountService', () => {
     });
   });
 
+  describe('adminUpdateAccountEmail()', () => {
+    it('should update email successfully', async () => {
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await expect(
+        service.adminUpdateAccountEmail(
+          'did:plc:abc123',
+          'newemail@example.com',
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(httpService.post).toHaveBeenCalledWith(
+        'https://pds-dev.openmeet.net/xrpc/com.atproto.admin.updateAccountEmail',
+        {
+          account: 'did:plc:abc123',
+          email: 'newemail@example.com',
+        },
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: expect.stringMatching(/^Basic /),
+            'Content-Type': 'application/json',
+          }),
+        }),
+      );
+    });
+
+    it('should use Basic Auth header', async () => {
+      const successResponse: AxiosResponse = {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+
+      httpService.post.mockReturnValue(of(successResponse));
+
+      await service.adminUpdateAccountEmail(
+        'did:plc:abc123',
+        'newemail@example.com',
+      );
+
+      const expectedAuthHeader = `Basic ${Buffer.from('admin:admin-secret').toString('base64')}`;
+      expect(httpService.post).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: expectedAuthHeader,
+          }),
+        }),
+      );
+    });
+
+    it('should throw PdsApiError on failure', async () => {
+      const errorResponse: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: {
+            error: 'InvalidRequest',
+            message: 'Account not found',
+          },
+          status: 400,
+          statusText: 'Bad Request',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 400',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+
+      httpService.post.mockReturnValue(throwError(() => errorResponse));
+
+      await expect(
+        service.adminUpdateAccountEmail(
+          'did:plc:invalid',
+          'newemail@example.com',
+        ),
+      ).rejects.toThrow(PdsApiError);
+    });
+  });
+
   describe('requestPasswordReset()', () => {
     it('should send password reset email successfully', async () => {
       const successResponse: AxiosResponse = {

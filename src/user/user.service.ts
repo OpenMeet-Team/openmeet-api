@@ -42,6 +42,7 @@ import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { ProfileSummaryDto } from './dto/profile-summary.dto';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupService } from '../group/group.service';
+import { PdsAccountService } from '../pds/pds-account.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -67,6 +68,7 @@ export class UserService {
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
     @Inject(forwardRef(() => GroupService))
     private readonly groupService: GroupService,
+    private readonly pdsAccountService: PdsAccountService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -85,6 +87,36 @@ export class UserService {
       dataSource.getRepository(UserPermissionEntity);
     this.groupRepository = dataSource.getRepository(GroupEntity);
     this.eventRepository = dataSource.getRepository(EventEntity);
+  }
+
+  private async syncEmailToPds(
+    user: User,
+    newEmail: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      if (!user.ulid) return;
+
+      const identity = await this.userAtprotoIdentityService.findByUserUlid(
+        tenantId,
+        user.ulid,
+      );
+      if (!identity?.did || !identity.isCustodial) return;
+
+      await this.pdsAccountService.adminUpdateAccountEmail(
+        identity.did,
+        newEmail,
+      );
+      this.logger.log('Synced email to PDS', {
+        userId: user.id,
+        did: identity.did,
+      });
+    } catch (error) {
+      this.logger.warn('Failed to sync email to PDS', {
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
@@ -765,6 +797,8 @@ export class UserService {
           tenantId,
         );
 
+        await this.syncEmailToPds(existingUser, profile.email!, tenantId);
+
         return updatedUser as UserEntity;
       }
 
@@ -816,6 +850,8 @@ export class UserService {
           { email: profile.email },
           tenantId,
         );
+
+        await this.syncEmailToPds(existingUser, profile.email!, tenantId);
 
         return updatedUser as UserEntity;
       }
