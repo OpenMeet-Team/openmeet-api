@@ -77,4 +77,31 @@ describe('markAtprotoSynced', () => {
     expect(setArg.atprotoCid).toBeUndefined();
     expect(typeof setArg.atprotoSyncedAt).toBe('function');
   });
+
+  it('should work with a non-EventEntity repository', async () => {
+    const nonEventQueryBuilder: Record<string, jest.Mock> = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+    const nonEventRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(nonEventQueryBuilder),
+      target: class FakeEntity {},
+    };
+
+    await markAtprotoSynced(nonEventRepo as any, 7, {
+      atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.rsvp/rkey1',
+      atprotoRkey: 'rkey1',
+    });
+
+    const setArg = nonEventQueryBuilder.set.mock.calls[0][0];
+    expect(setArg.atprotoUri).toBe(
+      'at://did:plc:abc/community.lexicon.calendar.rsvp/rkey1',
+    );
+    expect(setArg.atprotoRkey).toBe('rkey1');
+    expect(setArg.atprotoCid).toBeUndefined();
+    expect(typeof setArg.atprotoSyncedAt).toBe('function');
+    expect(setArg.atprotoSyncedAt()).toBe('now()');
+  });
 });

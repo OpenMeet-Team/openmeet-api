@@ -31,6 +31,7 @@ import { UserService } from '../user/user.service';
 import { EventAttendeeQueryService } from './event-attendee-query.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
+import { markAtprotoSynced } from '../atproto-publisher/atproto-sync.utils';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -190,15 +191,11 @@ export class EventAttendeeService {
     );
 
     if (publishResult.action === 'published') {
-      // Update the attendee record with AT Protocol fields
-      await this.eventAttendeesRepository.update(
-        { id: attendee.id },
-        {
-          atprotoUri: publishResult.atprotoUri,
-          atprotoRkey: publishResult.atprotoRkey,
-          atprotoSyncedAt: new Date(),
-        },
-      );
+      // Update the attendee record with AT Protocol fields using DB clock
+      await markAtprotoSynced(this.eventAttendeesRepository, attendee.id, {
+        atprotoUri: publishResult.atprotoUri,
+        atprotoRkey: publishResult.atprotoRkey,
+      });
 
       this.logger.debug(
         `[syncRsvpToAtproto] Published RSVP to AT Protocol: ${publishResult.atprotoUri}`,

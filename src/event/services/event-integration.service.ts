@@ -20,6 +20,7 @@ import { FileEntity } from '../../file/infrastructure/persistence/relational/ent
 import { FileService } from '../../file/file.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import axios from 'axios';
+import { markAtprotoSynced } from '../../atproto-publisher/atproto-sync.utils';
 
 @Injectable()
 export class EventIntegrationService {
@@ -660,6 +661,7 @@ export class EventIntegrationService {
     }
 
     // If CID differs and event was published by us, PDS is truth — accept remote version
+    let cidChanged = false;
     if (
       incomingCid &&
       existingEvent.atprotoCid &&
@@ -670,7 +672,7 @@ export class EventIntegrationService {
       );
       // Update stored CID to track this version
       existingEvent.atprotoCid = incomingCid;
-      existingEvent.atprotoSyncedAt = new Date();
+      cidChanged = true;
     }
 
     // Update basic fields
@@ -742,13 +744,14 @@ export class EventIntegrationService {
     existingEvent.lastSyncedAt = new Date();
 
     // Backfill atprotoUri if this is our event echoing back from firehose
+    let uriBackfilled = false;
     if (
       !existingEvent.atprotoUri &&
       existingEvent.atprotoRkey &&
       eventData.source.id
     ) {
       existingEvent.atprotoUri = eventData.source.id;
-      existingEvent.atprotoSyncedAt = new Date();
+      uriBackfilled = true;
       this.logger.debug(`Backfilled atprotoUri: ${eventData.source.id}`);
     }
 
@@ -770,6 +773,19 @@ export class EventIntegrationService {
     this.logger.debug(
       `Updated event with ID ${updatedEvent.id} for tenant ${tenantId}, image: ${updatedEvent.image ? updatedEvent.image.id : 'none'}`,
     );
+
+    // After save, sync atprotoSyncedAt via DB clock to avoid
+    // JS Date ms-precision drift that causes perpetual re-sync
+    if (cidChanged) {
+      await markAtprotoSynced(eventRepository, updatedEvent.id, {
+        atprotoCid: incomingCid,
+      });
+    }
+    if (uriBackfilled) {
+      await markAtprotoSynced(eventRepository, updatedEvent.id, {
+        atprotoUri: eventData.source.id,
+      });
+    }
 
     // Emit event.ingested.updated for activity feed and other listeners
     // Note: we use 'event.ingested.updated' instead of 'event.updated' to distinguish
