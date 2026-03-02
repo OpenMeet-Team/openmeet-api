@@ -148,13 +148,17 @@ describe('EventIntegrationService', () => {
 
     // Create a mock query builder
     const mockQueryBuilder = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValue([]),
+      execute: jest.fn().mockResolvedValue(undefined),
     };
 
     // Setup repository mocks with proper type casting
     eventRepository = {
+      target: EventEntity,
       findOne: jest.fn(),
       find: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockImplementation(() => {
@@ -1105,11 +1109,12 @@ describe('EventIntegrationService', () => {
 
       // Assert - save SHOULD be called because this is a remote edit
       expect(eventRepository.save).toHaveBeenCalled();
-      // The saved event should have the new CID
+      // The saved event should have the new CID stored on the entity
       const savedEntity = eventRepository.save.mock.calls[0][0] as any;
       expect(savedEntity.atprotoCid).toBe('bafyreinewcid');
-      // The saved event should have a fresh atprotoSyncedAt
-      expect(savedEntity.atprotoSyncedAt).toBeInstanceOf(Date);
+      // atprotoSyncedAt is now set via markAtprotoSynced (DB clock) after save,
+      // not directly on the entity. Verify the createQueryBuilder chain was called.
+      expect(eventRepository.createQueryBuilder).toHaveBeenCalled();
     });
 
     it('should proceed normally when no CID is available (no atprotoCid on event)', async () => {

@@ -1,14 +1,12 @@
 import { Repository } from 'typeorm';
-import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 
 /**
- * Update an event's ATProto sync metadata using database now() so that
- * atprotoSyncedAt and @UpdateDateColumn's updatedAt get the same timestamp.
- * Using new Date() from JS creates a 1-7ms gap where updatedAt (set by the DB)
- * is always slightly ahead, causing the sync scheduler to re-process the event.
+ * Update an entity's ATProto sync metadata using database now() so that
+ * atprotoSyncedAt uses the DB clock, avoiding JS Date ms-precision drift
+ * that causes the sync scheduler to re-process records.
  */
-export async function markAtprotoSynced(
-  repo: Repository<EventEntity>,
+export async function markAtprotoSynced<T extends object>(
+  repo: Repository<T>,
   id: number,
   fields?: {
     atprotoUri?: string;
@@ -22,7 +20,7 @@ export async function markAtprotoSynced(
     .set({
       ...fields,
       atprotoSyncedAt: () => 'now()',
-    })
+    } as any)
     .where('id = :id', { id })
     .execute();
 }

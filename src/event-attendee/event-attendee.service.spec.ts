@@ -31,12 +31,15 @@ describe('EventAttendeeService', () => {
     leftJoinAndSelect: jest.fn().mockReturnThis(),
     leftJoin: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     getOne: jest.fn(),
     getMany: jest.fn(),
     getCount: jest.fn(),
+    execute: jest.fn().mockResolvedValue(undefined),
     cache: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
@@ -45,6 +48,7 @@ describe('EventAttendeeService', () => {
   // Mock repository with all needed methods
   const mockRepository = {
     createQueryBuilder: jest.fn(() => mockQueryBuilder),
+    target: EventAttendeesEntity,
     findOne: jest.fn(),
     find: jest.fn(),
     create: jest.fn(),
