@@ -7,7 +7,14 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Repository, Brackets, In } from 'typeorm';
+import {
+  Repository,
+  Brackets,
+  In,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
 import { instanceToPlain } from 'class-transformer';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
@@ -625,15 +632,30 @@ export class EventQueryService {
   async findEventsForGroup(
     groupId: number,
     limit: number,
+    dateFilter?: { startDate?: string; endDate?: string },
   ): Promise<EventEntity[]> {
     await this.initializeRepository();
     // Only load relations needed for list view (EventsItemComponent)
     // Removed: 'user', 'categories' - not displayed in list view
+    const where: any = {
+      group: { id: groupId },
+      status: In([EventStatus.Published, EventStatus.Cancelled]),
+    };
+
+    // Only add date filters if provided (backward compatible — no params = all events)
+    if (dateFilter?.startDate && dateFilter?.endDate) {
+      where.startDate = Between(
+        new Date(dateFilter.startDate),
+        new Date(dateFilter.endDate),
+      );
+    } else if (dateFilter?.startDate) {
+      where.startDate = MoreThanOrEqual(new Date(dateFilter.startDate));
+    } else if (dateFilter?.endDate) {
+      where.startDate = LessThanOrEqual(new Date(dateFilter.endDate));
+    }
+
     const events = await this.eventRepository.find({
-      where: {
-        group: { id: groupId },
-        status: In([EventStatus.Published, EventStatus.Cancelled]),
-      },
+      where,
       relations: ['group', 'series', 'image'],
       take: limit,
     });

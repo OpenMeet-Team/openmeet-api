@@ -1101,12 +1101,15 @@ export class GroupService {
     return await this.groupMemberService.findGroupDetailsMembers(group.id, 0);
   }
 
-  async showGroupEvents(slug: string): Promise<EventEntity[]> {
+  async showGroupEvents(
+    slug: string,
+    query?: { startDate?: string; endDate?: string },
+  ): Promise<EventEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
     const group = await this.getGroupBySlug(slug);
 
-    return await this.eventQueryService.findEventsForGroup(group.id, 0);
+    return await this.eventQueryService.findEventsForGroup(group.id, 0, query);
   }
 
   // DEPRECATED: Group discussions method removed
