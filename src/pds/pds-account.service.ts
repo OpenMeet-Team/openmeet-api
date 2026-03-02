@@ -90,6 +90,13 @@ export class PdsAccountService {
   }
 
   /**
+   * Get the configured PDS URL.
+   */
+  getConfiguredPdsUrl(): string {
+    return this.pdsUrl;
+  }
+
+  /**
    * Create a new account on the PDS.
    *
    * @param params - Account creation parameters

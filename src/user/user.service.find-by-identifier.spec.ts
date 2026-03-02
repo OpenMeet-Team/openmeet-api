@@ -129,6 +129,9 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
           provide: PdsAccountService,
           useValue: {
             adminUpdateAccountEmail: jest.fn().mockResolvedValue(undefined),
+            getConfiguredPdsUrl: jest
+              .fn()
+              .mockReturnValue('https://pds-dev.openmeet.net'),
           },
         },
       ],

@@ -101,7 +101,11 @@ export class UserService {
         tenantId,
         user.ulid,
       );
-      if (!identity?.did || !identity.isCustodial) return;
+      if (!identity?.did) return;
+
+      // Only sync to our PDS (we have admin access)
+      const ourPdsUrl = this.pdsAccountService.getConfiguredPdsUrl();
+      if (!ourPdsUrl || identity.pdsUrl !== ourPdsUrl) return;
 
       await this.pdsAccountService.adminUpdateAccountEmail(
         identity.did,
