@@ -17,4 +17,5 @@ export const mockEventQueryService = {
   getHomePageUserUpcomingEvents: jest.fn().mockResolvedValue(mockEvents),
   findEventTopicsByEventId: jest.fn().mockResolvedValue([]),
   showEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
+  getMyEvents: jest.fn().mockResolvedValue([]),
 };

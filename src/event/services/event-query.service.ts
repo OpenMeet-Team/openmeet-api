@@ -14,6 +14,7 @@ import {
   Between,
   MoreThanOrEqual,
   LessThanOrEqual,
+  FindOptionsWhere,
 } from 'typeorm';
 import { instanceToPlain } from 'class-transformer';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
@@ -637,7 +638,7 @@ export class EventQueryService {
     await this.initializeRepository();
     // Only load relations needed for list view (EventsItemComponent)
     // Removed: 'user', 'categories' - not displayed in list view
-    const where: any = {
+    const where: FindOptionsWhere<EventEntity> = {
       group: { id: groupId },
       status: In([EventStatus.Published, EventStatus.Cancelled]),
     };
@@ -1874,6 +1875,7 @@ export class EventQueryService {
         statuses: [EventStatus.Published, EventStatus.Cancelled],
       })
       .orderBy('event.startDate', 'ASC')
+      .take(500)
       .getMany();
 
     if (events.length === 0) return [];
