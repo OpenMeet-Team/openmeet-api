@@ -412,10 +412,10 @@ describe('Auth Module', () => {
             return (
               letter.to[0].address.toLowerCase() ===
                 newUserNewEmail.toLowerCase() &&
-              /.*confirm\-new\-email\?hash\=(\S+).*/g.test(letter.text)
+              /confirm-new-email\?hash=/.test(letter.text)
             );
           })
-          ?.text.replace(/.*confirm\-new\-email\?hash\=(\S+).*/g, '$1'),
+          ?.text.match(/confirm-new-email\?hash=([^\s\]]+)/)?.[1],
       );
 
       await serverApp
