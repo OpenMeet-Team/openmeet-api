@@ -23,6 +23,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupService } from '../group/group.service';
+import { PdsAccountService } from '../pds/pds-account.service';
 
 describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () => {
   let userService: UserService;
@@ -122,6 +123,15 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
             create: jest.fn(),
             deleteByUserUlid: jest.fn(),
             update: jest.fn(),
+          },
+        },
+        {
+          provide: PdsAccountService,
+          useValue: {
+            adminUpdateAccountEmail: jest.fn().mockResolvedValue(undefined),
+            getConfiguredPdsUrl: jest
+              .fn()
+              .mockReturnValue('https://pds-dev.openmeet.net'),
           },
         },
       ],

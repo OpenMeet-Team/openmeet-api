@@ -90,6 +90,13 @@ export class PdsAccountService {
   }
 
   /**
+   * Get the configured PDS URL.
+   */
+  getConfiguredPdsUrl(): string {
+    return this.pdsUrl;
+  }
+
+  /**
    * Create a new account on the PDS.
    *
    * @param params - Account creation parameters
@@ -334,6 +341,32 @@ export class PdsAccountService {
             did,
             password: newPassword,
           },
+          {
+            headers: {
+              Authorization: this.getBasicAuthHeader(),
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+    });
+  }
+
+  /**
+   * Update an account's email using the admin API.
+   *
+   * @param did - The DID of the account to update
+   * @param email - The new email address to set
+   * @throws PdsApiError if the request fails
+   */
+  async adminUpdateAccountEmail(did: string, email: string): Promise<void> {
+    const url = `${this.pdsUrl}/xrpc/com.atproto.admin.updateAccountEmail`;
+
+    return this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(
+          url,
+          { account: did, email },
           {
             headers: {
               Authorization: this.getBasicAuthHeader(),

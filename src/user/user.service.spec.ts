@@ -28,6 +28,7 @@ import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { StatusEnum } from '../status/status.enum';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupService } from '../group/group.service';
+import { PdsAccountService } from '../pds/pds-account.service';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -111,6 +112,15 @@ describe('UserService', () => {
             create: jest.fn(),
             deleteByUserUlid: jest.fn(),
             update: jest.fn(),
+          },
+        },
+        {
+          provide: PdsAccountService,
+          useValue: {
+            adminUpdateAccountEmail: jest.fn().mockResolvedValue(undefined),
+            getConfiguredPdsUrl: jest
+              .fn()
+              .mockReturnValue('https://pds-dev.openmeet.net'),
           },
         },
         {
@@ -2470,6 +2480,387 @@ describe('UserService', () => {
           groupRole: expect.objectContaining({ name: 'owner' }),
         }),
       );
+    });
+  });
+
+  describe('findOrCreateUser - PDS Email Sync', () => {
+    let mockPdsAccountService: jest.Mocked<PdsAccountService>;
+    let mockUserAtprotoIdentityServiceRef: jest.Mocked<UserAtprotoIdentityService>;
+
+    beforeEach(() => {
+      mockPdsAccountService = module.get(PdsAccountService);
+      mockUserAtprotoIdentityServiceRef = module.get(
+        UserAtprotoIdentityService,
+      );
+    });
+
+    it('should sync email to PDS when existing user with no email gets email from OAuth', async () => {
+      const did = 'did:plc:pds-sync-test1';
+      const email = 'synced@example.com';
+      const userUlid = 'ulid-pds-sync-1';
+
+      const existingUserNoEmail = {
+        id: 101,
+        ulid: userUlid,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null,
+        firstName: 'PDS',
+        lastName: 'Sync',
+        role: mockRole,
+        preferences: {
+          bluesky: { did, connected: true },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email,
+        firstName: 'PDS',
+        lastName: 'Sync',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserNoEmail as any);
+
+      const updatedUser = { ...existingUserNoEmail, email };
+      jest.spyOn(userService, 'update').mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Mock identity lookup to return custodial identity
+      mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue({
+        id: 1,
+        userUlid,
+        did,
+        handle: 'test.dev.opnmt.me',
+        pdsUrl: 'https://pds-dev.openmeet.net',
+        pdsCredentials: 'encrypted-creds',
+        isCustodial: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(
+        mockPdsAccountService.adminUpdateAccountEmail,
+      ).toHaveBeenCalledWith(did, email);
+    });
+
+    it('should sync email to PDS when existing user gets verified email change from OAuth', async () => {
+      const did = 'did:plc:pds-sync-test2';
+      const oldEmail = 'old@example.com';
+      const newEmail = 'new-verified@example.com';
+      const userUlid = 'ulid-pds-sync-2';
+
+      const existingUser = {
+        id: 202,
+        ulid: userUlid,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: oldEmail,
+        firstName: 'Email',
+        lastName: 'Change',
+        role: mockRole,
+        status: { id: StatusEnum.active },
+        preferences: {
+          bluesky: { did, connected: true },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email: newEmail,
+        emailConfirmed: true,
+        firstName: 'Email',
+        lastName: 'Change',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUser as any);
+
+      // No email conflict
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      const updatedUser = { ...existingUser, email: newEmail };
+      jest.spyOn(userService, 'update').mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Mock identity lookup to return custodial identity
+      mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue({
+        id: 2,
+        userUlid,
+        did,
+        handle: 'test.dev.opnmt.me',
+        pdsUrl: 'https://pds-dev.openmeet.net',
+        pdsCredentials: 'encrypted-creds',
+        isCustodial: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(
+        mockPdsAccountService.adminUpdateAccountEmail,
+      ).toHaveBeenCalledWith(did, newEmail);
+    });
+
+    it('should NOT sync email to PDS for accounts on external PDS', async () => {
+      const did = 'did:plc:pds-sync-external';
+      const email = 'external@example.com';
+      const userUlid = 'ulid-pds-sync-ext';
+
+      const existingUser = {
+        id: 303,
+        ulid: userUlid,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null,
+        firstName: 'External',
+        lastName: 'PDS',
+        role: mockRole,
+        preferences: {
+          bluesky: { did, connected: true },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email,
+        firstName: 'External',
+        lastName: 'PDS',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUser as any);
+
+      const updatedUser = { ...existingUser, email };
+      jest.spyOn(userService, 'update').mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Identity on a different PDS (e.g., bsky.social) — we don't have admin access
+      mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue({
+        id: 3,
+        userUlid,
+        did,
+        handle: 'user.bsky.social',
+        pdsUrl: 'https://bsky.social',
+        pdsCredentials: null,
+        isCustodial: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(
+        mockPdsAccountService.adminUpdateAccountEmail,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should sync email to PDS for non-custodial accounts on our PDS', async () => {
+      const did = 'did:plc:pds-sync-noncustodial-ours';
+      const email = 'noncustodial-ours@example.com';
+      const userUlid = 'ulid-pds-sync-nc-ours';
+
+      const existingUser = {
+        id: 606,
+        ulid: userUlid,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null,
+        firstName: 'NonCustodial',
+        lastName: 'OurPDS',
+        role: mockRole,
+        preferences: {
+          bluesky: { did, connected: true },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email,
+        firstName: 'NonCustodial',
+        lastName: 'OurPDS',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUser as any);
+
+      const updatedUser = { ...existingUser, email };
+      jest.spyOn(userService, 'update').mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Non-custodial but on OUR PDS — should still sync
+      mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue({
+        id: 6,
+        userUlid,
+        did,
+        handle: 'user.dev.opnmt.me',
+        pdsUrl: 'https://pds-dev.openmeet.net',
+        pdsCredentials: null,
+        isCustodial: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(
+        mockPdsAccountService.adminUpdateAccountEmail,
+      ).toHaveBeenCalledWith(did, email);
+    });
+
+    it('should NOT block login when PDS email sync fails', async () => {
+      const did = 'did:plc:pds-sync-fail';
+      const email = 'failsync@example.com';
+      const userUlid = 'ulid-pds-sync-fail';
+
+      const existingUser = {
+        id: 404,
+        ulid: userUlid,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null,
+        firstName: 'Fail',
+        lastName: 'Sync',
+        role: mockRole,
+        preferences: {
+          bluesky: { did, connected: true },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email,
+        firstName: 'Fail',
+        lastName: 'Sync',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUser as any);
+
+      const updatedUser = { ...existingUser, email };
+      jest.spyOn(userService, 'update').mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Mock identity lookup to return custodial identity
+      mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue({
+        id: 4,
+        userUlid,
+        did,
+        handle: 'test.dev.opnmt.me',
+        pdsUrl: 'https://pds-dev.openmeet.net',
+        pdsCredentials: 'encrypted-creds',
+        isCustodial: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      // Mock PDS call to FAIL
+      mockPdsAccountService.adminUpdateAccountEmail.mockRejectedValue(
+        new Error('PDS is down'),
+      );
+
+      // Should NOT throw - login should proceed despite PDS failure
+      const result = await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.email).toBe(email);
+      expect(
+        mockPdsAccountService.adminUpdateAccountEmail,
+      ).toHaveBeenCalledWith(did, email);
+    });
+
+    it('should NOT sync email to PDS when user has no atproto identity', async () => {
+      const did = 'did:plc:pds-sync-no-identity';
+      const email = 'noidentity@example.com';
+      const userUlid = 'ulid-pds-sync-noid';
+
+      const existingUser = {
+        id: 505,
+        ulid: userUlid,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null,
+        firstName: 'No',
+        lastName: 'Identity',
+        role: mockRole,
+        preferences: {
+          bluesky: { did, connected: true },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email,
+        firstName: 'No',
+        lastName: 'Identity',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUser as any);
+
+      const updatedUser = { ...existingUser, email };
+      jest.spyOn(userService, 'update').mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Mock identity lookup to return null (no identity)
+      mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue(null);
+
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(
+        mockPdsAccountService.adminUpdateAccountEmail,
+      ).not.toHaveBeenCalled();
     });
   });
 });
