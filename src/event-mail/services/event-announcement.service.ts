@@ -1,8 +1,7 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { REQUEST } from '@nestjs/core';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { MailerService } from '../../mailer/mailer.service';
-import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from '../../config/config.type';
@@ -14,42 +13,82 @@ import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { ICalendarService } from '../../event/services/ical/ical.service';
 
+interface ResolvedServices {
+  mailerService: MailerService;
+  eventQueryService: EventQueryService;
+  groupMemberService: GroupMemberService;
+  eventAttendeeService: EventAttendeeService;
+  icalService: ICalendarService;
+}
+
 @Injectable()
 export class EventAnnouncementService {
   private readonly logger = new Logger(EventAnnouncementService.name);
 
   constructor(
-    private readonly mailerService: MailerService,
-    private readonly userService: UserService,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly configService: ConfigService<AllConfigType>,
-    private readonly eventQueryService: EventQueryService,
-    private readonly groupMemberService: GroupMemberService,
-    private readonly eventAttendeeService: EventAttendeeService,
-    private readonly icalService: ICalendarService,
-    @Inject(REQUEST) private readonly request: any,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
-  private getTenantConfig() {
-    const tenantId = this.request.tenantId;
+  /**
+   * Resolve request-scoped durable services with a synthetic tenant context.
+   * Required because EventEmitter events fire outside HTTP request scope,
+   * so AggregateByTenantContextIdStrategy.attach() is never called and
+   * REQUEST would be undefined. This pattern follows CalendarInviteListener
+   * and EventListener.
+   */
+  private async resolveServices(tenantId: string): Promise<ResolvedServices> {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    const [
+      mailerService,
+      eventQueryService,
+      groupMemberService,
+      eventAttendeeService,
+      icalService,
+    ] = await Promise.all([
+      this.moduleRef.resolve(MailerService, contextId, { strict: false }),
+      this.moduleRef.resolve(EventQueryService, contextId, { strict: false }),
+      this.moduleRef.resolve(GroupMemberService, contextId, { strict: false }),
+      this.moduleRef.resolve(EventAttendeeService, contextId, {
+        strict: false,
+      }),
+      this.moduleRef.resolve(ICalendarService, contextId, { strict: false }),
+    ]);
+    return {
+      mailerService,
+      eventQueryService,
+      groupMemberService,
+      eventAttendeeService,
+      icalService,
+    };
+  }
+
+  private getTenantConfig(tenantId: string) {
     if (!tenantId) {
       throw new Error('Tenant ID is required for sending emails');
     }
     return this.tenantConnectionService.getTenantConfig(tenantId);
   }
 
-  private async findEventBySlug(slug: string): Promise<EventEntity | null> {
-    return this.eventQueryService.findEventBySlug(slug);
+  private async findEventBySlug(
+    slug: string,
+    services: ResolvedServices,
+  ): Promise<EventEntity | null> {
+    return services.eventQueryService.findEventBySlug(slug);
   }
 
   private async getGroupMembersForEmail(
     groupId: number,
+    services: ResolvedServices,
   ): Promise<UserEntity[]> {
     // Get all group members using the service layer
-    const groupMembers = await this.groupMemberService.findGroupDetailsMembers(
-      groupId,
-      0,
-    );
+    const groupMembers =
+      await services.groupMemberService.findGroupDetailsMembers(groupId, 0);
 
     return groupMembers
       .map((member) => member.user)
@@ -58,10 +97,11 @@ export class EventAnnouncementService {
 
   private async getEventAttendeesForEmail(
     eventId: number,
+    services: ResolvedServices,
   ): Promise<UserEntity[]> {
     // Get all event attendees who should receive notifications
     const attendees =
-      await this.eventAttendeeService.findEventAttendees(eventId);
+      await services.eventAttendeeService.findEventAttendees(eventId);
 
     return attendees
       .map((attendee) => attendee.user)
@@ -70,19 +110,26 @@ export class EventAnnouncementService {
 
   private async getAllRecipientsForEvent(
     event: EventEntity,
+    services: ResolvedServices,
   ): Promise<UserEntity[]> {
     const recipients = new Map<number, UserEntity>();
 
     // Get group members if event is part of a group
     if (event.group) {
-      const groupMembers = await this.getGroupMembersForEmail(event.group.id);
+      const groupMembers = await this.getGroupMembersForEmail(
+        event.group.id,
+        services,
+      );
       groupMembers.forEach((user) => {
         recipients.set(user.id, user);
       });
     }
 
     // Get event attendees
-    const eventAttendees = await this.getEventAttendeesForEmail(event.id);
+    const eventAttendees = await this.getEventAttendeesForEmail(
+      event.id,
+      services,
+    );
     eventAttendees.forEach((user) => {
       recipients.set(user.id, user);
     });
@@ -104,9 +151,18 @@ export class EventAnnouncementService {
       tenantId: params.tenantId,
     });
 
+    if (!params.tenantId) {
+      this.logger.error(
+        'No tenantId available in event parameters for event.created announcement',
+      );
+      return;
+    }
+
     try {
+      const services = await this.resolveServices(params.tenantId);
+
       // Get the event with related data using slug (includes group and user relations)
-      const event = await this.findEventBySlug(params.slug);
+      const event = await this.findEventBySlug(params.slug, services);
 
       if (!event) {
         this.logger.warn(`Event not found: ${params.eventId}`);
@@ -114,7 +170,10 @@ export class EventAnnouncementService {
       }
 
       // Get all recipients (group members + event attendees)
-      const allRecipients = await this.getAllRecipientsForEvent(event);
+      const allRecipients = await this.getAllRecipientsForEvent(
+        event,
+        services,
+      );
 
       if (!allRecipients || allRecipients.length === 0) {
         this.logger.log(
@@ -145,7 +204,7 @@ export class EventAnnouncementService {
       );
 
       // Get tenant configuration for emails
-      const tenantConfig = this.getTenantConfig();
+      const tenantConfig = this.getTenantConfig(params.tenantId);
 
       // Get event organizer info
       const organizer = event.user || null;
@@ -161,7 +220,7 @@ export class EventAnnouncementService {
         try {
           // Generate calendar invite for this recipient
           const eventUrl = `${tenantConfig?.frontendDomain}/events/${event.slug}`;
-          const icsContent = this.icalService.generateCalendarInvite(
+          const icsContent = services.icalService.generateCalendarInvite(
             event,
             {
               email: user.email!,
@@ -176,7 +235,7 @@ export class EventAnnouncementService {
             eventUrl,
           );
 
-          await this.mailerService.sendCalendarInviteMail({
+          await services.mailerService.sendCalendarInviteMail({
             to: user.email!,
             subject: event.group?.name
               ? `New Event: ${event.name} in ${event.group.name}`
@@ -255,9 +314,18 @@ export class EventAnnouncementService {
       return;
     }
 
+    if (!params.tenantId) {
+      this.logger.error(
+        'No tenantId available in event parameters for event.updated announcement',
+      );
+      return;
+    }
+
     try {
+      const services = await this.resolveServices(params.tenantId);
+
       // Get the event with related data using slug (includes group and user relations)
-      const event = await this.findEventBySlug(params.slug);
+      const event = await this.findEventBySlug(params.slug, services);
 
       if (!event) {
         this.logger.warn(`Event not found: ${params.eventId}`);
@@ -270,12 +338,19 @@ export class EventAnnouncementService {
           `Event ${params.slug} was cancelled, sending cancellation announcement instead of update`,
         );
         // Use the existing cancellation logic
-        await this.sendCancellationAnnouncement(event);
+        await this.sendCancellationAnnouncement(
+          event,
+          params.tenantId,
+          services,
+        );
         return;
       }
 
       // Get all recipients (group members + event attendees)
-      const allRecipients = await this.getAllRecipientsForEvent(event);
+      const allRecipients = await this.getAllRecipientsForEvent(
+        event,
+        services,
+      );
 
       if (!allRecipients || allRecipients.length === 0) {
         this.logger.log(
@@ -306,7 +381,7 @@ export class EventAnnouncementService {
       );
 
       // Get tenant configuration for emails
-      const tenantConfig = this.getTenantConfig();
+      const tenantConfig = this.getTenantConfig(params.tenantId);
 
       // Get event organizer info
       const organizer = event.user || null;
@@ -322,7 +397,7 @@ export class EventAnnouncementService {
         try {
           // Generate updated calendar invite for this recipient
           const eventUrl = `${tenantConfig?.frontendDomain}/events/${event.slug}`;
-          const icsContent = this.icalService.generateCalendarInvite(
+          const icsContent = services.icalService.generateCalendarInvite(
             event,
             {
               email: user.email!,
@@ -337,7 +412,7 @@ export class EventAnnouncementService {
             eventUrl,
           );
 
-          await this.mailerService.sendCalendarInviteMail({
+          await services.mailerService.sendCalendarInviteMail({
             to: user.email!,
             subject: event.group?.name
               ? `Updated Event: ${event.name} in ${event.group.name}`
@@ -396,7 +471,11 @@ export class EventAnnouncementService {
   /**
    * Send cancellation announcement emails for a cancelled event
    */
-  private async sendCancellationAnnouncement(event: EventEntity) {
+  private async sendCancellationAnnouncement(
+    event: EventEntity,
+    tenantId: string,
+    services: ResolvedServices,
+  ) {
     this.logger.log('Processing event cancellation announcement', {
       eventId: event.id,
       slug: event.slug,
@@ -404,7 +483,10 @@ export class EventAnnouncementService {
 
     try {
       // Get all recipients (group members + event attendees)
-      const allRecipients = await this.getAllRecipientsForEvent(event);
+      const allRecipients = await this.getAllRecipientsForEvent(
+        event,
+        services,
+      );
 
       if (!allRecipients || allRecipients.length === 0) {
         this.logger.log(
@@ -435,7 +517,7 @@ export class EventAnnouncementService {
       );
 
       // Get tenant configuration for emails
-      const tenantConfig = this.getTenantConfig();
+      const tenantConfig = this.getTenantConfig(tenantId);
 
       // Get event organizer info
       const organizer = event.user || null;
@@ -451,7 +533,7 @@ export class EventAnnouncementService {
         try {
           // Generate cancellation calendar invite for this recipient
           const eventUrl = `${tenantConfig?.frontendDomain}/events/${event.slug}`;
-          const icsContent = this.icalService.generateCancellationInvite(
+          const icsContent = services.icalService.generateCancellationInvite(
             event,
             {
               email: user.email!,
@@ -466,7 +548,7 @@ export class EventAnnouncementService {
             eventUrl,
           );
 
-          await this.mailerService.sendCalendarInviteMail({
+          await services.mailerService.sendCalendarInviteMail({
             to: user.email!,
             subject: event.group?.name
               ? `Cancelled Event: ${event.name} in ${event.group.name}`
@@ -523,17 +605,33 @@ export class EventAnnouncementService {
   }
 
   @OnEvent('event.deleted')
-  async handleEventDeleted(event: EventEntity) {
+  async handleEventDeleted(params: {
+    event: EventEntity;
+    tenantId: string;
+  }) {
     this.logger.log(
       'Processing event deletion announcement (physical deletion)',
       {
-        eventId: event.id,
-        slug: event.slug,
+        eventId: params.event.id,
+        slug: params.event.slug,
       },
     );
 
+    if (!params.tenantId) {
+      this.logger.error(
+        'No tenantId available in event parameters for event.deleted announcement',
+      );
+      return;
+    }
+
+    const services = await this.resolveServices(params.tenantId);
+
     // For physical deletion, we also send cancellation emails
     // since the event will no longer be accessible
-    await this.sendCancellationAnnouncement(event);
+    await this.sendCancellationAnnouncement(
+      params.event,
+      params.tenantId,
+      services,
+    );
   }
 }

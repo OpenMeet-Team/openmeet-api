@@ -1,10 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { REQUEST } from '@nestjs/core';
+import { ModuleRef } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { EventAnnouncementService } from './event-announcement.service';
 import { MailerService } from '../../mailer/mailer.service';
-import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
@@ -17,11 +16,6 @@ describe('EventAnnouncementService', () => {
   let eventQueryService: jest.Mocked<any>;
   let groupMemberService: jest.Mocked<any>;
   let eventAttendeeService: jest.Mocked<any>;
-
-  const mockRequest = {
-    tenantId: 'test-tenant-123',
-    user: { id: 1, slug: 'test-user' },
-  };
 
   const mockEvent = {
     id: 1,
@@ -103,14 +97,21 @@ describe('EventAnnouncementService', () => {
     },
   ];
 
+  // Mocks for services resolved via ModuleRef
+  let mockMailerServiceInstance: jest.Mocked<any>;
+  let mockEventQueryServiceInstance: jest.Mocked<any>;
+  let mockGroupMemberServiceInstance: jest.Mocked<any>;
+  let mockEventAttendeeServiceInstance: jest.Mocked<any>;
+  let mockICalendarServiceInstance: jest.Mocked<any>;
+
   beforeEach(async () => {
-    const mockMailerService = {
+    mockMailerServiceInstance = {
       sendMail: jest.fn(),
       sendMjmlMail: jest.fn(),
       sendCalendarInviteMail: jest.fn(),
     };
 
-    const mockICalendarService = {
+    mockICalendarServiceInstance = {
       generateCalendarInvite: jest
         .fn()
         .mockReturnValue('BEGIN:VCALENDAR\nEND:VCALENDAR'),
@@ -119,12 +120,7 @@ describe('EventAnnouncementService', () => {
         .mockReturnValue('BEGIN:VCALENDAR\nMETHOD:CANCEL\nEND:VCALENDAR'),
     };
 
-    const mockUserService = {
-      findOne: jest.fn(),
-      findMany: jest.fn(),
-    };
-
-    const mockEventQueryService = {
+    mockEventQueryServiceInstance = {
       findEventBySlug: jest.fn().mockImplementation((slug) => {
         if (slug === 'test-event') {
           return Promise.resolve(mockEvent);
@@ -133,11 +129,11 @@ describe('EventAnnouncementService', () => {
       }),
     };
 
-    const mockGroupMemberService = {
+    mockGroupMemberServiceInstance = {
       findGroupDetailsMembers: jest.fn().mockResolvedValue(mockGroupMembers),
     };
 
-    const mockEventAttendeeService = {
+    mockEventAttendeeServiceInstance = {
       findEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
     };
 
@@ -160,17 +156,32 @@ describe('EventAnnouncementService', () => {
         .mockReturnValue('https://platform-dev.openmeet.net'),
     };
 
+    // ModuleRef mock that resolves services dynamically
+    const mockModuleRef = {
+      registerRequestByContextId: jest.fn(),
+      resolve: jest.fn().mockImplementation((serviceClass) => {
+        if (serviceClass === MailerService) {
+          return Promise.resolve(mockMailerServiceInstance);
+        }
+        if (serviceClass === EventQueryService) {
+          return Promise.resolve(mockEventQueryServiceInstance);
+        }
+        if (serviceClass === GroupMemberService) {
+          return Promise.resolve(mockGroupMemberServiceInstance);
+        }
+        if (serviceClass === EventAttendeeService) {
+          return Promise.resolve(mockEventAttendeeServiceInstance);
+        }
+        if (serviceClass === ICalendarService) {
+          return Promise.resolve(mockICalendarServiceInstance);
+        }
+        return Promise.resolve(null);
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventAnnouncementService,
-        {
-          provide: MailerService,
-          useValue: mockMailerService,
-        },
-        {
-          provide: UserService,
-          useValue: mockUserService,
-        },
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
@@ -184,33 +195,17 @@ describe('EventAnnouncementService', () => {
           useValue: mockConfigService,
         },
         {
-          provide: EventQueryService,
-          useValue: mockEventQueryService,
-        },
-        {
-          provide: GroupMemberService,
-          useValue: mockGroupMemberService,
-        },
-        {
-          provide: EventAttendeeService,
-          useValue: mockEventAttendeeService,
-        },
-        {
-          provide: ICalendarService,
-          useValue: mockICalendarService,
-        },
-        {
-          provide: REQUEST,
-          useValue: mockRequest,
+          provide: ModuleRef,
+          useValue: mockModuleRef,
         },
       ],
     }).compile();
 
     service = module.get<EventAnnouncementService>(EventAnnouncementService);
-    mailerService = module.get(MailerService);
-    eventQueryService = module.get(EventQueryService);
-    groupMemberService = module.get(GroupMemberService);
-    eventAttendeeService = module.get(EventAttendeeService);
+    mailerService = mockMailerServiceInstance;
+    eventQueryService = mockEventQueryServiceInstance;
+    groupMemberService = mockGroupMemberServiceInstance;
+    eventAttendeeService = mockEventAttendeeServiceInstance;
   });
 
   it('should be defined', () => {
@@ -962,8 +957,11 @@ describe('EventAnnouncementService', () => {
     });
 
     it('should send deletion announcement emails to group members when an event is deleted', async () => {
-      // Act
-      await service.handleEventDeleted(mockEvent);
+      // Act - new signature: { event, tenantId }
+      await service.handleEventDeleted({
+        event: mockEvent as any,
+        tenantId: 'test-tenant-123',
+      });
 
       // Assert - emails should be sent to group members
       // Should send emails to all members except the organizer (Alice, Bob, and Carol)
@@ -1044,7 +1042,10 @@ describe('EventAnnouncementService', () => {
       const eventWithoutGroup = { ...mockEvent, group: null };
 
       // Act
-      await service.handleEventDeleted(eventWithoutGroup);
+      await service.handleEventDeleted({
+        event: eventWithoutGroup as any,
+        tenantId: 'test-tenant-123',
+      });
 
       // Assert - Should send emails to event attendees (David, Emma) even without a group
       expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
@@ -1055,7 +1056,10 @@ describe('EventAnnouncementService', () => {
       groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
 
       // Act
-      await service.handleEventDeleted(mockEvent);
+      await service.handleEventDeleted({
+        event: mockEvent as any,
+        tenantId: 'test-tenant-123',
+      });
 
       // Assert - Should send emails to event attendees (David, Emma) even if group has no members
       expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
@@ -1067,7 +1071,10 @@ describe('EventAnnouncementService', () => {
       eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
 
       // Act
-      await service.handleEventDeleted(mockEvent);
+      await service.handleEventDeleted({
+        event: mockEvent as any,
+        tenantId: 'test-tenant-123',
+      });
 
       // Assert
       expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
@@ -1088,7 +1095,10 @@ describe('EventAnnouncementService', () => {
       );
 
       // Act
-      await service.handleEventDeleted(mockEvent);
+      await service.handleEventDeleted({
+        event: mockEvent as any,
+        tenantId: 'test-tenant-123',
+      });
 
       // Assert
       // Should send 6 emails (Alice, Bob, Carol, David, Emma, John the organizer)
@@ -1143,7 +1153,10 @@ describe('EventAnnouncementService', () => {
       eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
 
       // Act
-      await service.handleEventDeleted(mockEvent);
+      await service.handleEventDeleted({
+        event: mockEvent as any,
+        tenantId: 'test-tenant-123',
+      });
 
       // Assert - Bob should be excluded, Alice and Carol should receive emails
       expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
@@ -1196,7 +1209,10 @@ describe('EventAnnouncementService', () => {
       eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
 
       // Act
-      await service.handleEventDeleted(mockEvent);
+      await service.handleEventDeleted({
+        event: mockEvent as any,
+        tenantId: 'test-tenant-123',
+      });
 
       // Assert - all users should receive emails (default opt-in)
       expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(3);
@@ -1210,7 +1226,10 @@ describe('EventAnnouncementService', () => {
 
       // Act & Assert - should not throw
       await expect(
-        service.handleEventDeleted(mockEvent),
+        service.handleEventDeleted({
+          event: mockEvent as any,
+          tenantId: 'test-tenant-123',
+        }),
       ).resolves.not.toThrow();
 
       expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);

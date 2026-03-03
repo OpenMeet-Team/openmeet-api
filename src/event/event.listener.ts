@@ -62,9 +62,9 @@ export class EventListener {
   }
 
   @OnEvent('event.deleted')
-  handleEventDeletedEvent(params: EventEntity) {
+  handleEventDeletedEvent(params: { event: EventEntity; tenantId: string }) {
     this.logger.log('event.deleted', {
-      id: params.id,
+      id: params.event.id,
     });
 
     // For Matrix rooms, we don't delete them but could archive them if needed
