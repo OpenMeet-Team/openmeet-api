@@ -103,7 +103,8 @@ export class TestHelpersController {
    *   "did": "did:plc:test123",
    *   "handle": "test.bsky.social",
    *   "displayName": "Test User",
-   *   "email": "test@example.com"
+   *   "email": "test@example.com",
+   *   "emailConfirmed": true
    * }
    * ```
    */
@@ -115,6 +116,7 @@ export class TestHelpersController {
       handle: string;
       displayName?: string;
       email?: string;
+      emailConfirmed?: boolean;
     },
     @Req() req,
   ) {
@@ -126,6 +128,7 @@ export class TestHelpersController {
       {
         id: body.did,
         email: body.email,
+        emailConfirmed: body.emailConfirmed,
         firstName: body.displayName || body.handle,
         lastName: '',
       },
