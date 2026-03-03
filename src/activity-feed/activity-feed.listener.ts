@@ -48,7 +48,12 @@ export class ActivityFeedListener {
           strict: false,
         }),
       ]);
-    return { activityFeedService, groupService, userService, eventQueryService };
+    return {
+      activityFeedService,
+      groupService,
+      userService,
+      eventQueryService,
+    };
   }
 
   @OnEvent('group.created')
@@ -371,9 +376,7 @@ export class ActivityFeedListener {
       });
 
       // Fetch event entity to get name, groupId
-      const event = await eventQueryService.findEventBySlug(
-        params.eventSlug,
-      );
+      const event = await eventQueryService.findEventBySlug(params.eventSlug);
       if (!event) {
         this.logger.warn(
           `Event not found for slug ${params.eventSlug}, skipping activity creation`,
@@ -535,8 +538,9 @@ export class ActivityFeedListener {
     tenantId: string;
   }) {
     try {
-      const { activityFeedService, groupService } =
-        await this.resolveServices(params.tenantId);
+      const { activityFeedService, groupService } = await this.resolveServices(
+        params.tenantId,
+      );
 
       this.logger.log('group.updated event received', {
         groupId: params.groupId,

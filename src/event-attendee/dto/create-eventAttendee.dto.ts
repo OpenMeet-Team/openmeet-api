@@ -72,5 +72,4 @@ export class CreateEventAttendeeDto {
   lastSyncedAt?: Date;
 
   // Metadata field removed in favor of standardized SourceFields
-
 }

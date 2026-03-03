@@ -24,8 +24,7 @@ export class AtprotoSyncScheduler {
       async () => {
         this.logger.debug('Starting ATProto pending sync retry');
 
-        const tenantIds =
-          await this.tenantConnectionService.getAllTenantIds();
+        const tenantIds = await this.tenantConnectionService.getAllTenantIds();
 
         for (const tenantId of tenantIds) {
           try {
@@ -90,10 +89,7 @@ export class AtprotoSyncScheduler {
       }
 
       try {
-        const result = await publisherService.publishEvent(
-          event,
-          tenantId,
-        );
+        const result = await publisherService.publishEvent(event, tenantId);
 
         if (result.action === 'updated' || result.action === 'published') {
           await markAtprotoSynced(eventRepository, event.id, {

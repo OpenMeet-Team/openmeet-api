@@ -609,14 +609,10 @@ describe('AT Protocol Publishing (e2e)', () => {
       // CID should change (new content = new hash)
       if (originalCid && updatedEvent.atprotoCid) {
         expect(updatedEvent.atprotoCid).not.toBe(originalCid);
-        console.log(
-          `CID changed: ${originalCid} → ${updatedEvent.atprotoCid}`,
-        );
+        console.log(`CID changed: ${originalCid} → ${updatedEvent.atprotoCid}`);
       }
 
-      console.log(
-        'SUCCESS: Event update synced to PDS with correct content',
-      );
+      console.log('SUCCESS: Event update synced to PDS with correct content');
     });
 
     it('should use existing atprotoRkey when manually syncing', async () => {

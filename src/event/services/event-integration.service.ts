@@ -5,10 +5,7 @@ import { Repository, IsNull } from 'typeorm';
 import { ShadowAccountService } from '../../shadow-account/shadow-account.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventSourceType } from '../../core/constants/source-type.constant';
-import {
-  EventStatus,
-  EventVisibility,
-} from '../../core/constants/constant';
+import { EventStatus, EventVisibility } from '../../core/constants/constant';
 import { EventQueryService } from './event-query.service';
 import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
 import { Trace } from '../../utils/trace.decorator';

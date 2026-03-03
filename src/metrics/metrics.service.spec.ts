@@ -225,24 +225,35 @@ describe('MetricsService', () => {
 
     it('should skip tenants with empty IDs (public schema)', async () => {
       const realTenantConnection = {
-        query: jest.fn().mockResolvedValueOnce([{
-          users: 100, events: 50, groups: 25,
-          event_attendees: 200, group_members: 75, active_users: 30,
-        }]),
+        query: jest.fn().mockResolvedValueOnce([
+          {
+            users: 100,
+            events: 50,
+            groups: 25,
+            event_attendees: 200,
+            group_members: 75,
+            active_users: 30,
+          },
+        ]),
       } as unknown as jest.Mocked<DataSource>;
 
       mockTenantConnectionService.getAllTenants.mockResolvedValue([
-        { id: '' } as any,           // public schema - should be skipped
+        { id: '' } as any, // public schema - should be skipped
         { id: 'real-tenant' } as any, // real tenant - should be queried
       ]);
-      mockTenantConnectionService.getTenantConnection
-        .mockResolvedValue(realTenantConnection);
+      mockTenantConnectionService.getTenantConnection.mockResolvedValue(
+        realTenantConnection,
+      );
 
       await service.updateMetrics();
 
       // getTenantConnection should only be called for the real tenant
-      expect(mockTenantConnectionService.getTenantConnection).toHaveBeenCalledTimes(1);
-      expect(mockTenantConnectionService.getTenantConnection).toHaveBeenCalledWith('real-tenant');
+      expect(
+        mockTenantConnectionService.getTenantConnection,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        mockTenantConnectionService.getTenantConnection,
+      ).toHaveBeenCalledWith('real-tenant');
 
       // Only the real tenant's data should be in the 'all' aggregate
       expect(usersGauge.set).toHaveBeenCalledWith({ tenant: 'all' }, 100);
@@ -326,6 +337,5 @@ describe('MetricsService', () => {
         45,
       );
     });
-
   });
 });

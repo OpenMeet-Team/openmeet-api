@@ -4,7 +4,6 @@ import { UserEntity } from './infrastructure/persistence/relational/entities/use
 
 @Injectable()
 export class UserListener {
-
   @OnEvent('user.created')
   handleUserCreatedEvent(user: UserEntity) {
     console.log('user.created', user.id);

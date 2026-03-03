@@ -19,9 +19,7 @@ describe('DidWebController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DidWebController],
-      providers: [
-        { provide: ConfigService, useValue: configService },
-      ],
+      providers: [{ provide: ConfigService, useValue: configService }],
     }).compile();
 
     controller = module.get<DidWebController>(DidWebController);

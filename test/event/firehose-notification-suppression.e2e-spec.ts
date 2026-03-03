@@ -56,7 +56,8 @@ describe('Firehose notification suppression (e2e)', () => {
 
       const payload = {
         name: `Firehose Email Test Event ${timestamp}`,
-        description: 'This event came from the firehose - should NOT trigger emails',
+        description:
+          'This event came from the firehose - should NOT trigger emails',
         startDate: new Date(Date.now() + 86400000).toISOString(),
         endDate: new Date(Date.now() + 90000000).toISOString(),
         type: 'in-person',

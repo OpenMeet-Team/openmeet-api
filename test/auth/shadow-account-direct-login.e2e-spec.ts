@@ -107,7 +107,8 @@ describe('Shadow Account Direct Login Path (E2E)', () => {
         .set('Authorization', `Bearer ${loginResponse.body.token}`)
         .send({
           name: `Direct Login Group ${Date.now()}`,
-          description: 'Testing permissions after direct login shadow conversion',
+          description:
+            'Testing permissions after direct login shadow conversion',
         })
         .expect(201);
 
@@ -147,7 +148,8 @@ describe('Shadow Account Direct Login Path (E2E)', () => {
         .set('Authorization', `Bearer ${loginResponse.body.token}`)
         .send({
           name: `Direct Login Event ${Date.now()}`,
-          description: 'Testing event creation after direct login shadow conversion',
+          description:
+            'Testing event creation after direct login shadow conversion',
           type: 'online',
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),

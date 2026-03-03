@@ -828,13 +828,18 @@ describe('ActivityFeedListener', () => {
         tenantId: 'firehose-tenant',
       };
 
-      groupService.getGroupBySlug.mockResolvedValue(mockPublicGroup as GroupEntity);
+      groupService.getGroupBySlug.mockResolvedValue(
+        mockPublicGroup as GroupEntity,
+      );
       userService.getUserBySlug.mockResolvedValue(mockUser as UserEntity);
 
       await listener.handleGroupMemberAdded(params);
 
       expect(mockModuleRef.registerRequestByContextId).toHaveBeenCalledWith(
-        { tenantId: 'firehose-tenant', headers: { 'x-tenant-id': 'firehose-tenant' } },
+        {
+          tenantId: 'firehose-tenant',
+          headers: { 'x-tenant-id': 'firehose-tenant' },
+        },
         expect.anything(),
       );
     });

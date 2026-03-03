@@ -559,9 +559,9 @@ describe('AtprotoIdentityService', () => {
         'test-tenant',
         mockUser.ulid,
       );
-      expect(
-        mockAgent.com.atproto.identity.updateHandle,
-      ).toHaveBeenCalledWith({ handle: 'new-handle.opnmt.me' });
+      expect(mockAgent.com.atproto.identity.updateHandle).toHaveBeenCalledWith({
+        handle: 'new-handle.opnmt.me',
+      });
       expect(userAtprotoIdentityService.update).toHaveBeenCalledWith(
         'test-tenant',
         mockIdentityOnOurPds.id,
@@ -680,9 +680,9 @@ describe('AtprotoIdentityService', () => {
         'test-tenant',
         mockUser.ulid,
       );
-      expect(
-        mockAgent.com.atproto.identity.updateHandle,
-      ).toHaveBeenCalledWith({ handle: 'new-handle.opnmt.me' });
+      expect(mockAgent.com.atproto.identity.updateHandle).toHaveBeenCalledWith({
+        handle: 'new-handle.opnmt.me',
+      });
     });
 
     it('should not update database when PDS updateHandle fails (atomicity)', async () => {
@@ -786,9 +786,9 @@ describe('AtprotoIdentityService', () => {
         'test-tenant',
         mockUser.ulid,
       );
-      expect(
-        mockAgent.com.atproto.identity.updateHandle,
-      ).toHaveBeenCalledWith({ handle: 'new-handle.opnmt.me' });
+      expect(mockAgent.com.atproto.identity.updateHandle).toHaveBeenCalledWith({
+        handle: 'new-handle.opnmt.me',
+      });
       expect(result).toEqual(updatedNonCustodialIdentity);
     });
 

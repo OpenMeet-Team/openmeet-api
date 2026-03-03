@@ -318,9 +318,7 @@ describe('Event Creator - No Auto-RSVP (e2e)', () => {
       );
 
       expect(updatedEvent.name).toBe('Updated by Group Admin');
-      expect(updatedEvent.description).toBe(
-        'Group admin edited this event',
-      );
+      expect(updatedEvent.description).toBe('Group admin edited this event');
     });
   });
 });

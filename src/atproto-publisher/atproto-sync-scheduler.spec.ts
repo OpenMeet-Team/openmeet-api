@@ -159,10 +159,9 @@ describe('AtprotoSyncScheduler', () => {
           atprotoCid: 'cid-new',
         }),
       );
-      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
-        'id = :id',
-        { id: staleEvent.id },
-      );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith('id = :id', {
+        id: staleEvent.id,
+      });
       expect(mockUpdateQueryBuilder.execute).toHaveBeenCalled();
     });
 
@@ -178,8 +177,7 @@ describe('AtprotoSyncScheduler', () => {
         .mockRejectedValueOnce(new Error('PDS timeout'))
         .mockResolvedValueOnce({
           action: 'updated',
-          atprotoUri:
-            'at://did:plc:abc/community.lexicon.calendar.event/rkey2',
+          atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/rkey2',
           atprotoRkey: 'rkey2',
           atprotoCid: 'cid2',
         });
@@ -197,10 +195,9 @@ describe('AtprotoSyncScheduler', () => {
           atprotoRkey: 'rkey2',
         }),
       );
-      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
-        'id = :id',
-        { id: event2.id },
-      );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith('id = :id', {
+        id: event2.id,
+      });
     });
 
     it('should skip tenant if no stale events found', async () => {
@@ -228,10 +225,9 @@ describe('AtprotoSyncScheduler', () => {
       // On conflict, should update atprotoSyncedAt via QueryBuilder to stop the retry loop.
       // The firehose will deliver the PDS version for reconciliation.
       expect(mockUpdateQueryBuilder.update).toHaveBeenCalledWith(EventEntity);
-      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
-        'id = :id',
-        { id: staleEvent.id },
-      );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith('id = :id', {
+        id: staleEvent.id,
+      });
       expect(mockUpdateQueryBuilder.execute).toHaveBeenCalled();
     });
 
@@ -293,10 +289,7 @@ describe('AtprotoSyncScheduler', () => {
       });
 
       // Spy on logger to verify warning was emitted
-      const loggerWarnSpy = jest.spyOn(
-        scheduler['logger'],
-        'warn',
-      );
+      const loggerWarnSpy = jest.spyOn(scheduler['logger'], 'warn');
 
       await scheduler.handlePendingSyncRetry();
 
@@ -324,10 +317,9 @@ describe('AtprotoSyncScheduler', () => {
           atprotoRkey: 'rkey-normal',
         }),
       );
-      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
-        'id = :id',
-        { id: normalEvent.id },
-      );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith('id = :id', {
+        id: normalEvent.id,
+      });
     });
 
     it('should query with correct filters', async () => {
@@ -440,10 +432,9 @@ describe('AtprotoSyncScheduler', () => {
       expect(typeof setArg.atprotoSyncedAt).toBe('function');
       expect(setArg.atprotoSyncedAt()).toBe('now()');
 
-      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
-        'id = :id',
-        { id: staleEvent.id },
-      );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith('id = :id', {
+        id: staleEvent.id,
+      });
       expect(mockUpdateQueryBuilder.execute).toHaveBeenCalled();
 
       // Should NOT use the old repository.update approach
@@ -467,10 +458,9 @@ describe('AtprotoSyncScheduler', () => {
       expect(typeof setArg.atprotoSyncedAt).toBe('function');
       expect(setArg.atprotoSyncedAt()).toBe('now()');
 
-      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith(
-        'id = :id',
-        { id: staleEvent.id },
-      );
+      expect(mockUpdateQueryBuilder.where).toHaveBeenCalledWith('id = :id', {
+        id: staleEvent.id,
+      });
       expect(mockUpdateQueryBuilder.execute).toHaveBeenCalled();
 
       // Should NOT use the old repository.update approach

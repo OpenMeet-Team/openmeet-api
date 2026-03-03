@@ -632,7 +632,12 @@ export class AuthBlueskyService {
       profile: Buffer.from(JSON.stringify(profileData)).toString('base64'),
     });
 
-    const redirectUrl = this.buildRedirectUrl(tenantId, newParams, platform, redirectUri);
+    const redirectUrl = this.buildRedirectUrl(
+      tenantId,
+      newParams,
+      platform,
+      redirectUri,
+    );
     this.logger.debug('calling redirect to', { redirectUrl, platform });
 
     // Return both the redirect URL and session ID for cookie setting
@@ -1187,13 +1192,10 @@ export class AuthBlueskyService {
       });
       return profile.pdsUrl;
     } catch (error) {
-      this.logger.warn(
-        'Failed to resolve PDS URL from DID document',
-        {
-          did,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      );
+      this.logger.warn('Failed to resolve PDS URL from DID document', {
+        did,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     // Fallback: use session URL (supports test environments with fake DIDs)

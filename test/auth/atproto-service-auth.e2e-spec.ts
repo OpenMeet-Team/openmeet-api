@@ -137,8 +137,10 @@ describeIfPds('AT Protocol Service Auth (e2e)', () => {
 
     it('should return tokens for same DID on second service auth (idempotent)', async () => {
       // Create a fresh PDS account
-      const { accessJwt } =
-        await createPdsAccountAndGetServiceAuthToken(pdsUrl, app);
+      const { accessJwt } = await createPdsAccountAndGetServiceAuthToken(
+        pdsUrl,
+        app,
+      );
 
       // We need fresh service auth tokens for each exchange call because they
       // are short-lived JWTs. The PDS generates a new one each time.

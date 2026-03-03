@@ -174,9 +174,7 @@ describe('EventIntegrationController', () => {
     });
 
     it('should handle service errors properly', async () => {
-      service.deleteExternalEvent.mockRejectedValue(
-        new Error('Delete failed'),
-      );
+      service.deleteExternalEvent.mockRejectedValue(new Error('Delete failed'));
 
       await expect(
         controller.deleteEventByQuery('test-tenant', 'some-id', 'bluesky'),
@@ -242,9 +240,7 @@ describe('EventIntegrationController', () => {
     });
 
     it('should handle service errors properly', async () => {
-      service.deleteExternalEvent.mockRejectedValue(
-        new Error('Delete failed'),
-      );
+      service.deleteExternalEvent.mockRejectedValue(new Error('Delete failed'));
 
       await expect(
         controller.deleteAtprotoEvent(

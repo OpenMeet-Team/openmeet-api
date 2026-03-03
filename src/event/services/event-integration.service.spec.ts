@@ -1002,7 +1002,6 @@ describe('EventIntegrationService', () => {
       );
     });
 
-
     it('should emit event.ingested.updated (not event.updated) when updating from firehose', async () => {
       // Arrange - existing event found
       eventQueryService.findBySourceAttributes.mockResolvedValue([

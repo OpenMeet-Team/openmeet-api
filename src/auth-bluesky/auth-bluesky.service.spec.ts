@@ -294,7 +294,9 @@ describe('AuthBlueskyService - Error Handling', () => {
 
   describe('getStoredRedirectUri', () => {
     it('should return redirect_uri from Redis when stored', async () => {
-      mockElastiCacheService.get.mockResolvedValue('https://app.roomy.chat/callback');
+      mockElastiCacheService.get.mockResolvedValue(
+        'https://app.roomy.chat/callback',
+      );
 
       const result = await service.getStoredRedirectUri('test-state');
 
@@ -305,7 +307,9 @@ describe('AuthBlueskyService - Error Handling', () => {
     });
 
     it('should delete redirect_uri from Redis after retrieval (single-use)', async () => {
-      mockElastiCacheService.get.mockResolvedValue('https://app.roomy.chat/callback');
+      mockElastiCacheService.get.mockResolvedValue(
+        'https://app.roomy.chat/callback',
+      );
 
       await service.getStoredRedirectUri('cleanup-state');
 
@@ -701,19 +705,12 @@ describe('AuthBlueskyService - buildRedirectUrl', () => {
         'http://localhost:5173/auth/callback',
       );
 
-      expect(result).toMatch(
-        /^http:\/\/localhost:5173\/auth\/callback\?/,
-      );
+      expect(result).toMatch(/^http:\/\/localhost:5173\/auth\/callback\?/);
     });
 
     it('should throw BadRequestException for malformed redirect_uri', () => {
       expect(() =>
-        service.buildRedirectUrl(
-          'tenant-123',
-          testParams,
-          'web',
-          'not-a-url',
-        ),
+        service.buildRedirectUrl('tenant-123', testParams, 'web', 'not-a-url'),
       ).toThrow('Invalid redirect_uri');
     });
 

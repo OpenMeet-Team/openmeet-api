@@ -390,9 +390,7 @@ describe('EventManagementService', () => {
         timeZone: 'UTC',
       };
 
-      jest
-        .spyOn(service['categoryService'], 'findByIds')
-        .mockResolvedValue([]);
+      jest.spyOn(service['categoryService'], 'findByIds').mockResolvedValue([]);
       jest
         .spyOn(mockRepository, 'save')
         .mockResolvedValue(findOneMockEventEntity);
@@ -1181,7 +1179,9 @@ describe('EventManagementService', () => {
           permissions: [],
         } as any);
 
-        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(
+          0,
+        );
 
         const createdAttendee = {
           id: 1,
@@ -1248,7 +1248,9 @@ describe('EventManagementService', () => {
           permissions: [],
         } as any);
 
-        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(
+          0,
+        );
 
         const reactivatedAttendee = {
           id: 1,
@@ -1319,7 +1321,9 @@ describe('EventManagementService', () => {
           permissions: [],
         } as any);
 
-        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(
+          0,
+        );
 
         const createdAttendee = {
           id: 1,
@@ -1339,7 +1343,11 @@ describe('EventManagementService', () => {
 
         const attendeeDto = {};
 
-        await service.attendEvent(nonCreatorEvent.slug, mockUser.id, attendeeDto);
+        await service.attendEvent(
+          nonCreatorEvent.slug,
+          mockUser.id,
+          attendeeDto,
+        );
 
         // The key assertion: getRoleByName should be called with Participant, not Host
         expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(

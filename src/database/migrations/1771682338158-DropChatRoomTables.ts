@@ -37,9 +37,7 @@ export class DropChatRoomTables1771682338158 implements MigrationInterface {
     );
 
     // Drop enum types
-    await queryRunner.query(
-      `DROP TYPE IF EXISTS "${schema}"."chat_room_type"`,
-    );
+    await queryRunner.query(`DROP TYPE IF EXISTS "${schema}"."chat_room_type"`);
     await queryRunner.query(
       `DROP TYPE IF EXISTS "${schema}"."chat_room_visibility"`,
     );

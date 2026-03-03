@@ -247,9 +247,7 @@ describe('GroupService', () => {
       qb.getCount = jest.fn().mockResolvedValue(1);
       qb.getRawMany = jest.fn().mockResolvedValue([{ id: 1 }]);
       qb.getMany = jest.fn().mockResolvedValue([mockGroup]);
-      qb.getManyAndCount = jest
-        .fn()
-        .mockResolvedValue([[mockGroup], 1]);
+      qb.getManyAndCount = jest.fn().mockResolvedValue([[mockGroup], 1]);
       qb.getQuery = jest.fn().mockReturnValue('SELECT ...');
       qb.getParameters = jest.fn().mockReturnValue({});
       // expressionMap is accessed directly for the members sort hack
@@ -460,9 +458,7 @@ describe('GroupService', () => {
       expect(
         service['groupMemberPermissionsRepository'].delete,
       ).toHaveBeenCalledWith({ group: { id: testGroup.id } });
-      expect(service['groupRepository'].remove).toHaveBeenCalledWith(
-        testGroup,
-      );
+      expect(service['groupRepository'].remove).toHaveBeenCalledWith(testGroup);
     });
 
     it('should clear matrixRoomId before deletion', async () => {

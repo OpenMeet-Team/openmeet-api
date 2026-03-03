@@ -511,14 +511,22 @@ export class EventManagementService {
       if (publishResult.action === 'error') {
         this.logger.warn(
           `Event ${eventToPublish.slug} saved but AT Protocol publish failed: ${publishResult.error || publishResult.validationError}`,
-          { tenantId: this.request.tenantId, eventId: eventToPublish.id, slug: eventToPublish.slug },
+          {
+            tenantId: this.request.tenantId,
+            eventId: eventToPublish.id,
+            slug: eventToPublish.slug,
+          },
         );
       }
 
       if (publishResult.action === 'conflict') {
         this.logger.warn(
           `ATProto conflict for event ${eventToPublish.slug}: PDS record was modified externally`,
-          { tenantId: this.request.tenantId, eventId: eventToPublish.id, slug: eventToPublish.slug },
+          {
+            tenantId: this.request.tenantId,
+            eventId: eventToPublish.id,
+            slug: eventToPublish.slug,
+          },
         );
       }
     }
@@ -1012,14 +1020,22 @@ export class EventManagementService {
         if (publishResult.action === 'error') {
           this.logger.warn(
             `Event ${updatedEvent.slug} saved but AT Protocol publish failed: ${publishResult.error || publishResult.validationError}`,
-            { tenantId: this.request.tenantId, eventId: updatedEvent.id, slug: updatedEvent.slug },
+            {
+              tenantId: this.request.tenantId,
+              eventId: updatedEvent.id,
+              slug: updatedEvent.slug,
+            },
           );
         }
 
         if (publishResult.action === 'conflict') {
           this.logger.warn(
             `ATProto conflict for event ${updatedEvent.slug}: PDS record was modified externally`,
-            { tenantId: this.request.tenantId, eventId: updatedEvent.id, slug: updatedEvent.slug },
+            {
+              tenantId: this.request.tenantId,
+              eventId: updatedEvent.id,
+              slug: updatedEvent.slug,
+            },
           );
         }
       } catch (error) {
@@ -1562,9 +1578,7 @@ export class EventManagementService {
 
     const detachedCount = result.affected || 0;
 
-    this.logger.log(
-      `Detached ${detachedCount} events from group ${groupId}`,
-    );
+    this.logger.log(`Detached ${detachedCount} events from group ${groupId}`);
 
     this.auditLogger.log('events detached from group', {
       groupId,
