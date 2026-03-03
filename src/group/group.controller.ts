@@ -23,6 +23,7 @@ import { PaginationResult } from '../utils/generic-pagination';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { QueryGroupDto } from './dto/group-query.dto';
+import { GroupEventsQueryDto } from './dto/group-events-query.dto';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
@@ -185,8 +186,11 @@ export class GroupController {
   @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/events')
   @ApiOperation({ summary: 'Get all group events' })
-  async showGroupEvents(@Param('slug') slug: string): Promise<EventEntity[]> {
-    return await this.groupService.showGroupEvents(slug);
+  async showGroupEvents(
+    @Param('slug') slug: string,
+    @Query() query: GroupEventsQueryDto,
+  ): Promise<EventEntity[]> {
+    return await this.groupService.showGroupEvents(slug, query);
   }
 
   @Public()
