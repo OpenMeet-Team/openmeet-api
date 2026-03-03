@@ -136,9 +136,8 @@ export class EventAnnouncementService {
         }
 
         // Check if user has opted into new event notifications
-        // For now, default to true since user preferences for notifications aren't implemented yet
-        // TODO: Implement user notification preferences
-        return true;
+        // Default to true - only exclude users who explicitly set email to false
+        return user.preferences?.notifications?.email !== false;
       });
 
       this.logger.log(
@@ -298,9 +297,8 @@ export class EventAnnouncementService {
         }
 
         // Check if user has opted into event update notifications
-        // For now, default to true since user preferences for notifications aren't implemented yet
-        // TODO: Implement user notification preferences for event updates
-        return true;
+        // Default to true - only exclude users who explicitly set email to false
+        return user.preferences?.notifications?.email !== false;
       });
 
       this.logger.log(
@@ -428,9 +426,8 @@ export class EventAnnouncementService {
         }
 
         // Check if user has opted into event cancellation notifications
-        // For now, default to true since user preferences for notifications aren't implemented yet
-        // TODO: Implement user notification preferences for event cancellations
-        return true;
+        // Default to true - only exclude users who explicitly set email to false
+        return user.preferences?.notifications?.email !== false;
       });
 
       this.logger.log(

@@ -390,6 +390,119 @@ describe('EventAnnouncementService', () => {
       expect(emailAddresses).toContain('organizer@example.com');
     });
 
+    it('should not send email to users who opted out of email notifications', async () => {
+      // Arrange - Bob has email notifications disabled
+      const membersWithPreferences = [
+        {
+          id: 1,
+          user: {
+            id: 2,
+            slug: 'member-1',
+            firstName: 'Alice',
+            lastName: 'Smith',
+            email: 'alice@example.com',
+            preferences: { notifications: { email: true } },
+          },
+        },
+        {
+          id: 2,
+          user: {
+            id: 3,
+            slug: 'member-2',
+            firstName: 'Bob',
+            lastName: 'Johnson',
+            email: 'bob@example.com',
+            preferences: { notifications: { email: false } },
+          },
+        },
+        {
+          id: 3,
+          user: {
+            id: 4,
+            slug: 'member-3',
+            firstName: 'Carol',
+            lastName: 'Wilson',
+            email: 'carol@example.com',
+            // No preferences set - should default to receiving emails
+          },
+        },
+      ];
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        membersWithPreferences,
+      );
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventCreated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+      });
+
+      // Assert - Bob should be excluded, Alice and Carol should receive emails
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
+      const emailCalls = mailerService.sendCalendarInviteMail.mock.calls;
+      const emailAddresses = emailCalls.map((call) => call[0].to);
+      expect(emailAddresses).toContain('alice@example.com');
+      expect(emailAddresses).toContain('carol@example.com');
+      expect(emailAddresses).not.toContain('bob@example.com');
+    });
+
+    it('should send email to users with undefined preferences (default opt-in)', async () => {
+      // Arrange - all users have no preferences set
+      const membersWithoutPreferences = [
+        {
+          id: 1,
+          user: {
+            id: 2,
+            slug: 'member-1',
+            firstName: 'Alice',
+            lastName: 'Smith',
+            email: 'alice@example.com',
+            // No preferences property at all
+          },
+        },
+        {
+          id: 2,
+          user: {
+            id: 3,
+            slug: 'member-2',
+            firstName: 'Bob',
+            lastName: 'Johnson',
+            email: 'bob@example.com',
+            preferences: {},
+          },
+        },
+        {
+          id: 3,
+          user: {
+            id: 4,
+            slug: 'member-3',
+            firstName: 'Carol',
+            lastName: 'Wilson',
+            email: 'carol@example.com',
+            preferences: { notifications: {} },
+          },
+        },
+      ];
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        membersWithoutPreferences,
+      );
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventCreated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+      });
+
+      // Assert - all users should receive emails (default opt-in)
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(3);
+    });
+
     it('should handle email sending failures gracefully', async () => {
       // Arrange
       mailerService.sendCalendarInviteMail.mockRejectedValueOnce(
@@ -602,6 +715,120 @@ describe('EventAnnouncementService', () => {
       const emailCalls = mailerService.sendCalendarInviteMail.mock.calls;
       const emailAddresses = emailCalls.map((call) => call[0].to);
       expect(emailAddresses).toContain('organizer@example.com');
+    });
+
+    it('should not send update email to users who opted out of email notifications', async () => {
+      // Arrange - Bob has email notifications disabled
+      const membersWithPreferences = [
+        {
+          id: 1,
+          user: {
+            id: 2,
+            slug: 'member-1',
+            firstName: 'Alice',
+            lastName: 'Smith',
+            email: 'alice@example.com',
+            preferences: { notifications: { email: true } },
+          },
+        },
+        {
+          id: 2,
+          user: {
+            id: 3,
+            slug: 'member-2',
+            firstName: 'Bob',
+            lastName: 'Johnson',
+            email: 'bob@example.com',
+            preferences: { notifications: { email: false } },
+          },
+        },
+        {
+          id: 3,
+          user: {
+            id: 4,
+            slug: 'member-3',
+            firstName: 'Carol',
+            lastName: 'Wilson',
+            email: 'carol@example.com',
+            // No preferences set - should default to receiving emails
+          },
+        },
+      ];
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        membersWithPreferences,
+      );
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventUpdated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+        sendNotifications: true,
+      });
+
+      // Assert - Bob should be excluded, Alice and Carol should receive emails
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
+      const emailCalls = mailerService.sendCalendarInviteMail.mock.calls;
+      const emailAddresses = emailCalls.map((call) => call[0].to);
+      expect(emailAddresses).toContain('alice@example.com');
+      expect(emailAddresses).toContain('carol@example.com');
+      expect(emailAddresses).not.toContain('bob@example.com');
+    });
+
+    it('should send update email to users with undefined preferences (default opt-in)', async () => {
+      // Arrange - all users have no preferences set
+      const membersWithoutPreferences = [
+        {
+          id: 1,
+          user: {
+            id: 2,
+            slug: 'member-1',
+            firstName: 'Alice',
+            lastName: 'Smith',
+            email: 'alice@example.com',
+          },
+        },
+        {
+          id: 2,
+          user: {
+            id: 3,
+            slug: 'member-2',
+            firstName: 'Bob',
+            lastName: 'Johnson',
+            email: 'bob@example.com',
+            preferences: {},
+          },
+        },
+        {
+          id: 3,
+          user: {
+            id: 4,
+            slug: 'member-3',
+            firstName: 'Carol',
+            lastName: 'Wilson',
+            email: 'carol@example.com',
+            preferences: { notifications: {} },
+          },
+        },
+      ];
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        membersWithoutPreferences,
+      );
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventUpdated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+        sendNotifications: true,
+      });
+
+      // Assert - all users should receive emails (default opt-in)
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(3);
     });
 
     it('should handle email sending failures gracefully for updates', async () => {
@@ -871,6 +1098,108 @@ describe('EventAnnouncementService', () => {
       const emailCalls = mailerService.sendCalendarInviteMail.mock.calls;
       const emailAddresses = emailCalls.map((call) => call[0].to);
       expect(emailAddresses).toContain('organizer@example.com');
+    });
+
+    it('should not send cancellation email to users who opted out of email notifications', async () => {
+      // Arrange - Bob has email notifications disabled
+      const membersWithPreferences = [
+        {
+          id: 1,
+          user: {
+            id: 2,
+            slug: 'member-1',
+            firstName: 'Alice',
+            lastName: 'Smith',
+            email: 'alice@example.com',
+            preferences: { notifications: { email: true } },
+          },
+        },
+        {
+          id: 2,
+          user: {
+            id: 3,
+            slug: 'member-2',
+            firstName: 'Bob',
+            lastName: 'Johnson',
+            email: 'bob@example.com',
+            preferences: { notifications: { email: false } },
+          },
+        },
+        {
+          id: 3,
+          user: {
+            id: 4,
+            slug: 'member-3',
+            firstName: 'Carol',
+            lastName: 'Wilson',
+            email: 'carol@example.com',
+            // No preferences set - should default to receiving emails
+          },
+        },
+      ];
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        membersWithPreferences,
+      );
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventDeleted(mockEvent);
+
+      // Assert - Bob should be excluded, Alice and Carol should receive emails
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
+      const emailCalls = mailerService.sendCalendarInviteMail.mock.calls;
+      const emailAddresses = emailCalls.map((call) => call[0].to);
+      expect(emailAddresses).toContain('alice@example.com');
+      expect(emailAddresses).toContain('carol@example.com');
+      expect(emailAddresses).not.toContain('bob@example.com');
+    });
+
+    it('should send cancellation email to users with undefined preferences (default opt-in)', async () => {
+      // Arrange - all users have no preferences set
+      const membersWithoutPreferences = [
+        {
+          id: 1,
+          user: {
+            id: 2,
+            slug: 'member-1',
+            firstName: 'Alice',
+            lastName: 'Smith',
+            email: 'alice@example.com',
+          },
+        },
+        {
+          id: 2,
+          user: {
+            id: 3,
+            slug: 'member-2',
+            firstName: 'Bob',
+            lastName: 'Johnson',
+            email: 'bob@example.com',
+            preferences: {},
+          },
+        },
+        {
+          id: 3,
+          user: {
+            id: 4,
+            slug: 'member-3',
+            firstName: 'Carol',
+            lastName: 'Wilson',
+            email: 'carol@example.com',
+            preferences: { notifications: {} },
+          },
+        },
+      ];
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        membersWithoutPreferences,
+      );
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventDeleted(mockEvent);
+
+      // Assert - all users should receive emails (default opt-in)
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(3);
     });
 
     it('should handle email sending failures gracefully for cancellations', async () => {

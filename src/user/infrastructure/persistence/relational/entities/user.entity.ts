@@ -254,5 +254,8 @@ export class UserEntity extends EntityRelationalHelper {
     analytics?: {
       optOut?: boolean;
     };
+    notifications?: {
+      email?: boolean;
+    };
   };
 }

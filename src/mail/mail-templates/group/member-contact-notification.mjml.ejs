@@ -61,4 +61,17 @@
         </mj-column>
       </mj-section>
 
+      <!-- Footer Info -->
+      <mj-section padding="10px">
+        <mj-column>
+          <mj-text font-size="12px" color="#666666">
+            You received this email because someone contacted you about your group.
+          </mj-text>
+          <mj-text font-size="12px" color="#666666" padding-top="10px">
+            To change your email settings, visit your
+            <a href="<%= tenantConfig?.frontendDomain %>/dashboard/profile" style="color: #7B71DA;">profile settings</a>.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
 <%- include('./../layouts/footer.mjml.ejs') %>

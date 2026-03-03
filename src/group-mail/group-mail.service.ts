@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { MailService } from '../mail/mail.service';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { UserService } from '../user/user.service';
@@ -32,7 +37,11 @@ export class GroupMailService {
 
     for (const admin of admins) {
       if (!admin.email) {
-        return;
+        continue;
+      }
+
+      if (admin.preferences?.notifications?.email === false) {
+        continue;
       }
 
       await this.mailService.groupGuestJoined({
@@ -48,6 +57,9 @@ export class GroupMailService {
     const groupMember =
       await this.groupMemberService.getMailServiceGroupMember(groupMemberId);
     if (!groupMember.user.email) {
+      return;
+    }
+    if (groupMember.user.preferences?.notifications?.email === false) {
       return;
     }
     await this.mailService.groupMemberRoleUpdated({
@@ -123,6 +135,10 @@ export class GroupMailService {
     // Send individual emails to members with email addresses
     for (const member of members) {
       if (member.email && !emailsSent.has(member.email)) {
+        if (member.preferences?.notifications?.email === false) {
+          continue;
+        }
+
         try {
           await this.mailService.sendAdminGroupMessage({
             to: member.email,
@@ -210,6 +226,10 @@ export class GroupMailService {
     // Send notification to all admins
     for (const admin of admins) {
       if (admin.email) {
+        if (admin.preferences?.notifications?.email === false) {
+          continue;
+        }
+
         try {
           await this.mailService.sendMemberContactNotification({
             to: admin.email,

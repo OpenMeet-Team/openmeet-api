@@ -75,6 +75,60 @@ describe('GroupMailService', () => {
         },
       });
     });
+
+    it('should skip sending email to admins who opted out of email notifications', async () => {
+      const optedOutAdmin = {
+        ...mockUser,
+        id: 2,
+        email: 'optedout@example.com',
+        preferences: { notifications: { email: false } },
+      } as UserEntity;
+      const optedInAdmin = {
+        ...mockUser,
+        id: 3,
+        email: 'optedin@example.com',
+        preferences: { notifications: { email: true } },
+      } as UserEntity;
+
+      groupMemberService.getMailServiceGroupMember.mockResolvedValue(
+        mockGroupMember,
+      );
+      groupMemberService.getMailServiceGroupMembersByPermission.mockResolvedValue(
+        [optedOutAdmin, optedInAdmin],
+      );
+
+      await service.sendGroupGuestJoined(mockGroupMember.id);
+
+      expect(mailService.groupGuestJoined).toHaveBeenCalledTimes(1);
+      expect(mailService.groupGuestJoined).toHaveBeenCalledWith({
+        to: 'optedin@example.com',
+        data: { groupMember: mockGroupMember },
+      });
+    });
+
+    it('should send email to admins with no preferences set (default opt-in)', async () => {
+      const noPrefsAdmin = {
+        ...mockUser,
+        id: 2,
+        email: 'noprefs@example.com',
+        preferences: null,
+      } as unknown as UserEntity;
+
+      groupMemberService.getMailServiceGroupMember.mockResolvedValue(
+        mockGroupMember,
+      );
+      groupMemberService.getMailServiceGroupMembersByPermission.mockResolvedValue(
+        [noPrefsAdmin],
+      );
+
+      await service.sendGroupGuestJoined(mockGroupMember.id);
+
+      expect(mailService.groupGuestJoined).toHaveBeenCalledTimes(1);
+      expect(mailService.groupGuestJoined).toHaveBeenCalledWith({
+        to: 'noprefs@example.com',
+        data: { groupMember: mockGroupMember },
+      });
+    });
   });
 
   describe('sendGroupMemberRoleUpdated', () => {
@@ -94,6 +148,23 @@ describe('GroupMailService', () => {
           groupMember: mockGroupMember,
         },
       });
+    });
+
+    it('should skip sending email when member opted out of email notifications', async () => {
+      const optedOutMember = {
+        ...mockGroupMember,
+        user: {
+          ...mockGroupMember.user,
+          preferences: { notifications: { email: false } },
+        },
+      };
+      groupMemberService.getMailServiceGroupMember.mockResolvedValue(
+        optedOutMember as any,
+      );
+
+      await service.sendGroupMemberRoleUpdated(mockGroupMember.id);
+
+      expect(mailService.groupMemberRoleUpdated).not.toHaveBeenCalled();
     });
   });
 
@@ -175,6 +246,40 @@ describe('GroupMailService', () => {
       await expect(
         service.sendAdminMessageToMembers(mockGroup, 999, 'Subject', 'Message'),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should skip members who opted out of email notifications', async () => {
+      const optedOutMember = {
+        id: 4,
+        email: 'optedout@example.com',
+        name: 'Opted Out',
+        preferences: { notifications: { email: false } },
+      } as any;
+      const optedInMember = {
+        id: 5,
+        email: 'optedin@example.com',
+        name: 'Opted In',
+        preferences: { notifications: { email: true } },
+      } as any;
+
+      userService.findById.mockResolvedValue(mockUser);
+      groupMemberService.getMailServiceGroupMembersByPermission.mockResolvedValue(
+        [optedOutMember, optedInMember],
+      );
+      mailService.sendAdminGroupMessage = jest
+        .fn()
+        .mockResolvedValue(undefined);
+
+      const result = await service.sendAdminMessageToMembers(
+        mockGroup,
+        1,
+        'Test Subject',
+        'Test Message',
+      );
+
+      // Admin copy + 1 opted-in member = 2 emails (opted-out member skipped)
+      expect(mailService.sendAdminGroupMessage).toHaveBeenCalledTimes(2);
+      expect(result.deliveredCount).toBe(2);
     });
   });
 
@@ -404,6 +509,53 @@ describe('GroupMailService', () => {
           'Test Message',
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should skip admins who opted out of email notifications', async () => {
+      const optedOutAdmin = {
+        ...mockUser,
+        id: 10,
+        email: 'optedout-admin@example.com',
+        preferences: { notifications: { email: false } },
+      } as UserEntity;
+      const optedInAdmin = {
+        ...mockUser,
+        id: 11,
+        email: 'optedin-admin@example.com',
+        preferences: { notifications: { email: true } },
+      } as UserEntity;
+      const member = {
+        ...mockUser,
+        id: 5,
+        email: 'member@example.com',
+      } as UserEntity;
+
+      userService.findById.mockResolvedValue(member);
+      groupMemberService.getMailServiceGroupMembersByPermission.mockResolvedValue(
+        [optedOutAdmin, optedInAdmin],
+      );
+      (
+        mailService.sendMemberContactNotification as jest.Mock
+      ).mockResolvedValue(undefined);
+
+      const result = await service.sendMemberContactToAdmins(
+        mockGroup,
+        5,
+        'question',
+        'Test Subject',
+        'Test Message',
+      );
+
+      // Only opted-in admin should receive the email
+      expect(
+        mailService.sendMemberContactNotification as jest.Mock,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        mailService.sendMemberContactNotification as jest.Mock,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'optedin-admin@example.com' }),
+      );
+      expect(result.deliveredCount).toBe(1);
     });
   });
 });
