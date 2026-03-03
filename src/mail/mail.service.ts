@@ -58,7 +58,7 @@ export class MailService {
     await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      subject: emailConfirmTitle,
+      subject: emailConfirmTitle || 'Confirm your email',
       templateName: 'auth/activation',
       context: {
         tenantConfig: this.tenantConfig,
@@ -104,7 +104,7 @@ export class MailService {
     await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      subject: resetPasswordTitle,
+      subject: resetPasswordTitle || 'Reset your password',
       templateName: 'auth/reset-password',
       context: {
         tenantConfig: this.tenantConfig,
@@ -146,7 +146,7 @@ export class MailService {
     await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      subject: emailConfirmTitle,
+      subject: emailConfirmTitle || 'Confirm your email',
       templateName: 'auth/confirm-new-email',
       context: {
         tenantConfig: this.tenantConfig,
