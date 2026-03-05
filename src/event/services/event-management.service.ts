@@ -1294,7 +1294,10 @@ export class EventManagementService {
       })
       .then(() => {
         // Transaction succeeded - emit events and log
-        this.eventEmitter.emit('event.deleted', eventCopy);
+        this.eventEmitter.emit('event.deleted', {
+          event: eventCopy,
+          tenantId: this.request.tenantId,
+        });
         this.auditLogger.log('event deleted', { event: eventCopy });
         this.logger.log(
           `Successfully completed deletion of event ${eventCopy.id}`,

@@ -5,7 +5,6 @@ import { MailData } from './interfaces/mail-data.interface';
 
 import { MaybeType } from '../utils/types/maybe.type';
 import { MailerService } from '../mailer/mailer.service';
-import path from 'path';
 import { AllConfigType } from '../config/config.type';
 import { REQUEST } from '@nestjs/core';
 import { TenantConfig } from '../core/constants/constant';
@@ -56,22 +55,13 @@ export class MailService {
     );
     url.searchParams.set('hash', mailData.data.hash);
 
-    await this.mailerService.sendMail({
+    await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      subject: emailConfirmTitle,
-      text: `${url.toString()} ${emailConfirmTitle}`,
-      templatePath: path.join(
-        this.configService.getOrThrow('app.workingDirectory', {
-          infer: true,
-        }),
-        'src',
-        'mail',
-        'mail-templates',
-        'auth',
-        'activation.hbs',
-      ),
+      subject: emailConfirmTitle || 'Confirm your email',
+      templateName: 'auth/activation',
       context: {
+        tenantConfig: this.tenantConfig,
         title: emailConfirmTitle,
         url: url.toString(),
         actionTitle: emailConfirmTitle,
@@ -111,22 +101,13 @@ export class MailService {
     url.searchParams.set('hash', mailData.data.hash);
     url.searchParams.set('expires', mailData.data.tokenExpires.toString());
 
-    await this.mailerService.sendMail({
+    await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      subject: resetPasswordTitle,
-      text: `${url.toString()} ${resetPasswordTitle}`,
-      templatePath: path.join(
-        this.configService.getOrThrow('app.workingDirectory', {
-          infer: true,
-        }),
-        'src',
-        'mail',
-        'mail-templates',
-        'auth',
-        'reset-password.hbs',
-      ),
+      subject: resetPasswordTitle || 'Reset your password',
+      templateName: 'auth/reset-password',
       context: {
+        tenantConfig: this.tenantConfig,
         title: resetPasswordTitle,
         url: url.toString(),
         actionTitle: resetPasswordTitle,
@@ -162,22 +143,13 @@ export class MailService {
     );
     url.searchParams.set('hash', mailData.data.hash);
 
-    await this.mailerService.sendMail({
+    await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      subject: emailConfirmTitle,
-      text: `${url.toString()} ${emailConfirmTitle}`,
-      templatePath: path.join(
-        this.configService.getOrThrow('app.workingDirectory', {
-          infer: true,
-        }),
-        'src',
-        'mail',
-        'mail-templates',
-        'auth',
-        'confirm-new-email.hbs',
-      ),
+      subject: emailConfirmTitle || 'Confirm your email',
+      templateName: 'auth/confirm-new-email',
       context: {
+        tenantConfig: this.tenantConfig,
         title: emailConfirmTitle,
         url: url.toString(),
         actionTitle: emailConfirmTitle,
@@ -259,20 +231,6 @@ export class MailService {
     });
   }
 
-  async sendMailChatNewMessage(
-    mailData: MailData<{ participant: UserEntity }>,
-  ) {
-    this.getTenantConfig();
-    await this.mailerService.sendMjmlMail({
-      tenantConfig: this.tenantConfig,
-      to: mailData.to,
-      subject: 'New message from your chat',
-      templateName: 'chat/chat-new-message',
-      context: {
-        participant: mailData.data.participant,
-      },
-    });
-  }
 
   async sendAdminGroupMessage(
     mailData: MailData<{

@@ -126,18 +126,16 @@
       <!-- Footer Info -->
       <mj-section padding="10px">
         <mj-column>
-          <mj-text font-size="12px" color="#666666">
+          <mj-text font-size="12px" color="#666666" padding-top="20px">
             <% if (groupName) { %>
-            You received this email because you're a member of "<%= groupName %>" 
-            and have opted to receive event cancellation notifications.
+            You received this email because you're a member of "<%= groupName %>".
             <% } else { %>
-            You received this email because you've shown interest in this event 
-            and have opted to receive event cancellation notifications.
+            You received this email because you joined "<%= eventName %>".
             <% } %>
           </mj-text>
-          
+
           <mj-text font-size="12px" color="#666666" padding-top="10px">
-            To manage your notification preferences, visit your 
+            To change your email settings, visit your
             <a href="<%= tenantConfig?.frontendDomain %>/dashboard/profile" style="color: #7B71DA;">profile settings</a>.
           </mj-text>
         </mj-column>

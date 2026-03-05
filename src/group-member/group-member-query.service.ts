@@ -413,6 +413,7 @@ export class GroupMemberQueryService {
           lastName: true,
           name: true,
           email: true,
+          preferences: true,
         },
       },
     });
@@ -439,6 +440,7 @@ export class GroupMemberQueryService {
           lastName: true,
           name: true,
           email: true,
+          preferences: true,
         },
       },
     });

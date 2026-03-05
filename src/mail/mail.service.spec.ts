@@ -2,6 +2,7 @@ import {
   mockConfigService,
   mockRepository,
   mockTenantConnectionService,
+  mockTenantConfig,
 } from '../test/mocks';
 import { MailerService } from '../mailer/mailer.service';
 import {
@@ -24,6 +25,8 @@ describe('MailService', () => {
   let mailService: MailService;
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MailService,
@@ -57,42 +60,76 @@ describe('MailService', () => {
   });
 
   describe('userSignUp', () => {
-    it('should send mail to user', async () => {
-      jest.spyOn(mailService, 'userSignUp').mockResolvedValue();
-      const result = await mailService.userSignUp({
+    it('should call sendMjmlMail with auth/activation template', async () => {
+      await mailService.userSignUp({
         to: mockUser.email as string,
         data: {
-          hash: 'hash',
+          hash: 'test-hash',
         },
       });
-      expect(result).toBeUndefined();
+
+      expect(mockMailerService.sendMjmlMail).toHaveBeenCalledTimes(1);
+      expect(mockMailerService.sendMjmlMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: mockUser.email,
+          templateName: 'auth/activation',
+          context: expect.objectContaining({
+            tenantConfig: mockTenantConfig,
+            url: expect.stringContaining('test-hash'),
+          }),
+        }),
+      );
+      // Must NOT call the legacy sendMail
+      expect(mockMailerService.sendMail).not.toHaveBeenCalled();
     });
   });
 
   describe('forgotPassword', () => {
-    it('should send mail to user', async () => {
-      jest.spyOn(mailService, 'forgotPassword').mockResolvedValue();
-      const result = await mailService.forgotPassword({
+    it('should call sendMjmlMail with auth/reset-password template', async () => {
+      await mailService.forgotPassword({
         to: mockUser.email as string,
         data: {
-          hash: 'hash',
+          hash: 'reset-hash',
           tokenExpires: 1000,
         },
       });
-      expect(result).toBeUndefined();
+
+      expect(mockMailerService.sendMjmlMail).toHaveBeenCalledTimes(1);
+      expect(mockMailerService.sendMjmlMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: mockUser.email,
+          templateName: 'auth/reset-password',
+          context: expect.objectContaining({
+            tenantConfig: mockTenantConfig,
+            url: expect.stringContaining('reset-hash'),
+          }),
+        }),
+      );
+      expect(mockMailerService.sendMail).not.toHaveBeenCalled();
     });
   });
 
   describe('confirmNewEmail', () => {
-    it('should send mail to user', async () => {
-      jest.spyOn(mailService, 'confirmNewEmail').mockResolvedValue();
-      const result = await mailService.confirmNewEmail({
+    it('should call sendMjmlMail with auth/confirm-new-email template', async () => {
+      await mailService.confirmNewEmail({
         to: mockUser.email as string,
         data: {
-          hash: 'hash',
+          hash: 'confirm-hash',
         },
       });
-      expect(result).toBeUndefined();
+
+      expect(mockMailerService.sendMjmlMail).toHaveBeenCalledTimes(1);
+      expect(mockMailerService.sendMjmlMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: mockUser.email,
+          templateName: 'auth/confirm-new-email',
+          context: expect.objectContaining({
+            tenantConfig: mockTenantConfig,
+            url: expect.stringContaining('confirm-hash'),
+          }),
+        }),
+      );
+      expect(mockMailerService.sendMail).not.toHaveBeenCalled();
     });
   });
 
@@ -164,16 +201,5 @@ describe('MailService', () => {
     });
   });
 
-  describe('sendMailChatNewMessage', () => {
-    it('should send mail to user', async () => {
-      jest.spyOn(mailService, 'sendMailChatNewMessage').mockResolvedValue();
-      const result = await mailService.sendMailChatNewMessage({
-        to: mockUser.email as string,
-        data: {
-          participant: mockUser,
-        },
-      });
-      expect(result).toBeUndefined();
-    });
-  });
+
 });

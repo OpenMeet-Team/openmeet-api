@@ -36,6 +36,83 @@ describe('MailerService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('renderTemplate - Auth MJML Templates', () => {
+    const authContext = {
+      tenantConfig: {
+        name: 'Test App',
+        frontendDomain: 'https://test.openmeet.net',
+        companyDomain: 'https://openmeet.net',
+        logoUrl: 'https://test.openmeet.net/logo.png',
+      },
+      title: 'Confirm Email',
+      url: 'https://test.openmeet.net/auth/confirm-email?hash=abc123',
+      actionTitle: 'Confirm Email',
+      app_name: 'Test App',
+      text1: 'Hello!',
+      text2: 'Please confirm your email address with',
+      text3: 'Click the button below to verify.',
+    };
+
+    it('should render activation template with correct content', async () => {
+      const html = await service.renderTemplate('auth/activation', authContext);
+
+      expect(html).toContain('Hello!');
+      expect(html).toContain('Please confirm your email address with');
+      expect(html).toContain('Test App');
+      expect(html).toContain('Confirm Email');
+      expect(html).toContain(
+        'https://test.openmeet.net/auth/confirm-email?hash=abc123',
+      );
+    });
+
+    it('should render reset-password template with expiry warning', async () => {
+      const resetContext = {
+        ...authContext,
+        title: 'Reset Password',
+        actionTitle: 'Reset Password',
+        text1: 'We received a password reset request.',
+        text2: 'Click below to reset your password.',
+        text3: 'If you did not request this, ignore this email.',
+        text4: 'This link will expire in 24 hours.',
+        url: 'https://test.openmeet.net/auth/password-change?hash=xyz789',
+      };
+
+      const html = await service.renderTemplate(
+        'auth/reset-password',
+        resetContext,
+      );
+
+      expect(html).toContain('We received a password reset request.');
+      expect(html).toContain('Reset Password');
+      expect(html).toContain('This link will expire in 24 hours.');
+      expect(html).toContain(
+        'https://test.openmeet.net/auth/password-change?hash=xyz789',
+      );
+    });
+
+    it('should render confirm-new-email template with correct content', async () => {
+      const confirmContext = {
+        ...authContext,
+        text1: 'You requested to change your email.',
+        text2: 'Please confirm your new email address.',
+        text3: 'Click below to verify.',
+        url: 'https://test.openmeet.net/auth/confirm-new-email?hash=def456',
+      };
+
+      const html = await service.renderTemplate(
+        'auth/confirm-new-email',
+        confirmContext,
+      );
+
+      expect(html).toContain('You requested to change your email.');
+      expect(html).toContain('Please confirm your new email address.');
+      expect(html).toContain('Confirm Email');
+      expect(html).toContain(
+        'https://test.openmeet.net/auth/confirm-new-email?hash=def456',
+      );
+    });
+  });
+
   describe('renderTemplate - Event Update Email', () => {
     let originalTZ: string | undefined;
 

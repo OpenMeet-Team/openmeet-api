@@ -179,6 +179,16 @@ export const mockGroupsQuery = {
   categories: [],
 };
 
+export const mockTenantConfig = {
+  id: 'test-tenant',
+  name: 'Test App',
+  frontendDomain: 'https://test.openmeet.net',
+  companyDomain: 'https://openmeet.net',
+  logoUrl: 'https://test.openmeet.net/logo.png',
+  mailDefaultName: 'Test App',
+  mailDefaultEmail: 'noreply@test.openmeet.net',
+};
+
 export const mockTenantConnectionService = {
   getTenantConnection: jest.fn().mockResolvedValue({
     getRepository: jest.fn().mockImplementation(() => {
@@ -188,6 +198,7 @@ export const mockTenantConnectionService = {
       return mockRepository;
     }),
   }),
+  getTenantConfig: jest.fn().mockReturnValue(mockTenantConfig),
 };
 
 export const mockHomeQuery = {
@@ -198,6 +209,7 @@ export const mockHomeQuery = {
 };
 
 export const mockMailerService = {
+  sendMail: jest.fn().mockResolvedValue(undefined),
   sendMjmlMail: jest.fn().mockResolvedValue(undefined),
 };
 

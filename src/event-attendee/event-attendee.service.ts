@@ -993,6 +993,7 @@ export class EventAttendeeService {
           lastName: true,
           name: true,
           email: true,
+          preferences: true,
         },
       },
     });

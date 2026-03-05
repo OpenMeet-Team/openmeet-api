@@ -38,6 +38,10 @@ export class EventMailService {
 
     for (const admin of admins) {
       if (admin.email) {
+        if (admin.preferences?.notifications?.email === false) {
+          continue;
+        }
+
         await this.mailService.sendMailAttendeeGuestJoined({
           to: admin.email,
           data: { eventAttendee },
@@ -62,6 +66,10 @@ export class EventMailService {
       }
 
       if (eventAttendee.user.email) {
+        if (eventAttendee.user.preferences?.notifications?.email === false) {
+          return;
+        }
+
         await this.mailService.sendMailAttendeeStatusChanged({
           to: eventAttendee.user.email,
           data: { eventAttendee },
@@ -130,6 +138,10 @@ export class EventMailService {
     // Send individual emails to attendees with email addresses
     for (const attendee of attendees) {
       if (attendee.email && !emailsSent.has(attendee.email)) {
+        if (attendee.preferences?.notifications?.email === false) {
+          continue;
+        }
+
         try {
           await this.mailService.sendAdminEventMessage({
             to: attendee.email,
@@ -229,6 +241,10 @@ export class EventMailService {
     // Send notification to all organizers
     for (const organizer of organizers) {
       if (organizer.email) {
+        if (organizer.preferences?.notifications?.email === false) {
+          continue;
+        }
+
         try {
           await this.mailService.sendAttendeeContactNotification({
             to: organizer.email,
