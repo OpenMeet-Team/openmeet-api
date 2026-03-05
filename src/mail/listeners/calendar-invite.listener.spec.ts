@@ -215,6 +215,68 @@ describe('CalendarInviteListener - Behavior Tests', () => {
     });
   });
 
+  describe('Email notification preference', () => {
+    it('should NOT send invite when user opted out of email notifications', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: {
+          id: 1,
+          email: 'attendee@example.com',
+          preferences: { notifications: { email: false } },
+        },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should send invite when user has email notifications enabled', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: {
+          id: 1,
+          email: 'attendee@example.com',
+          preferences: { notifications: { email: true } },
+        },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).toHaveBeenCalled();
+    });
+
+    it('should send invite when user has no notification preferences set (default)', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: {
+          id: 1,
+          email: 'attendee@example.com',
+          preferences: {},
+        },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).toHaveBeenCalled();
+    });
+  });
+
   describe('Self-notification guard', () => {
     it('should NOT send invite when attendee is the event creator', async () => {
       mockEventAttendeeService.findOne.mockResolvedValue({

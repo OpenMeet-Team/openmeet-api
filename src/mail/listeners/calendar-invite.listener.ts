@@ -106,6 +106,14 @@ export class CalendarInviteListener {
         return;
       }
 
+      // Skip if user opted out of email notifications
+      if (attendee.user.preferences?.notifications?.email === false) {
+        this.logger.debug(
+          `User ${params.userId} opted out of email notifications, skipping calendar invite`,
+        );
+        return;
+      }
+
       // Skip sending calendar invite to event creator
       if (attendee.user.id === attendee.event.user.id) {
         this.logger.debug(
