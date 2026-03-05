@@ -1744,13 +1744,17 @@ describe('UserService', () => {
 
       const updateSpy = jest
         .spyOn(userService, 'update')
-        .mockResolvedValue({ ...existingInactiveUser, email, status: { id: StatusEnum.inactive } } as any);
+        .mockResolvedValue({
+          ...existingInactiveUser,
+          email,
+          status: { id: StatusEnum.inactive },
+        } as any);
 
       jest
         .spyOn(userService as any, 'getTenantSpecificRepository')
         .mockResolvedValue(undefined);
 
-      const result = await userService.findOrCreateUser(
+      await userService.findOrCreateUser(
         blueskyProfile,
         AuthProvidersEnum.bluesky,
         TESTING_TENANT_ID,
