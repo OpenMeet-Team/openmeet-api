@@ -770,8 +770,12 @@ describe('UserService', () => {
         TESTING_TENANT_ID,
       );
 
-      // Assert: Email was updated
-      expect(updateSpy).toHaveBeenCalledWith(111, { email }, TESTING_TENANT_ID);
+      // Assert: Email was updated (with INACTIVE status since Bluesky emailConfirmed is untrusted)
+      expect(updateSpy).toHaveBeenCalledWith(
+        111,
+        { email, status: { id: StatusEnum.inactive } },
+        TESTING_TENANT_ID,
+      );
 
       // Assert: User now has email
       expect(result.email).toBe(email);
@@ -829,8 +833,12 @@ describe('UserService', () => {
         TESTING_TENANT_ID,
       );
 
-      // Assert: Email was updated
-      expect(updateSpy).toHaveBeenCalledWith(222, { email }, TESTING_TENANT_ID);
+      // Assert: Email was updated (with INACTIVE status since Bluesky emailConfirmed is untrusted)
+      expect(updateSpy).toHaveBeenCalledWith(
+        222,
+        { email, status: { id: StatusEnum.inactive } },
+        TESTING_TENANT_ID,
+      );
       expect(result.email).toBe(email);
     });
 
@@ -886,8 +894,12 @@ describe('UserService', () => {
         TESTING_TENANT_ID,
       );
 
-      // Assert: Email was updated
-      expect(updateSpy).toHaveBeenCalledWith(333, { email }, TESTING_TENANT_ID);
+      // Assert: Email was updated (with INACTIVE status since Bluesky emailConfirmed is untrusted)
+      expect(updateSpy).toHaveBeenCalledWith(
+        333,
+        { email, status: { id: StatusEnum.inactive } },
+        TESTING_TENANT_ID,
+      );
       expect(result.email).toBe(email);
     });
 
@@ -1185,13 +1197,13 @@ describe('UserService', () => {
     });
 
     it('should create new user as ACTIVE when email is verified (emailConfirmed=true)', async () => {
-      const did = 'did:plc:newuser-verified';
+      const googleId = 'google-user-verified-123';
       const email = 'verified@example.com';
 
-      const blueskyProfile = {
-        id: did,
+      const googleProfile = {
+        id: googleId,
         email,
-        emailConfirmed: true, // Email verified by Bluesky
+        emailConfirmed: true, // Email verified by Google (trusted provider)
         firstName: 'Verified',
         lastName: 'User',
       };
@@ -1203,20 +1215,13 @@ describe('UserService', () => {
 
       const newUser = {
         id: 999,
-        socialId: did,
-        provider: AuthProvidersEnum.bluesky,
+        socialId: googleId,
+        provider: AuthProvidersEnum.google,
         email,
         firstName: 'Verified',
         lastName: 'User',
         role: mockRole,
         status: { id: StatusEnum.active }, // ACTIVE due to verified email
-        preferences: {
-          bluesky: {
-            did,
-            connected: true,
-            autoPost: false,
-          },
-        },
       };
 
       const createSpy = jest
@@ -1228,8 +1233,8 @@ describe('UserService', () => {
         .mockResolvedValue(undefined);
 
       const result = await userService.findOrCreateUser(
-        blueskyProfile,
-        AuthProvidersEnum.bluesky,
+        googleProfile,
+        AuthProvidersEnum.google,
         TESTING_TENANT_ID,
       );
 
@@ -1369,30 +1374,24 @@ describe('UserService', () => {
     });
 
     it('should set existing INACTIVE user to ACTIVE when updating with verified email', async () => {
-      const did = 'did:plc:inactive-to-active';
+      const googleId = 'google-user-inactive-to-active';
       const email = 'now-verified@example.com';
 
       const existingInactiveUser = {
         id: 789,
-        socialId: did,
-        provider: AuthProvidersEnum.bluesky,
+        socialId: googleId,
+        provider: AuthProvidersEnum.google,
         email: null,
         firstName: 'Upgrading',
         lastName: 'User',
         role: mockRole,
         status: { id: StatusEnum.inactive }, // Currently INACTIVE
-        preferences: {
-          bluesky: {
-            did,
-            connected: true,
-          },
-        },
       };
 
-      const blueskyProfileVerified = {
-        id: did,
+      const googleProfileVerified = {
+        id: googleId,
         email,
-        emailConfirmed: true, // Verified email
+        emailConfirmed: true, // Verified email from Google (trusted)
         firstName: 'Upgrading',
         lastName: 'User',
       };
@@ -1416,8 +1415,8 @@ describe('UserService', () => {
         .mockResolvedValue(undefined);
 
       const result = await userService.findOrCreateUser(
-        blueskyProfileVerified,
-        AuthProvidersEnum.bluesky,
+        googleProfileVerified,
+        AuthProvidersEnum.google,
         TESTING_TENANT_ID,
       );
 
@@ -1434,30 +1433,24 @@ describe('UserService', () => {
     });
 
     it('should replace existing email with new verified email from OAuth', async () => {
-      const did = 'did:plc:email-change';
+      const googleId = 'google-user-email-change';
       const oldEmail = 'old@example.com';
       const newEmail = 'new-verified@example.com';
 
       const existingUserWithEmail = {
         id: 555,
-        socialId: did,
-        provider: AuthProvidersEnum.bluesky,
+        socialId: googleId,
+        provider: AuthProvidersEnum.google,
         email: oldEmail, // Has existing email
         firstName: 'User',
         lastName: 'WithEmail',
         role: mockRole,
         status: { id: StatusEnum.active },
-        preferences: {
-          bluesky: {
-            did,
-            connected: true,
-          },
-        },
       };
 
-      const blueskyProfileNewVerifiedEmail = {
-        id: did,
-        email: newEmail, // Different verified email from OAuth
+      const googleProfileNewVerifiedEmail = {
+        id: googleId,
+        email: newEmail, // Different verified email from Google (trusted)
         emailConfirmed: true,
         firstName: 'User',
         lastName: 'WithEmail',
@@ -1484,8 +1477,8 @@ describe('UserService', () => {
         .mockResolvedValue(undefined);
 
       const result = await userService.findOrCreateUser(
-        blueskyProfileNewVerifiedEmail,
-        AuthProvidersEnum.bluesky,
+        googleProfileNewVerifiedEmail,
+        AuthProvidersEnum.google,
         TESTING_TENANT_ID,
       );
 
@@ -2669,7 +2662,8 @@ describe('UserService', () => {
       ).toHaveBeenCalledWith(did, email);
     });
 
-    it('should sync email to PDS when existing user gets verified email change from OAuth', async () => {
+    it('should sync email to PDS when existing user gets verified email change from OAuth (trusted provider)', async () => {
+      const googleId = 'google-pds-sync-test2';
       const did = 'did:plc:pds-sync-test2';
       const oldEmail = 'old@example.com';
       const newEmail = 'new-verified@example.com';
@@ -2678,22 +2672,19 @@ describe('UserService', () => {
       const existingUser = {
         id: 202,
         ulid: userUlid,
-        socialId: did,
-        provider: AuthProvidersEnum.bluesky,
+        socialId: googleId,
+        provider: AuthProvidersEnum.google,
         email: oldEmail,
         firstName: 'Email',
         lastName: 'Change',
         role: mockRole,
         status: { id: StatusEnum.active },
-        preferences: {
-          bluesky: { did, connected: true },
-        },
       };
 
-      const blueskyProfile = {
-        id: did,
+      const googleProfile = {
+        id: googleId,
         email: newEmail,
-        emailConfirmed: true,
+        emailConfirmed: true, // Trusted provider
         firstName: 'Email',
         lastName: 'Change',
       };
@@ -2712,7 +2703,7 @@ describe('UserService', () => {
         .spyOn(userService as any, 'getTenantSpecificRepository')
         .mockResolvedValue(undefined);
 
-      // Mock identity lookup to return custodial identity
+      // Mock identity lookup to return custodial identity (user has ATProto identity from separate linking)
       mockUserAtprotoIdentityServiceRef.findByUserUlid.mockResolvedValue({
         id: 2,
         userUlid,
@@ -2726,8 +2717,8 @@ describe('UserService', () => {
       } as any);
 
       await userService.findOrCreateUser(
-        blueskyProfile,
-        AuthProvidersEnum.bluesky,
+        googleProfile,
+        AuthProvidersEnum.google,
         TESTING_TENANT_ID,
       );
 
