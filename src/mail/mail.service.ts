@@ -231,20 +231,6 @@ export class MailService {
     });
   }
 
-  async sendMailChatNewMessage(
-    mailData: MailData<{ participant: UserEntity }>,
-  ) {
-    this.getTenantConfig();
-    await this.mailerService.sendMjmlMail({
-      tenantConfig: this.tenantConfig,
-      to: mailData.to,
-      subject: 'New message from your chat',
-      templateName: 'chat/chat-new-message',
-      context: {
-        participant: mailData.data.participant,
-      },
-    });
-  }
 
   async sendAdminGroupMessage(
     mailData: MailData<{

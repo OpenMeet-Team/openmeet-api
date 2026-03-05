@@ -201,16 +201,5 @@ describe('MailService', () => {
     });
   });
 
-  describe('sendMailChatNewMessage', () => {
-    it('should send mail to user', async () => {
-      jest.spyOn(mailService, 'sendMailChatNewMessage').mockResolvedValue();
-      const result = await mailService.sendMailChatNewMessage({
-        to: mockUser.email as string,
-        data: {
-          participant: mockUser,
-        },
-      });
-      expect(result).toBeUndefined();
-    });
-  });
+
 });
