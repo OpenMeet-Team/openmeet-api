@@ -1772,6 +1772,60 @@ describe('UserService', () => {
         TESTING_TENANT_ID,
       );
     });
+
+    it('should still replace existing email when Google OAuth reports different verified email', async () => {
+      const googleId = 'google-123-email-change';
+      const oldEmail = 'old@example.com';
+      const newEmail = 'new-google@example.com';
+
+      const existingGoogleUser = {
+        id: 950,
+        socialId: googleId,
+        provider: AuthProvidersEnum.google,
+        email: oldEmail,
+        firstName: 'Google',
+        lastName: 'User',
+        role: mockRole,
+        status: { id: StatusEnum.active },
+      };
+
+      const googleProfileNewEmail = {
+        id: googleId,
+        email: newEmail,
+        emailConfirmed: true,
+        firstName: 'Google',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingGoogleUser as any);
+
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      const updatedUser = { ...existingGoogleUser, email: newEmail };
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        googleProfileNewEmail,
+        AuthProvidersEnum.google,
+        TESTING_TENANT_ID,
+      );
+
+      // Google IS trusted — email should be updated
+      expect(updateSpy).toHaveBeenCalledWith(
+        950,
+        { email: newEmail },
+        TESTING_TENANT_ID,
+      );
+      expect(result.email).toBe(newEmail);
+    });
   });
 
   describe('findOrCreateUser - Bluesky Avatar in Preferences', () => {
