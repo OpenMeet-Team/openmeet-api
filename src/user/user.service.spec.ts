@@ -1718,6 +1718,67 @@ describe('UserService', () => {
       expect(result.email).toBe(oldEmail);
       expect(result.id).toBe(900);
     });
+
+    it('should NOT activate existing INACTIVE Bluesky user when PDS reports emailConfirmed=true', async () => {
+      const did = 'did:plc:inactive-bluesky-user';
+      const email = 'new-email@example.com';
+
+      const existingInactiveUser = {
+        id: 902,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null, // No email yet
+        firstName: 'Inactive',
+        lastName: 'User',
+        role: mockRole,
+        status: { id: StatusEnum.inactive },
+        preferences: {
+          bluesky: { did, connected: true },
+        },
+      };
+
+      const blueskyProfile = {
+        id: did,
+        email,
+        emailConfirmed: true, // PDS claims verified - we don't trust it
+        firstName: 'Inactive',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingInactiveUser as any);
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue({ ...existingInactiveUser, email, status: { id: StatusEnum.inactive } } as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Email should be added (user had none)
+      expect(updateSpy).toHaveBeenCalledWith(
+        902,
+        expect.objectContaining({ email }),
+        TESTING_TENANT_ID,
+      );
+
+      // But user should NOT be activated — Bluesky emailConfirmed is not trusted
+      expect(updateSpy).toHaveBeenCalledWith(
+        902,
+        expect.not.objectContaining({
+          status: { id: StatusEnum.active },
+        }),
+        TESTING_TENANT_ID,
+      );
+    });
   });
 
   describe('findOrCreateUser - Bluesky Avatar in Preferences', () => {

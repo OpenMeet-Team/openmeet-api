@@ -739,6 +739,17 @@ export class UserService {
 
     await this.getTenantSpecificRepository(tenantId);
 
+    // AT Protocol providers (Bluesky, etc.) are not trusted for email verification.
+    // A malicious PDS can self-report emailConfirmed=true for any email.
+    // Force emailConfirmed to false so email is stored but not trusted.
+    const isUntrustedEmailProvider =
+      authProvider === AuthProvidersEnum.bluesky ||
+      authProvider === AuthProvidersEnum.atprotoService;
+
+    if (isUntrustedEmailProvider) {
+      profile.emailConfirmed = false;
+    }
+
     // Attempt to find the user by socialId and provider
     const existingUser = await this.findBySocialIdAndProvider(
       {
@@ -805,13 +816,6 @@ export class UserService {
 
         return updatedUser as UserEntity;
       }
-
-      // AT Protocol providers (Bluesky, etc.) are not trusted for email verification.
-      // A malicious PDS can self-report emailConfirmed=true for any email.
-      // Only trust email changes from providers with verified email infrastructure.
-      const isUntrustedEmailProvider =
-        authProvider === AuthProvidersEnum.bluesky ||
-        authProvider === AuthProvidersEnum.atprotoService;
 
       // Check if existing user has a different email and OAuth provides verified email
       const hasExistingEmail =
