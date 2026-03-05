@@ -1748,6 +1748,7 @@ describe('AuthService', () => {
               connected: true,
             },
             analytics: { optOut: true },
+            notifications: {},
           },
         }),
       );
@@ -1810,6 +1811,7 @@ describe('AuthService', () => {
         expect.objectContaining({
           preferences: {
             analytics: { optOut: true },
+            notifications: {},
           },
         }),
       );
@@ -1843,6 +1845,40 @@ describe('AuthService', () => {
         expect.objectContaining({
           preferences: {
             analytics: { optOut: true },
+            notifications: {},
+          },
+        }),
+      );
+    });
+
+    it('should deep-merge notification preferences without clobbering other preferences', async () => {
+      const currentUser = {
+        id: 1,
+        slug: 'test-user',
+        email: 'test@example.com',
+        role: { id: 1 },
+        preferences: {
+          bluesky: { connected: true },
+          analytics: { optOut: true },
+        },
+      };
+
+      mockUserService.findById.mockResolvedValue(currentUser);
+      mockUserService.update.mockResolvedValue(currentUser);
+
+      await authService.update(jwtPayload, {
+        preferences: {
+          notifications: { email: false },
+        },
+      });
+
+      expect(mockUserService.update).toHaveBeenCalledWith(
+        jwtPayload.id,
+        expect.objectContaining({
+          preferences: {
+            bluesky: { connected: true },
+            analytics: { optOut: true },
+            notifications: { email: false },
           },
         }),
       );

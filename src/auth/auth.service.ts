@@ -848,6 +848,10 @@ export class AuthService {
           ...(currentPrefs.analytics || {}),
           ...(userDto.preferences.analytics || {}),
         },
+        notifications: {
+          ...(currentPrefs.notifications || {}),
+          ...(userDto.preferences.notifications || {}),
+        },
       } as any;
     }
 
