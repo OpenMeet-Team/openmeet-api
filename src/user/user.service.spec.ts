@@ -1665,6 +1665,59 @@ describe('UserService', () => {
       expect(updateSpy).not.toHaveBeenCalled();
       expect(result.email).toBe(email);
     });
+
+    it('should NOT replace existing email when Bluesky OAuth reports different verified email', async () => {
+      const did = 'did:plc:untrusted-email-change';
+      const oldEmail = 'trusted@example.com';
+      const untrustedNewEmail = 'attacker@malicious-pds.com';
+
+      const existingUserWithEmail = {
+        id: 900,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: oldEmail,
+        firstName: 'Existing',
+        lastName: 'User',
+        role: mockRole,
+        status: { id: StatusEnum.active },
+        preferences: {
+          bluesky: { did, connected: true },
+        },
+      };
+
+      const blueskyProfileDifferentEmail = {
+        id: did,
+        email: untrustedNewEmail,
+        emailConfirmed: true, // PDS claims verified - but we don't trust it
+        firstName: 'Existing',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserWithEmail as any);
+
+      // Mock findByEmail to return null (no conflict) - should not even reach this
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      const updateSpy = jest.spyOn(userService, 'update');
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfileDifferentEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Should NOT update email - Bluesky is untrusted for email changes
+      expect(updateSpy).not.toHaveBeenCalled();
+      // Should return existing user with original email
+      expect(result.email).toBe(oldEmail);
+      expect(result.id).toBe(900);
+    });
   });
 
   describe('findOrCreateUser - Bluesky Avatar in Preferences', () => {

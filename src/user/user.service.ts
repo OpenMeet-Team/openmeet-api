@@ -806,6 +806,13 @@ export class UserService {
         return updatedUser as UserEntity;
       }
 
+      // AT Protocol providers (Bluesky, etc.) are not trusted for email verification.
+      // A malicious PDS can self-report emailConfirmed=true for any email.
+      // Only trust email changes from providers with verified email infrastructure.
+      const isUntrustedEmailProvider =
+        authProvider === AuthProvidersEnum.bluesky ||
+        authProvider === AuthProvidersEnum.atprotoService;
+
       // Check if existing user has a different email and OAuth provides verified email
       const hasExistingEmail =
         existingUser.email &&
@@ -815,7 +822,12 @@ export class UserService {
         profileHasEmail && profile.emailConfirmed === true;
       const emailsAreDifferent = existingUser.email !== profile.email;
 
-      if (hasExistingEmail && profileHasVerifiedEmail && emailsAreDifferent) {
+      if (
+        hasExistingEmail &&
+        profileHasVerifiedEmail &&
+        emailsAreDifferent &&
+        !isUntrustedEmailProvider
+      ) {
         // Check if new email is already in use by another account
         // Note: profile.email is guaranteed to exist here due to profileHasVerifiedEmail check
         const emailConflict = await this.findByEmail(profile.email!, tenantId);
