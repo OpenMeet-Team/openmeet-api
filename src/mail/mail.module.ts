@@ -7,8 +7,13 @@ import { MailController } from './mail.controller';
 
 @Module({
   imports: [ConfigModule, MailerModule, TenantModule],
-  providers: [MailService, MailController],
+  providers: [MailService],
   exports: [MailService],
-  controllers: [MailController],
 })
 export class MailModule {}
+
+@Module({
+  imports: [MailModule, ConfigModule],
+  controllers: [MailController],
+})
+export class MailPreviewModule {}
