@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
 import {
   IsNotEmpty,
@@ -64,11 +64,8 @@ export class CreateShadowAccountDto {
   @IsEnum(AuthProvidersEnum)
   provider: AuthProvidersEnum;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Provider-specific preferences',
-    type: 'object',
-    additionalProperties: true,
-    required: false,
   })
   @IsOptional()
   @ValidateNested()

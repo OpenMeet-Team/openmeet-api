@@ -32,14 +32,11 @@ export class FilesS3PresignedService {
     private readonly tenantConnectionService: TenantConnectionService,
   ) {
     this.s3 = new S3Client({
-      region: configService.get('file.awsS3Region', { infer: true }),
+      region: configService.get<string>('file.awsS3Region'),
       credentials: {
-        accessKeyId: configService.getOrThrow('file.accessKeyId', {
-          infer: true,
-        }),
-        secretAccessKey: configService.getOrThrow('file.secretAccessKey', {
-          infer: true,
-        }),
+        accessKeyId: configService.getOrThrow<string>('file.accessKeyId'),
+        secretAccessKey:
+          configService.getOrThrow<string>('file.secretAccessKey'),
       },
     });
   }

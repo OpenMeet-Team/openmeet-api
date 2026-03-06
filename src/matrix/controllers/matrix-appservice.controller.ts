@@ -1856,10 +1856,10 @@ export class MatrixAppServiceController {
   }
 
   // Debug endpoint to catch any unmatched requests - MUST BE LAST
-  @Get('*')
+  @Get('*splat')
   catchAllGet(@Param() params: any, @Headers() headers: any) {
     this.logger.log(
-      `🔍 APPSERVICE DEBUG: Received GET request to ${params[0]} with headers: ${JSON.stringify(Object.keys(headers))}`,
+      `🔍 APPSERVICE DEBUG: Received GET request to ${params['splat']} with headers: ${JSON.stringify(Object.keys(headers))}`,
     );
     return { debug: 'appservice is receiving requests' };
   }

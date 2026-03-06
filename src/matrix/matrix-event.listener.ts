@@ -1,6 +1,6 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-// import { HttpService } from '@nestjs/axios'; // Currently not used
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { RoomAliasUtils } from './utils/room-alias.utils';
 import { UserService } from '../user/user.service';
@@ -46,18 +46,36 @@ export class MatrixEventListener {
   private readonly logger = new Logger(MatrixEventListener.name);
 
   constructor(
-    @Inject(forwardRef(() => MatrixRoomService))
-    private readonly matrixRoomService: MatrixRoomService,
     private readonly roomAliasUtils: RoomAliasUtils,
-    private readonly userService: UserService,
-    private readonly eventQueryService: EventQueryService,
-    private readonly groupService: GroupService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
     private readonly eventAttendeeQueryService: EventAttendeeQueryService,
+    private readonly moduleRef: ModuleRef,
   ) {
     this.logger.log(
       '🔥 MatrixEventListener initialized and ready to handle events',
     );
+  }
+
+  /**
+   * Resolve request-scoped services with a synthetic tenant context.
+   * NestJS 11 correctly enforces scope propagation, so UserService,
+   * EventQueryService, GroupService, and MatrixRoomService must be
+   * resolved dynamically to keep this listener singleton-scoped.
+   */
+  private async resolveServices(tenantId: string) {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    const [userService, eventQueryService, groupService, matrixRoomService] =
+      await Promise.all([
+        this.moduleRef.resolve(UserService, contextId, { strict: false }),
+        this.moduleRef.resolve(EventQueryService, contextId, { strict: false }),
+        this.moduleRef.resolve(GroupService, contextId, { strict: false }),
+        this.moduleRef.resolve(MatrixRoomService, contextId, { strict: false }),
+      ]);
+    return { userService, eventQueryService, groupService, matrixRoomService };
   }
 
   @OnEvent('chat.event.member.add')
@@ -76,8 +94,11 @@ export class MatrixEventListener {
         return;
       }
 
+      const { userService, eventQueryService, matrixRoomService } =
+        await this.resolveServices(payload.tenantId);
+
       // Get user details
-      const user = await this.userService.findBySlug(
+      const user = await userService.findBySlug(
         payload.userSlug,
         payload.tenantId,
       );
@@ -135,16 +156,16 @@ export class MatrixEventListener {
       this.logger.log(`Adding user ${userMatrixId} to event room ${roomAlias}`);
 
       // Get event details and ensure the Matrix room exists before trying to invite users
-      const event = await this.eventQueryService.showEventBySlugWithTenant(
+      const event = await eventQueryService.showEventBySlugWithTenant(
         payload.eventSlug,
         payload.tenantId,
       );
       if (event) {
-        await this.ensureRoomExists(event, roomAlias, payload.tenantId);
+        await this.ensureRoomExists(event, roomAlias, payload.tenantId, matrixRoomService);
       }
 
       // Add user to the Matrix room
-      await this.matrixRoomService.inviteUser(roomAlias, userMatrixId);
+      await matrixRoomService.inviteUser(roomAlias, userMatrixId);
 
       this.logger.log(
         `Successfully added user ${userMatrixId} to event room ${roomAlias}`,
@@ -173,8 +194,10 @@ export class MatrixEventListener {
         return;
       }
 
+      const { userService, matrixRoomService } = await this.resolveServices(payload.tenantId);
+
       // Get user details
-      const user = await this.userService.findBySlug(
+      const user = await userService.findBySlug(
         payload.userSlug,
         payload.tenantId,
       );
@@ -213,7 +236,7 @@ export class MatrixEventListener {
       );
 
       // Remove user from the Matrix room
-      await this.matrixRoomService.removeUserFromRoom(roomAlias, userMatrixId);
+      await matrixRoomService.removeUserFromRoom(roomAlias, userMatrixId);
 
       this.logger.log(
         `Successfully removed user ${userMatrixId} from event room ${roomAlias}`,
@@ -242,8 +265,12 @@ export class MatrixEventListener {
         return;
       }
 
+      const { userService, groupService, matrixRoomService } = await this.resolveServices(
+        payload.tenantId,
+      );
+
       // Get user details
-      const user = await this.userService.findBySlug(
+      const user = await userService.findBySlug(
         payload.userSlug,
         payload.tenantId,
       );
@@ -282,13 +309,13 @@ export class MatrixEventListener {
       );
 
       // Get group details and ensure the Matrix room exists before trying to invite users
-      const group = await this.groupService.findGroupBySlug(payload.groupSlug);
+      const group = await groupService.findGroupBySlug(payload.groupSlug);
       if (group) {
-        await this.ensureGroupRoomExists(group, roomAlias, payload.tenantId);
+        await this.ensureGroupRoomExists(group, roomAlias, payload.tenantId, matrixRoomService);
       }
 
       // Add user to the Matrix room with appropriate permissions based on role
-      await this.matrixRoomService.inviteUser(roomAlias, userMatrixId);
+      await matrixRoomService.inviteUser(roomAlias, userMatrixId);
 
       // TODO: Phase 2 - Set Matrix room permissions based on group role
       // For now, all invited users get default participant permissions
@@ -321,8 +348,12 @@ export class MatrixEventListener {
         return;
       }
 
+      const { userService: userSvc, matrixRoomService } = await this.resolveServices(
+        payload.tenantId,
+      );
+
       // Get user details
-      const user = await this.userService.findBySlug(
+      const user = await userSvc.findBySlug(
         payload.userSlug,
         payload.tenantId,
       );
@@ -361,7 +392,7 @@ export class MatrixEventListener {
       );
 
       // Remove user from the Matrix room
-      await this.matrixRoomService.removeUserFromRoom(roomAlias, userMatrixId);
+      await matrixRoomService.removeUserFromRoom(roomAlias, userMatrixId);
 
       this.logger.log(
         `Successfully removed user ${userMatrixId} from group room ${roomAlias}`,
@@ -390,8 +421,10 @@ export class MatrixEventListener {
         return;
       }
 
+      const { matrixRoomService } = await this.resolveServices(payload.tenantId);
+
       // Update Matrix room alias for the slug change
-      await this.matrixRoomService.updateRoomAliasForSlugChange(
+      await matrixRoomService.updateRoomAliasForSlugChange(
         'group',
         payload.oldSlug,
         payload.newSlug,
@@ -489,8 +522,12 @@ export class MatrixEventListener {
         return;
       }
 
+      const { eventQueryService: eqs, matrixRoomService } = await this.resolveServices(
+        payload.tenantId,
+      );
+
       // Get the event details
-      const event = await this.eventQueryService.showEventBySlugWithTenant(
+      const event = await eqs.showEventBySlugWithTenant(
         payload.eventSlug,
         payload.tenantId,
       );
@@ -560,7 +597,7 @@ export class MatrixEventListener {
           );
 
           // Add user to the Matrix room
-          await this.matrixRoomService.inviteUser(roomAlias, userMatrixId);
+          await matrixRoomService.inviteUser(roomAlias, userMatrixId);
           successCount++;
 
           this.logger.debug(
@@ -656,17 +693,21 @@ export class MatrixEventListener {
         `Proactively inviting user ${userMatrixId} to event room ${roomAlias}`,
       );
 
+      const { eventQueryService: eqs2, matrixRoomService } = await this.resolveServices(
+        payload.tenantId,
+      );
+
       // Get event details and ensure the Matrix room exists before trying to invite users
-      const event = await this.eventQueryService.showEventBySlugWithTenant(
+      const event = await eqs2.showEventBySlugWithTenant(
         payload.eventSlug,
         payload.tenantId,
       );
       if (event) {
-        await this.ensureRoomExists(event, roomAlias, payload.tenantId);
+        await this.ensureRoomExists(event, roomAlias, payload.tenantId, matrixRoomService);
       }
 
       // Send invitation via MatrixRoomService
-      await this.matrixRoomService.inviteUser(roomAlias, userMatrixId);
+      await matrixRoomService.inviteUser(roomAlias, userMatrixId);
 
       this.logger.log(
         `Successfully sent proactive invitation to ${userMatrixId} for event room ${roomAlias}`,
@@ -699,8 +740,11 @@ export class MatrixEventListener {
         `Manual sync requested for event ${eventSlug} attendees to Matrix`,
       );
 
+      const { eventQueryService: eqs3, matrixRoomService } =
+        await this.resolveServices(tenantId);
+
       // Get the event details
-      const event = await this.eventQueryService.showEventBySlugWithTenant(
+      const event = await eqs3.showEventBySlugWithTenant(
         eventSlug,
         tenantId,
       );
@@ -775,7 +819,7 @@ export class MatrixEventListener {
 
           // Room should already exist via AppService room creation flow
           // Add user to the Matrix room (this will be idempotent if they're already in the room)
-          await this.matrixRoomService.inviteUser(roomAlias, userMatrixId);
+          await matrixRoomService.inviteUser(roomAlias, userMatrixId);
           successCount++;
 
           this.logger.debug(
@@ -847,6 +891,7 @@ export class MatrixEventListener {
     event: { id: number; slug: string; name: string; visibility: string },
     roomAlias: string,
     tenantId: string,
+    matrixRoomService: MatrixRoomService,
   ): Promise<void> {
     try {
       // Check if the room already exists by trying to get its info
@@ -867,7 +912,7 @@ export class MatrixEventListener {
         isPublic: event.visibility === 'public', // Use actual event visibility
       };
 
-      await this.matrixRoomService.createRoom(roomOptions, tenantId);
+      await matrixRoomService.createRoom(roomOptions, tenantId);
 
       this.logger.debug(`Room ensured for event ${event.slug}: ${roomAlias}`);
     } catch (error) {
@@ -901,6 +946,7 @@ export class MatrixEventListener {
     group: { id: number; slug: string; name: string; visibility: string },
     roomAlias: string,
     tenantId: string,
+    matrixRoomService: MatrixRoomService,
   ): Promise<void> {
     try {
       // Check if the room already exists by trying to get its info
@@ -911,10 +957,10 @@ export class MatrixEventListener {
       );
 
       // Extract the local part from the room alias for room creation
-      const localpart = this.matrixRoomService.extractLocalpart(roomAlias);
+      const localpart = matrixRoomService.extractLocalpart(roomAlias);
 
       // Create the room using shared configuration logic
-      await this.matrixRoomService.createEntityRoom(
+      await matrixRoomService.createEntityRoom(
         {
           name: group.name,
           slug: group.slug,

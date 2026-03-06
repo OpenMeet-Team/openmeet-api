@@ -200,7 +200,7 @@ export class MailerService {
       },
     );
 
-    const { html } = mjml(renderedTemplate, {
+    const { html } = await mjml(renderedTemplate, {
       validationLevel: 'strict',
       keepComments: false,
       fonts: {

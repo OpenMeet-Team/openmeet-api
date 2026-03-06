@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { GroupService } from './group.service';
 import { UserService } from '../user/user.service';
@@ -10,10 +11,27 @@ export class GroupListener {
 
   constructor(
     private readonly eventEmitter: EventEmitter2,
-    private readonly groupService: GroupService,
-    private readonly userService: UserService,
+    private readonly moduleRef: ModuleRef,
   ) {
     this.logger.log('GroupListener constructed and ready to handle events');
+  }
+
+  /**
+   * Resolve request-scoped services with a synthetic tenant context.
+   * NestJS 11 correctly enforces scope propagation, so GroupService and
+   * UserService must be resolved dynamically in event listeners.
+   */
+  private async resolveServices(tenantId: string) {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    const [groupService, userService] = await Promise.all([
+      this.moduleRef.resolve(GroupService, contextId, { strict: false }),
+      this.moduleRef.resolve(UserService, contextId, { strict: false }),
+    ]);
+    return { groupService, userService };
   }
 
   @OnEvent('group.deleted')
@@ -71,8 +89,12 @@ export class GroupListener {
         `Matrix handle registered for user ${params.userId}, reprocessing pending group invitations`,
       );
 
+      const { userService, groupService } = await this.resolveServices(
+        params.tenantId,
+      );
+
       // Get user to retrieve slug
-      const user = await this.userService.findById(params.userId);
+      const user = await userService.findById(params.userId);
       if (!user) {
         this.logger.warn(
           `User ${params.userId} not found, cannot reprocess invitations`,
@@ -81,7 +103,7 @@ export class GroupListener {
       }
 
       // Find all groups where user is a member (getGroupsByMember only returns approved memberships)
-      const groups = await this.groupService.getGroupsByMember(params.userId);
+      const groups = await groupService.getGroupsByMember(params.userId);
 
       this.logger.log(
         `Found ${groups.length} group memberships for user ${user.slug}`,

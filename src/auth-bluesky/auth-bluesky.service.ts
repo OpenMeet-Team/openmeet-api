@@ -334,10 +334,9 @@ export class AuthBlueskyService {
         throw new BadRequestException('Invalid redirect_uri');
       }
 
-      const allowedDomainsRaw = this.configService.get(
+      const allowedDomainsRaw = this.configService.get<string>(
         'ALLOWED_REDIRECT_DOMAINS',
-        { infer: true },
-      ) as string | undefined;
+      );
       const allowedDomains = allowedDomainsRaw
         ? allowedDomainsRaw.split(',').map((s) => s.trim())
         : [];
@@ -358,9 +357,7 @@ export class AuthBlueskyService {
     let baseUrl: string;
     if (isMobile) {
       const customScheme =
-        (this.configService.get('MOBILE_CUSTOM_URL_SCHEME', {
-          infer: true,
-        }) as string | undefined) ?? 'net.openmeet.platform';
+        this.configService.get<string>('MOBILE_CUSTOM_URL_SCHEME') ?? 'net.openmeet.platform';
       baseUrl = `${customScheme}:`;
     } else {
       baseUrl = tenantConfig.frontendDomain;

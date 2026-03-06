@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import { ContextIdFactory } from '@nestjs/core';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { MatrixRoomService } from '../../src/matrix/services/matrix-room.service';
@@ -26,7 +27,15 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
 
-    matrixRoomService = moduleFixture.get<MatrixRoomService>(MatrixRoomService);
+    // MatrixRoomService is transitively request-scoped (via EventQueryService etc.)
+    // so we must resolve it with a synthetic tenant context for NestJS 11
+    const contextId = ContextIdFactory.create();
+    moduleFixture.registerRequestByContextId(
+      { tenantId: testTenantId, headers: { 'x-tenant-id': testTenantId } },
+      contextId,
+    );
+    matrixRoomService =
+      await moduleFixture.resolve<MatrixRoomService>(MatrixRoomService, contextId);
     roomAliasUtils = moduleFixture.get<RoomAliasUtils>(RoomAliasUtils);
     globalMatrixValidationService =
       moduleFixture.get<GlobalMatrixValidationService>(
@@ -103,7 +112,7 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
       );
     });
 
-    it('should fail to invite user using room alias (BEFORE fix)', async () => {
+    it('should successfully invite user using room alias', async () => {
       const roomAlias = roomAliasUtils.generateEventRoomAlias(
         testEvent.slug,
         testTenantId,
@@ -113,67 +122,17 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
         process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
       const userMatrixId = `@${matrixHandle}:${serverName}`;
 
-      console.log(`🔍 Testing invitation to room alias: ${roomAlias}`);
-      console.log(`🔍 Inviting user: ${userMatrixId}`);
+      console.log(`Testing invitation to room alias: ${roomAlias}`);
+      console.log(`Inviting user: ${userMatrixId}`);
 
-      // This should fail with "Unknown room" error before the fix
-      let inviteError: any = null;
-      try {
-        await matrixRoomService.inviteUser(roomAlias, userMatrixId);
-        console.log(`❌ UNEXPECTED: Invitation succeeded before fix`);
-      } catch (error) {
-        inviteError = error;
-        console.log(
-          `✅ EXPECTED: Invitation failed with error: ${error.message}`,
-        );
-      }
-
-      // Verify it failed with the expected error
-      expect(inviteError).toBeDefined();
-      // The error structure might be different, so let's be more flexible
-      const errorMessage =
-        inviteError.message || inviteError.toString() || String(inviteError);
-      console.log(`🔍 Error structure:`, inviteError);
-      console.log(`🔍 Error message:`, errorMessage);
-      // For now, just verify that we got an error (the test is about demonstrating the problem)
-      expect(errorMessage).toBeTruthy();
-    });
-
-    it('should successfully invite user after room alias resolution (AFTER fix)', async () => {
-      // This test will pass after we implement the fix
-      const roomAlias = roomAliasUtils.generateEventRoomAlias(
-        testEvent.slug,
-        testTenantId,
-      );
-      const matrixHandle = `${testUser.slug}_${testTenantId}`;
-      const serverName =
-        process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
-      const userMatrixId = `@${matrixHandle}:${serverName}`;
+      // Room alias resolution should resolve the alias to a room ID and invite succeeds
+      await expect(
+        matrixRoomService.inviteUser(roomAlias, userMatrixId),
+      ).resolves.not.toThrow();
 
       console.log(
-        `🔍 Testing invitation after fix: ${roomAlias} -> ${userMatrixId}`,
+        `Successfully invited ${userMatrixId} to room ${roomAlias}`,
       );
-
-      // After implementing the fix, this should succeed
-      let inviteSuccess = false;
-      try {
-        await matrixRoomService.inviteUser(roomAlias, userMatrixId);
-        inviteSuccess = true;
-        console.log(`✅ SUCCESS: Invitation succeeded after fix`);
-      } catch (error) {
-        console.log(`❌ FAILED: Invitation still failing: ${error.message}`);
-
-        // For now, we expect this to fail until we implement the fix
-        // The error structure might be different, so let's be more flexible
-        const errorMessage = error.message || error.toString() || String(error);
-        console.log(`🔍 Error structure:`, error);
-        console.log(`🔍 Error message:`, errorMessage);
-        expect(errorMessage).toBeTruthy();
-      }
-
-      // After the fix is implemented, change this to: expect(inviteSuccess).toBe(true);
-      // For now, we expect it to fail:
-      expect(inviteSuccess).toBe(false);
     });
 
     it('should test the complete RSVP -> invitation flow', async () => {
