@@ -87,7 +87,6 @@ export class ExternalEventSourceDto {
 
   @ApiPropertyOptional({
     description: 'Additional source metadata',
-    type: 'object',
   })
   @IsObject()
   @IsOptional()
@@ -170,7 +169,6 @@ export class ExternalEventDto {
 
   @ApiPropertyOptional({
     description: 'Event image information. Images are uploaded seperately',
-    type: 'object',
     example: { id: 450 },
   })
   @IsObject()
@@ -205,7 +203,6 @@ export class ExternalEventDto {
 
   @ApiPropertyOptional({
     description: 'Recurrence pattern information for recurring events',
-    type: 'object',
   })
   @IsObject()
   @IsOptional()

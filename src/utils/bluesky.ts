@@ -35,9 +35,7 @@ export async function initializeOAuthClient(
     password: redisConfig.password as string | undefined,
   });
 
-  const baseUrl = configService.get('BACKEND_DOMAIN', {
-    infer: true,
-  }) as string;
+  const baseUrl = configService.get<string>('BACKEND_DOMAIN');
   if (!baseUrl) {
     throw new Error('BACKEND_DOMAIN not configured');
   }
@@ -53,9 +51,7 @@ export async function initializeOAuthClient(
   // When DID_PLC_URL is set (e.g. in dev), create a fetch wrapper that
   // tries the private PLC before falling back to public plc.directory.
   // This is needed because the private PLC doesn't federate with public plc.directory.
-  const didPlcUrl = configService.get('DID_PLC_URL', {
-    infer: true,
-  }) as string | undefined;
+  const didPlcUrl = configService.get<string>('DID_PLC_URL');
   const customFetch = createPlcFallbackFetch(didPlcUrl);
 
   // Use path-based tenant routing for OAuth metadata URLs.
@@ -146,9 +142,7 @@ async function loadKeys(configService: ConfigService): Promise<JoseKey[]> {
 
   for (let i = 1; i <= 3; i++) {
     const encodedKeyData: string =
-      configService.get(`BLUESKY_KEY_${i}`, {
-        infer: true,
-      }) || '';
+      configService.get<string>(`BLUESKY_KEY_${i}`) || '';
     if (!encodedKeyData) {
       console.warn(`BLUESKY_KEY_${i} not found in environment variables`);
       continue;

@@ -956,7 +956,7 @@ export class OidcController {
         if (userToken) {
           try {
             const payload: any = await this.jwtService.verifyAsync(userToken, {
-              secret: this.configService.get('auth.secret', { infer: true }),
+              secret: this.configService.get<string>('auth.secret'),
             });
             tenantFromToken = payload.tenantId;
             this.logger.debug(

@@ -31,22 +31,20 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   private createRedisClient(): RedisClientType {
     return createClient({
       socket: {
-        host: this.configService.get('ELASTICACHE_HOST', { infer: true }),
-        port: this.configService.get('ELASTICACHE_PORT', { infer: true }),
+        host: this.configService.get<string>('ELASTICACHE_HOST'),
+        port: this.configService.get<number>('ELASTICACHE_PORT'),
         tls:
-          this.configService.get('ELASTICACHE_TLS', { infer: true }) === 'true',
+          this.configService.get<string>('ELASTICACHE_TLS') === 'true',
         rejectUnauthorized:
-          this.configService.get('ELASTICACHE_REJECT_UNAUTHORIZED', {
-            infer: true,
-          }) === 'true',
+          this.configService.get<string>('ELASTICACHE_REJECT_UNAUTHORIZED') === 'true',
         connectTimeout: this.CONNECTION_TIMEOUT,
         keepAlive: 30000, // Send TCP keepalive every 30 seconds
         noDelay: true, // Disable Nagle's algorithm for lower latency
       },
       // ElastiCache uses AUTH token instead of username/password, if set to true
-      ...(this.configService.get('ELASTICACHE_AUTH', { infer: true }) ===
+      ...(this.configService.get<string>('ELASTICACHE_AUTH') ===
         'true' && {
-        password: this.configService.get('ELASTICACHE_TOKEN', { infer: true }),
+        password: this.configService.get<string>('ELASTICACHE_TOKEN'),
       }),
     });
   }
@@ -71,7 +69,7 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   private async connectWithRetry(attempt = 1): Promise<void> {
     try {
       this.logger.log(
-        `Attempting to connect to Redis [${this.configService.get('ELASTICACHE_HOST', { infer: true })}:${this.configService.get('ELASTICACHE_PORT', { infer: true })}] (attempt ${attempt}/${this.MAX_RETRIES})`,
+        `Attempting to connect to Redis [${this.configService.get<string>('ELASTICACHE_HOST')}:${this.configService.get<number>('ELASTICACHE_PORT')}] (attempt ${attempt}/${this.MAX_RETRIES})`,
       );
 
       if (this.redis) {
@@ -325,13 +323,13 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
 
   getRedisConfig() {
     return {
-      host: this.configService.get('ELASTICACHE_HOST', { infer: true }),
-      port: this.configService.get('ELASTICACHE_PORT', { infer: true }),
+      host: this.configService.get<string>('ELASTICACHE_HOST'),
+      port: this.configService.get<number>('ELASTICACHE_PORT'),
       tls:
-        this.configService.get('ELASTICACHE_TLS', { infer: true }) === 'true',
-      ...(this.configService.get('ELASTICACHE_AUTH', { infer: true }) ===
+        this.configService.get<string>('ELASTICACHE_TLS') === 'true',
+      ...(this.configService.get<string>('ELASTICACHE_AUTH') ===
         'true' && {
-        password: this.configService.get('ELASTICACHE_TOKEN', { infer: true }),
+        password: this.configService.get<string>('ELASTICACHE_TOKEN'),
       }),
     };
   }

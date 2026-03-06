@@ -38,7 +38,6 @@ export class UpdateEventAttendeeDto {
 
   @ApiPropertyOptional({
     description: 'Additional data from the source',
-    type: 'object',
   })
   sourceData?: Record<string, unknown>;
 }

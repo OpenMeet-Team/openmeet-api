@@ -1,19 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import {
-  HealthIndicator,
-  HealthIndicatorResult,
-  HealthCheckError,
-} from '@nestjs/terminus';
+import { HealthIndicatorService, HealthIndicatorResult } from '@nestjs/terminus';
 import axios from 'axios';
 import { MatrixCoreService } from '../services/matrix-core.service';
 
 @Injectable()
-export class MatrixHealthIndicator extends HealthIndicator {
-  constructor(private readonly matrixCoreService: MatrixCoreService) {
-    super();
-  }
+export class MatrixHealthIndicator {
+  constructor(
+    private readonly matrixCoreService: MatrixCoreService,
+    private readonly healthIndicatorService: HealthIndicatorService,
+  ) {}
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
+    const indicator = this.healthIndicatorService.check(key);
+
     try {
       // Get Matrix server configuration from core service
       const config = this.matrixCoreService.getConfig();
@@ -58,17 +57,14 @@ export class MatrixHealthIndicator extends HealthIndicator {
       const isHealthy = serverAvailable && appServiceHealthy;
 
       if (isHealthy) {
-        return this.getStatus(key, true, data);
+        return indicator.up(data);
       }
 
-      throw new HealthCheckError(
-        'Matrix health check failed',
-        this.getStatus(key, false, data),
-      );
+      return indicator.down(data);
     } catch (error) {
       // General error handling
       const config = this.matrixCoreService.getConfig();
-      return this.getStatus(key, false, {
+      return indicator.down({
         message: error.message,
         serverUrl: config.baseUrl,
         error: error.toString(),

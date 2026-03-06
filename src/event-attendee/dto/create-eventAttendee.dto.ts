@@ -59,7 +59,6 @@ export class CreateEventAttendeeDto {
 
   @ApiPropertyOptional({
     description: 'Additional data from the source',
-    type: 'object',
   })
   @IsOptional()
   sourceData?: Record<string, unknown>;
