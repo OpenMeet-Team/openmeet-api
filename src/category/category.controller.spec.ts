@@ -15,7 +15,6 @@ describe('CategoryController', () => {
 
   const mockCategoryService = {
     findAll: jest.fn(),
-    findOne: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
@@ -128,6 +127,12 @@ describe('CategoryController', () => {
 
         const result = await controller.findAll();
         expect(result).toEqual(categories);
+      });
+    });
+
+    describe('GET /categories/:id (removed)', () => {
+      it('should not expose a findOne route', () => {
+        expect(controller).not.toHaveProperty('findOne');
       });
     });
     describe('PATCH /categories/:id', () => {
