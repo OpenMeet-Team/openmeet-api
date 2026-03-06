@@ -11,7 +11,6 @@ export class CalendarInviteListener {
   private readonly logger = new Logger(CalendarInviteListener.name);
 
   constructor(
-    private readonly calendarInviteService: CalendarInviteService,
     private readonly moduleRef: ModuleRef,
     private readonly tenantConnectionService: TenantConnectionService,
   ) {}
@@ -21,18 +20,26 @@ export class CalendarInviteListener {
    * Required because EventEmitter events fire outside HTTP request scope,
    * so AggregateByTenantContextIdStrategy.attach() is never called and
    * REQUEST would be undefined. This pattern follows ActivityFeedListener.
+   *
+   * NestJS 11 correctly enforces scope propagation: CalendarInviteService
+   * and EventAttendeeService are transitively request-scoped, so they must
+   * be resolved dynamically rather than injected in the constructor.
    */
-  private async resolveEventAttendeeService(
-    tenantId: string,
-  ): Promise<EventAttendeeService> {
+  private async resolveServices(tenantId: string) {
     const contextId = ContextIdFactory.create();
     this.moduleRef.registerRequestByContextId(
       { tenantId, headers: { 'x-tenant-id': tenantId } },
       contextId,
     );
-    return this.moduleRef.resolve(EventAttendeeService, contextId, {
-      strict: false,
-    });
+    const [calendarInviteService, eventAttendeeService] = await Promise.all([
+      this.moduleRef.resolve(CalendarInviteService, contextId, {
+        strict: false,
+      }),
+      this.moduleRef.resolve(EventAttendeeService, contextId, {
+        strict: false,
+      }),
+    ]);
+    return { calendarInviteService, eventAttendeeService };
   }
 
   @OnEvent('event.rsvp.added')
@@ -57,10 +64,9 @@ export class CalendarInviteListener {
     }
 
     try {
-      // Dynamically resolve EventAttendeeService with tenant context
-      const eventAttendeeService = await this.resolveEventAttendeeService(
-        params.tenantId,
-      );
+      // Dynamically resolve scoped services with tenant context
+      const { calendarInviteService, eventAttendeeService } =
+        await this.resolveServices(params.tenantId);
 
       // Fetch attendee with event and user relations in one query
       const attendee = await eventAttendeeService.findOne({
@@ -128,7 +134,7 @@ export class CalendarInviteListener {
       );
 
       // Send calendar invite
-      await this.calendarInviteService.sendCalendarInvite(
+      await calendarInviteService.sendCalendarInvite(
         attendee.event,
         attendee.user,
         attendee.event.user,

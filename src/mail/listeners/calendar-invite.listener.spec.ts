@@ -14,6 +14,7 @@ describe('CalendarInviteListener - Behavior Tests', () => {
     resolve: jest.Mock;
   };
   let mockEventAttendeeService: { findOne: jest.Mock };
+  let mockCalendarInviteService: { sendCalendarInvite: jest.Mock };
 
   const mockTenantConfig = {
     tenantId: 'test',
@@ -37,9 +38,21 @@ describe('CalendarInviteListener - Behavior Tests', () => {
       findOne: jest.fn().mockResolvedValue(defaultAttendee),
     };
 
+    mockCalendarInviteService = {
+      sendCalendarInvite: jest.fn(),
+    };
+
     mockModuleRef = {
       registerRequestByContextId: jest.fn(),
-      resolve: jest.fn().mockResolvedValue(mockEventAttendeeService),
+      resolve: jest.fn().mockImplementation((serviceClass: any) => {
+        if (serviceClass === CalendarInviteService) {
+          return Promise.resolve(mockCalendarInviteService);
+        }
+        if (serviceClass === EventAttendeeService) {
+          return Promise.resolve(mockEventAttendeeService);
+        }
+        return Promise.resolve({});
+      }),
     };
 
     // Spy on ContextIdFactory.create to verify it's called
@@ -51,10 +64,6 @@ describe('CalendarInviteListener - Behavior Tests', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CalendarInviteListener,
-        {
-          provide: CalendarInviteService,
-          useValue: { sendCalendarInvite: jest.fn() },
-        },
         {
           provide: TenantConnectionService,
           useValue: {
@@ -69,8 +78,7 @@ describe('CalendarInviteListener - Behavior Tests', () => {
     }).compile();
 
     listener = module.get(CalendarInviteListener);
-    const calendarService = module.get(CalendarInviteService);
-    sendInviteSpy = jest.spyOn(calendarService, 'sendCalendarInvite');
+    sendInviteSpy = mockCalendarInviteService.sendCalendarInvite;
   });
 
   afterEach(() => {

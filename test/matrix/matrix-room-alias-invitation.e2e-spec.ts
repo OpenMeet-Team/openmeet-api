@@ -26,7 +26,8 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
 
-    matrixRoomService = moduleFixture.get<MatrixRoomService>(MatrixRoomService);
+    matrixRoomService =
+      await moduleFixture.resolve<MatrixRoomService>(MatrixRoomService);
     roomAliasUtils = moduleFixture.get<RoomAliasUtils>(RoomAliasUtils);
     globalMatrixValidationService =
       moduleFixture.get<GlobalMatrixValidationService>(
