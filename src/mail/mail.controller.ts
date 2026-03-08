@@ -1,11 +1,14 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { MailService } from './mail.service';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiExcludeController } from '@nestjs/swagger';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { getTenantConfig } from '../utils/tenant-config';
+import { TestOnlyGuard } from '../shared/guard/test-only.guard';
 
 @ApiTags('Mail')
 @Controller('mail')
+@ApiExcludeController()
+@UseGuards(TestOnlyGuard)
 export class MailController {
   constructor(private readonly mailService: MailService) {}
 

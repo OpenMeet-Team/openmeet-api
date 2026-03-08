@@ -6,7 +6,6 @@ import {
   Param,
   Patch,
   Delete,
-  NotFoundException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -62,31 +61,6 @@ export class CategoryController {
           span.setAttribute('categories.count', result.length);
           span.setAttribute('duration_ms', Date.now() - startTime);
           return result;
-        } finally {
-          span.end();
-        }
-      },
-    );
-  }
-
-  @Public()
-  @UseGuards(JWTAuthGuard)
-  @Get(':id')
-  @ApiOperation({ summary: 'Get category by ID' })
-  @Trace('category.controller.findOne')
-  async findOne(@Param('id') id: number): Promise<CategoryEntity> {
-    return await this.tracer.startActiveSpan(
-      'category.controller.findOne',
-      async (span) => {
-        try {
-          span.setAttribute('category.id', id);
-          const category = await this.categoryService.findOne(+id);
-          if (!category) {
-            span.setAttribute('error', true);
-            span.setAttribute('error.type', 'NotFound');
-            throw new NotFoundException(`Category with ID ${id} not found`);
-          }
-          return category;
         } finally {
           span.end();
         }

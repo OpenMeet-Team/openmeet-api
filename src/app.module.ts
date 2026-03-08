@@ -20,7 +20,7 @@ import { AuthGoogleModule } from './auth-google/auth-google.module';
 import { I18nModule } from 'nestjs-i18n/dist/i18n.module';
 import { HeaderResolver } from 'nestjs-i18n';
 import { TypeOrmConfigService } from './database/typeorm-config.service';
-import { MailModule } from './mail/mail.module';
+import { MailModule, MailPreviewModule } from './mail/mail.module';
 import { HomeModule } from './home/home.module';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { AllConfigType } from './config/config.type';
@@ -178,7 +178,9 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     AtprotoIdentityModule,
     MeModule,
     // Conditionally import test helpers only in non-production environments
-    ...(process.env.NODE_ENV !== 'production' ? [TestHelpersModule] : []),
+    ...(process.env.NODE_ENV !== 'production'
+      ? [TestHelpersModule, MailPreviewModule]
+      : []),
   ],
   providers: [
     TenantConnectionService,
