@@ -650,6 +650,10 @@ export class AuthBlueskyService {
     platform?: OAuthPlatform,
     redirectUri?: string,
   ): Promise<string> {
+    if (!tenantId) {
+      throw new BadRequestException('tenantId query parameter is required');
+    }
+
     try {
       this.logger.debug('Creating auth URL for Bluesky OAuth', {
         handle,

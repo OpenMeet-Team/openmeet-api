@@ -89,6 +89,26 @@ describe('AuthBlueskyService - Error Handling', () => {
   });
 
   describe('createAuthUrl', () => {
+    it('should throw BadRequestException when tenantId is undefined', async () => {
+      await expect(
+        service.createAuthUrl('test.bsky.social', undefined as unknown as string),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.createAuthUrl('test.bsky.social', undefined as unknown as string),
+      ).rejects.toThrow('tenantId query parameter is required');
+    });
+
+    it('should throw BadRequestException when tenantId is empty string', async () => {
+      await expect(
+        service.createAuthUrl('test.bsky.social', ''),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.createAuthUrl('test.bsky.social', ''),
+      ).rejects.toThrow('tenantId query parameter is required');
+    });
+
     it('should throw BadRequestException when OAuth client initialization fails', async () => {
       // Arrange: Mock initializeClient to throw an error
       jest
