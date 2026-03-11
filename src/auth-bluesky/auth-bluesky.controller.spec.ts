@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthBlueskyController } from './auth-bluesky.controller';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { ModuleRef } from '@nestjs/core';
+import { OAuthPlatform } from '../auth/types/oauth.types';
 
 describe('AuthBlueskyController', () => {
   let controller: AuthBlueskyController;
@@ -56,7 +57,7 @@ describe('AuthBlueskyController', () => {
 
       await controller.getAuthUrl(
         'user.bsky.social',
-        'mobile',
+        'android' as OAuthPlatform,
         'myapp://callback',
         mockRequest,
       );
@@ -64,7 +65,7 @@ describe('AuthBlueskyController', () => {
       expect(mockAuthBlueskyService.createAuthUrl).toHaveBeenCalledWith(
         'user.bsky.social',
         'test-tenant-id',
-        'mobile',
+        'android',
         'myapp://callback',
       );
     });
