@@ -594,6 +594,17 @@ export class BlueskyService {
     }
   }
 
+  /**
+   * Revoke an OAuth session for a DID.
+   *
+   * @param tenantId - The tenant ID
+   * @param did - The user's DID
+   */
+  async revokeOAuthSession(tenantId: string, did: string): Promise<void> {
+    const client = await this.getOAuthClient(tenantId);
+    await client.revoke(did);
+  }
+
   async deleteEventRecord(
     event: EventEntity,
     did: string,

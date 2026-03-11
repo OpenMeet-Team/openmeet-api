@@ -34,9 +34,11 @@ describe('PdsSessionService', () => {
   };
   let mockPdsAccountService: {
     createSession: jest.Mock;
+    deleteSession: jest.Mock;
   };
   let mockBlueskyService: {
     resumeSession: jest.Mock;
+    revokeOAuthSession: jest.Mock;
   };
   let mockElastiCacheService: {
     get: jest.Mock;
@@ -87,10 +89,12 @@ describe('PdsSessionService', () => {
 
     mockPdsAccountService = {
       createSession: jest.fn(),
+      deleteSession: jest.fn(),
     };
 
     mockBlueskyService = {
       resumeSession: jest.fn(),
+      revokeOAuthSession: jest.fn(),
     };
 
     mockElastiCacheService = {
@@ -414,6 +418,108 @@ describe('PdsSessionService', () => {
       expect(mockElastiCacheService.del).toHaveBeenCalledWith(
         `pds:session:${tenantId}:${testDid}`,
       );
+    });
+  });
+
+  describe('disconnectSession()', () => {
+    it('should throw NotFoundException when no identity found', async () => {
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      await expect(
+        service.disconnectSession(tenantId, userUlid),
+      ).rejects.toThrow('No AT Protocol identity found');
+    });
+
+    it('should revoke OAuth session for non-custodial identity and invalidate cache', async () => {
+      const oauthIdentity = createMockIdentity({
+        isCustodial: false,
+        pdsCredentials: null,
+      });
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        oauthIdentity,
+      );
+      mockBlueskyService.revokeOAuthSession.mockResolvedValue(undefined);
+
+      const result = await service.disconnectSession(tenantId, userUlid);
+
+      expect(mockBlueskyService.revokeOAuthSession).toHaveBeenCalledWith(
+        tenantId,
+        testDid,
+      );
+      expect(mockElastiCacheService.del).toHaveBeenCalledWith(
+        `pds:session:${tenantId}:${testDid}`,
+      );
+      expect(result).toEqual({
+        success: true,
+        message: 'AT Protocol session disconnected. You can reconnect from Settings.',
+      });
+    });
+
+    it('should still succeed when OAuth revocation fails', async () => {
+      const oauthIdentity = createMockIdentity({
+        isCustodial: false,
+        pdsCredentials: null,
+      });
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        oauthIdentity,
+      );
+      mockBlueskyService.revokeOAuthSession.mockRejectedValue(
+        new Error('OAuth revoke failed'),
+      );
+
+      const result = await service.disconnectSession(tenantId, userUlid);
+
+      expect(result.success).toBe(true);
+      expect(mockElastiCacheService.del).toHaveBeenCalled();
+    });
+
+    it('should create then delete session for custodial identity with credentials', async () => {
+      const custodialIdentity = createMockIdentity();
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        custodialIdentity,
+      );
+      mockPdsCredentialService.decrypt.mockReturnValue(decryptedPassword);
+      mockPdsAccountService.createSession.mockResolvedValue({
+        did: testDid,
+        handle: testHandle,
+        accessJwt: 'access-jwt',
+        refreshJwt: 'refresh-jwt',
+      });
+      mockPdsAccountService.deleteSession.mockResolvedValue(undefined);
+
+      const result = await service.disconnectSession(tenantId, userUlid);
+
+      expect(mockPdsCredentialService.decrypt).toHaveBeenCalledWith(
+        encryptedCredentials,
+      );
+      expect(mockPdsAccountService.createSession).toHaveBeenCalledWith(
+        testDid,
+        decryptedPassword,
+      );
+      expect(mockPdsAccountService.deleteSession).toHaveBeenCalledWith(
+        testPdsUrl,
+        'refresh-jwt',
+      );
+      expect(mockElastiCacheService.del).toHaveBeenCalledWith(
+        `pds:session:${tenantId}:${testDid}`,
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('should still succeed when custodial session deletion fails', async () => {
+      const custodialIdentity = createMockIdentity();
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        custodialIdentity,
+      );
+      mockPdsCredentialService.decrypt.mockReturnValue(decryptedPassword);
+      mockPdsAccountService.createSession.mockRejectedValue(
+        new Error('PDS login failed'),
+      );
+
+      const result = await service.disconnectSession(tenantId, userUlid);
+
+      expect(result.success).toBe(true);
+      expect(mockElastiCacheService.del).toHaveBeenCalled();
     });
   });
 });

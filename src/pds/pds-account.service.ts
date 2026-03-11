@@ -177,6 +177,29 @@ export class PdsAccountService {
   }
 
   /**
+   * Delete (logout) a session on the PDS.
+   *
+   * Uses the refresh JWT as the bearer token per AT Protocol spec.
+   *
+   * @param pdsUrl - The PDS URL to call
+   * @param refreshJwt - The refresh JWT from the session
+   * @throws PdsApiError if the request fails
+   */
+  async deleteSession(pdsUrl: string, refreshJwt: string): Promise<void> {
+    const url = `${pdsUrl}/xrpc/com.atproto.server.deleteSession`;
+
+    await this.withRetry(async () => {
+      await firstValueFrom(
+        this.httpService.post(url, undefined, {
+          headers: {
+            Authorization: `Bearer ${refreshJwt}`,
+          },
+        }),
+      );
+    });
+  }
+
+  /**
    * Check if a handle is available on the PDS.
    *
    * @param handle - The handle to check
