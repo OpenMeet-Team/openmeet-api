@@ -47,15 +47,15 @@ export class AuthBlueskyController {
 
   @Get('authorize')
   @Public()
-  @TenantPublic()
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: String })
   async getAuthUrl(
     @Query('handle') handle: string,
-    @Query('tenantId') tenantId: string,
     @Query('platform') platform?: OAuthPlatform,
     @Query('redirect_uri') redirectUri?: string,
+    @Request() request?: any,
   ) {
+    const tenantId = request.tenantId;
     return await this.authBlueskyService.createAuthUrl(
       handle,
       tenantId,
