@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Post,
   HttpCode,
@@ -35,6 +36,7 @@ import { AtprotoIdentityDto } from './dto/atproto-identity.dto';
 import { ResetPdsPasswordDto } from './dto/reset-pds-password.dto';
 import { UpdateHandleDto } from './dto/update-handle.dto';
 import { PdsAccountService } from '../pds/pds-account.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 import { PdsApiError } from '../pds/pds.errors';
 import { NullableType } from '../utils/types/nullable.type';
 import { AllConfigType } from '../config/config.type';
@@ -52,6 +54,7 @@ export class AtprotoIdentityController {
     private readonly atprotoIdentityService: AtprotoIdentityService,
     private readonly recoveryService: AtprotoIdentityRecoveryService,
     private readonly pdsAccountService: PdsAccountService,
+    private readonly pdsSessionService: PdsSessionService,
     private readonly userService: UserService,
     private readonly blueskyService: BlueskyService,
     private readonly configService: ConfigService<AllConfigType>,
@@ -344,6 +347,32 @@ export class AtprotoIdentityController {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Disconnect (logout) the user's AT Protocol session.
+   *
+   * Kills the active PDS session so hasActiveSession returns false.
+   * The identity record (DID, handle) stays intact.
+   */
+  @ApiBearerAuth()
+  @Delete('session')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Disconnect AT Protocol session' })
+  @ApiOkResponse({ description: 'Session disconnected successfully' })
+  async disconnectSession(
+    @Request() request: any,
+  ): Promise<{ success: boolean; message: string }> {
+    const tenantId = request.tenantId;
+    const userId = request.user.id;
+
+    const user = await this.userService.findById(userId, tenantId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.pdsSessionService.disconnectSession(tenantId, user.ulid);
   }
 
   /**

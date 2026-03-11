@@ -1,4 +1,11 @@
-import { Injectable, Inject, Scope, Logger, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Scope,
+  Logger,
+  forwardRef,
+  NotFoundException,
+} from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Agent, CredentialSession } from '@atproto/api';
 import { PdsCredentialService } from './pds-credential.service';
@@ -127,6 +134,70 @@ export class PdsSessionService {
     const cacheKey = this.getCacheKey(tenantId, did);
     await this.elastiCacheService.del(cacheKey);
     this.logger.debug(`Invalidated cached session for DID ${did}`);
+  }
+
+  /**
+   * Disconnect (logout) a user's AT Protocol session.
+   *
+   * For OAuth users: revokes the OAuth session.
+   * For custodial users: creates a session then deletes it on the PDS.
+   * Always invalidates the cached session in Redis.
+   *
+   * @param tenantId - The tenant ID
+   * @param userUlid - The user's ULID
+   * @returns Success result with message
+   * @throws NotFoundException if no AT Protocol identity found
+   */
+  async disconnectSession(
+    tenantId: string,
+    userUlid: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const identity = await this.userAtprotoIdentityService.findByUserUlid(
+      tenantId,
+      userUlid,
+    );
+    if (!identity) {
+      throw new NotFoundException('No AT Protocol identity found');
+    }
+
+    if (!identity.isCustodial) {
+      // OAuth: revoke via the BlueskyService
+      try {
+        await this.blueskyService.revokeOAuthSession(tenantId, identity.did);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to revoke OAuth session for ${identity.did}: ${error.message}`,
+        );
+      }
+    } else if (identity.pdsCredentials) {
+      // Custodial: create a session then delete it on the PDS
+      try {
+        const password = this.pdsCredentialService.decrypt(
+          identity.pdsCredentials,
+        );
+        const session = await this.pdsAccountService.createSession(
+          identity.did,
+          password,
+        );
+        await this.pdsAccountService.deleteSession(
+          identity.pdsUrl,
+          session.refreshJwt,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to delete custodial session for ${identity.did}: ${error.message}`,
+        );
+      }
+    }
+
+    // Always invalidate the cached session
+    await this.invalidateSession(tenantId, identity.did);
+
+    return {
+      success: true,
+      message:
+        'AT Protocol session disconnected. You can reconnect from Settings.',
+    };
   }
 
   /**

@@ -16,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { PdsAccountService } from '../pds/pds-account.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 import { PdsApiError } from '../pds/pds.errors';
 import 'reflect-metadata';
 
@@ -27,6 +28,7 @@ describe('AtprotoIdentityController', () => {
   let userService: UserService;
   let configService: ConfigService;
   let pdsAccountService: PdsAccountService;
+  let pdsSessionService: PdsSessionService;
   let blueskyService: BlueskyService;
 
   const mockIdentityEntity: Partial<UserAtprotoIdentityEntity> = {
@@ -91,6 +93,10 @@ describe('AtprotoIdentityController', () => {
       resetPassword: jest.fn(),
     };
 
+    const mockPdsSessionService = {
+      disconnectSession: jest.fn(),
+    };
+
     const mockUserServiceImpl = {
       findById: jest.fn().mockResolvedValue(mockUserEntity),
     };
@@ -127,6 +133,10 @@ describe('AtprotoIdentityController', () => {
           useValue: mockPdsAccountService,
         },
         {
+          provide: PdsSessionService,
+          useValue: mockPdsSessionService,
+        },
+        {
           provide: UserService,
           useValue: mockUserServiceImpl,
         },
@@ -156,6 +166,7 @@ describe('AtprotoIdentityController', () => {
     userService = module.get<UserService>(UserService);
     configService = module.get<ConfigService>(ConfigService);
     pdsAccountService = module.get<PdsAccountService>(PdsAccountService);
+    pdsSessionService = module.get<PdsSessionService>(PdsSessionService);
     blueskyService = module.get<BlueskyService>(BlueskyService);
   });
 
@@ -927,6 +938,55 @@ describe('AtprotoIdentityController', () => {
       expect(ttl).toBeDefined();
       // TTL should be at least 1 hour (3600000 ms)
       expect(ttl).toBeGreaterThanOrEqual(3600000);
+    });
+  });
+
+  describe('disconnectSession', () => {
+    it('should disconnect session and return success', async () => {
+      // Arrange
+      const mockResult = {
+        success: true,
+        message:
+          'AT Protocol session disconnected. You can reconnect from Settings.',
+      };
+      jest
+        .spyOn(pdsSessionService, 'disconnectSession')
+        .mockResolvedValue(mockResult);
+
+      // Act
+      const result = await controller.disconnectSession(mockRequest);
+
+      // Assert
+      expect(userService.findById).toHaveBeenCalledWith(1, 'test-tenant');
+      expect(pdsSessionService.disconnectSession).toHaveBeenCalledWith(
+        'test-tenant',
+        '01234567890123456789012345',
+      );
+      expect(result).toEqual(mockResult);
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      // Arrange
+      jest.spyOn(userService, 'findById').mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        controller.disconnectSession(mockRequest),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should propagate NotFoundException from pdsSessionService', async () => {
+      // Arrange
+      jest
+        .spyOn(pdsSessionService, 'disconnectSession')
+        .mockRejectedValue(
+          new NotFoundException('No AT Protocol identity found'),
+        );
+
+      // Act & Assert
+      await expect(
+        controller.disconnectSession(mockRequest),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
