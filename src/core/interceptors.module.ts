@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { RequestCounterInterceptor } from '../interceptors/request-counter.interceptor';
+import { OAuthLinkHeaderInterceptor } from '../interceptors/oauth-link-header.interceptor';
 import { GlobalExceptionFilter } from '../filters/global-exception.filter';
 import { MetricsModule } from '../metrics/metrics.module';
 
@@ -15,12 +16,17 @@ import { MetricsModule } from '../metrics/metrics.module';
   providers: [
     // Register the interceptor and filter directly
     RequestCounterInterceptor,
+    OAuthLinkHeaderInterceptor,
     GlobalExceptionFilter,
 
     // Register them as global providers through NestJS tokens
     {
       provide: APP_INTERCEPTOR,
       useExisting: RequestCounterInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useExisting: OAuthLinkHeaderInterceptor,
     },
     {
       provide: APP_FILTER,
@@ -30,6 +36,7 @@ import { MetricsModule } from '../metrics/metrics.module';
   exports: [
     // Export them in case they need to be used elsewhere
     RequestCounterInterceptor,
+    OAuthLinkHeaderInterceptor,
     GlobalExceptionFilter,
   ],
 })
