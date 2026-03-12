@@ -204,6 +204,15 @@ export class EventAttendeeService {
       this.logger.debug(
         `[syncRsvpToAtproto] Skipped - event not eligible for AT Protocol publishing`,
       );
+    } else if (publishResult.action === 'error') {
+      this.logger.warn(
+        `[syncRsvpToAtproto] RSVP ${attendee.id} saved but AT Protocol publish failed: ${publishResult.error}`,
+        {
+          attendeeId: attendee.id,
+          eventSlug: attendee.event?.slug,
+          needsOAuthLink: publishResult.needsOAuthLink,
+        },
+      );
     }
   }
 
