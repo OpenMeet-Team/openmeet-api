@@ -57,6 +57,7 @@ describe('AtprotoServiceAuthService', () => {
     aud: 'did:web:api.openmeet.net',
     lxm: 'net.openmeet.auth',
     exp: Math.floor(Date.now() / 1000) + 300, // 5 min in future
+    jti: 'unique-token-id-123',
   };
 
   beforeEach(async () => {
@@ -159,6 +160,24 @@ describe('AtprotoServiceAuthService', () => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { iss: _iss, ...noIss } = validPayload;
       const token = makeJwt(validHeader, noIss);
+
+      await expect(service.verifyAndExchange(token, 'tenant1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should reject a JWT missing jti claim', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { jti: _jti, ...noJti } = validPayload;
+      const token = makeJwt(validHeader, noJti);
+
+      await expect(service.verifyAndExchange(token, 'tenant1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should reject a JWT with empty string jti claim', async () => {
+      const token = makeJwt(validHeader, { ...validPayload, jti: '' });
 
       await expect(service.verifyAndExchange(token, 'tenant1')).rejects.toThrow(
         BadRequestException,

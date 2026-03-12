@@ -48,7 +48,7 @@ export class AtprotoServiceAuthService {
    *
    * The JWT is signed by the user's PDS via com.atproto.server.getServiceAuth.
    * We verify:
-   *   1. JWT structure and claims (aud, lxm, exp, iss)
+   *   1. JWT structure and claims (aud, lxm, exp, iss, jti)
    *   2. Cryptographic signature against the user's DID document
    *   3. User exists in OpenMeet (auto-created if not)
    *
@@ -83,15 +83,20 @@ export class AtprotoServiceAuthService {
     }
 
     // Step 2: Validate claims
-    const { iss, aud, lxm, exp } = payload as {
+    const { iss, aud, lxm, exp, jti } = payload as {
       iss?: string;
       aud?: string;
       lxm?: string;
       exp?: number;
+      jti?: string;
     };
 
     if (!iss) {
       throw new BadRequestException('JWT missing required claim: iss');
+    }
+
+    if (!jti) {
+      throw new BadRequestException('JWT missing required claim: jti');
     }
 
     const serviceDid =
