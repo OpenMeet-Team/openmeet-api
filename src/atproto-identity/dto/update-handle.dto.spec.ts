@@ -3,7 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { UpdateHandleDto } from './update-handle.dto';
 
 describe('UpdateHandleDto', () => {
-  async function validateDto(data: Partial<UpdateHandleDto>) {
+  function validateDto(data: Partial<UpdateHandleDto>) {
     const dto = plainToInstance(UpdateHandleDto, data);
     return validate(dto);
   }

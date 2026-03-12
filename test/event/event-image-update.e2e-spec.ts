@@ -6,7 +6,7 @@ import {
   getEvent,
   createFile,
 } from '../utils/functions';
-import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { TESTING_APP_URL } from '../utils/constants';
 import {
   EventStatus,
   EventType,

@@ -1,5 +1,4 @@
 import { TestOnlyGuard } from './test-only.guard';
-import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, ExecutionContext } from '@nestjs/common';
 
 describe('TestOnlyGuard', () => {

@@ -350,7 +350,7 @@ export class ActivityFeedService {
    * - For regular users: Use firstName
    * - Batch resolution for performance
    */
-  async resolveDisplayNames(
+  resolveDisplayNames(
     activities: ActivityFeedEntity[],
   ): Promise<Array<ActivityFeedEntity & { displayName?: string }>> {
     return this.tracer.startActiveSpan(

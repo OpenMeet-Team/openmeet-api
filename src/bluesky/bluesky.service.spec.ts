@@ -922,7 +922,12 @@ describe('BlueskyService', () => {
         status: 404,
       });
 
-      await service.createEventRecord(event, 'test-did', 'test.handle', 'test-tenant');
+      await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+      );
 
       expect(
         mockAgentImplementation.com.atproto.repo.putRecord,

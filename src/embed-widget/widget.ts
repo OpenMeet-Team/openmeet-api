@@ -1,6 +1,6 @@
 import { WidgetConfig, EmbedResponse, EmbedEvent } from './types';
 import { getStyles } from './styles';
-import { escapeHtml, formatEventDate, truncate } from './utils';
+import { escapeHtml, formatEventDate } from './utils';
 
 (function () {
   function parseConfig(script: HTMLScriptElement): WidgetConfig | null {
@@ -43,7 +43,7 @@ import { escapeHtml, formatEventDate, truncate } from './utils';
     return `<div class="om-error">Unable to load events. Please try again later.</div>`;
   }
 
-  function renderEvent(event: EmbedEvent, layout: 'list' | 'cards'): string {
+  function renderEvent(event: EmbedEvent, _layout: 'list' | 'cards'): string {
     const placeholderSvg = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect fill='%23e8eaed' width='80' height='80'/%3E%3Cpath d='M24 20h32a4 4 0 0 1 4 4v32a4 4 0 0 1-4 4H24a4 4 0 0 1-4-4V24a4 4 0 0 1 4-4zm0 12v24h32V32H24zm4-8v4h4v-4h-4zm20 0v4h4v-4h-4z' fill='%23bdc1c6'/%3E%3C/svg%3E`;
     const imageHtml = event.imageUrl
       ? `<img class="om-event-image" src="${escapeHtml(event.imageUrl)}" alt="" loading="lazy" />`

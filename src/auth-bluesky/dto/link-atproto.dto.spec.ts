@@ -3,7 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { LinkAtprotoDto } from './link-atproto.dto';
 
 describe('LinkAtprotoDto', () => {
-  async function validateDto(data: Partial<LinkAtprotoDto>) {
+  function validateDto(data: Partial<LinkAtprotoDto>) {
     const dto = plainToInstance(LinkAtprotoDto, data);
     return validate(dto);
   }

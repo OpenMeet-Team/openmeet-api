@@ -1,8 +1,5 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import {
   loginAsTester,
   loginAsAdmin,

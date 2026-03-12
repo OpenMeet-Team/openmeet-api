@@ -451,7 +451,8 @@ describe('PdsSessionService', () => {
       );
       expect(result).toEqual({
         success: true,
-        message: 'AT Protocol session disconnected. You can reconnect from Settings.',
+        message:
+          'AT Protocol session disconnected. You can reconnect from Settings.',
       });
     });
 

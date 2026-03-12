@@ -1,19 +1,11 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-  TESTING_MAIL_HOST,
-  TESTING_MAIL_PORT,
-  TESTING_PDS_URL,
-  TESTING_PDS_ADMIN_PASSWORD,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { mailDevService } from '../utils/maildev-service';
 import { EmailVerificationTestHelpers } from '../utils/email-verification-helpers';
 import {
   EventType,
   EventVisibility,
   EventStatus,
-  EventAttendeeStatus,
 } from '../../src/core/constants/constant';
 
 /**
@@ -43,8 +35,6 @@ jest.setTimeout(120000);
 
 describe('AT Protocol Publishing (e2e)', () => {
   const app = TESTING_APP_URL;
-  const mail = `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}`;
-
   // Generate unique user for this test run
   const testRunId = Date.now();
   const newUserEmail = `atproto-test-${testRunId}@openmeet.net`;
@@ -57,7 +47,7 @@ describe('AT Protocol Publishing (e2e)', () => {
   let userId: number;
   let userUlid: string;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
   });
 
@@ -173,7 +163,6 @@ describe('AT Protocol Publishing (e2e)', () => {
 
   describe('2. Event Publishing to PDS', () => {
     let createdEventSlug: string;
-    let createdEventId: number;
 
     it('should create a public event that gets published to PDS', async () => {
       // Skip if no AT Protocol identity
@@ -212,7 +201,6 @@ describe('AT Protocol Publishing (e2e)', () => {
       expect(createResponse.status).toBe(201);
       const createdEvent = createResponse.body;
       createdEventSlug = createdEvent.slug;
-      createdEventId = createdEvent.id;
 
       console.log(`Created event: ${createdEventSlug}`);
 
@@ -704,7 +692,6 @@ describe('AT Protocol Publishing (e2e)', () => {
     const user2Email = `atproto-rsvp-${testRunId}@openmeet.net`;
     const user2Password = 'testpassword123';
     let user2Token: string;
-    let user2Ulid: string;
 
     it('should register a second user for RSVP testing', async () => {
       if (!publicEventSlug || !publicEventAtprotoUri) {
@@ -761,12 +748,6 @@ describe('AT Protocol Publishing (e2e)', () => {
 
       expect(loginResponse.status).toBe(200);
       user2Token = loginResponse.body.token;
-
-      // Get user2's ULID
-      const meResponse = await serverApp
-        .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${user2Token}`);
-      user2Ulid = meResponse.body.ulid;
 
       console.log(`Registered second user for RSVP testing: ${user2Email}`);
     });

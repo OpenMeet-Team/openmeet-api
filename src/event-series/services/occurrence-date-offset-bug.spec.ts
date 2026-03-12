@@ -397,7 +397,7 @@ describe('RecurrencePatternService output format', () => {
     );
   });
 
-  it('returns UTC ISO strings where the UTC date may differ from local date', () => {
+  it('should return UTC ISO strings where the UTC date may differ from local date', () => {
     // Template: Wednesday Jan 14, 2026 at 7pm PST = Jan 15, 3am UTC
     const templateStartUtc = new Date('2026-01-15T03:00:00.000Z');
     const timezone = 'America/Vancouver';

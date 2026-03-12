@@ -71,15 +71,21 @@ export class UserSeedService {
     this.roleRepository = dataSource.getRepository(RoleEntity);
 
     const adminCredentials = {
-      email: this.configService.get<string>('ADMIN_EMAIL')!,
-      password: this.configService.get<string>('ADMIN_PASSWORD')!,
+      email: this.configService.get<string>('ADMIN_EMAIL', { infer: true })!,
+      password: this.configService.get<string>('ADMIN_PASSWORD', {
+        infer: true,
+      })!,
       firstName: 'The',
       lastName: 'Admin',
     };
 
     const testUserCredentials = {
-      email: this.configService.get<string>('TEST_USER_EMAIL')!,
-      password: this.configService.get<string>('TEST_USER_PASSWORD')!,
+      email: this.configService.get<string>('TEST_USER_EMAIL', {
+        infer: true,
+      })!,
+      password: this.configService.get<string>('TEST_USER_PASSWORD', {
+        infer: true,
+      })!,
       firstName: 'Test',
       lastName: 'User',
     };

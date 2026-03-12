@@ -1,16 +1,6 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-  TESTING_USER_EMAIL,
-  TESTING_USER_PASSWORD,
-} from '../utils/constants';
-import {
-  loginAsTester,
-  createEvent,
-  createGroup,
-  getAuthToken,
-} from '../utils/functions';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { loginAsTester, createEvent, createGroup } from '../utils/functions';
 import {
   EventStatus,
   EventType,

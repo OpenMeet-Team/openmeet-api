@@ -62,7 +62,7 @@ export class OidcService {
 
     // Configure key ID from environment or use default
     this.keyId =
-      this.configService.get<string>('oidc.keyId') ||
+      this.configService.get<string>('oidc.keyId', { infer: true }) ||
       process.env.OIDC_KEY_ID ||
       'openmeet-oidc-rsa-key';
 
@@ -119,7 +119,7 @@ export class OidcService {
     // Use the provided base URL or fall back to config
     const issuerBaseUrl =
       baseUrl ||
-      this.configService.get<string>('app.oidcIssuerUrl') ||
+      this.configService.get<string>('app.oidcIssuerUrl', { infer: true }) ||
       'https://localdev.openmeet.net';
     const oidcIssuerUrl = `${issuerBaseUrl}/oidc`;
     const oidcApiBaseUrl = `${issuerBaseUrl}/api/oidc`;

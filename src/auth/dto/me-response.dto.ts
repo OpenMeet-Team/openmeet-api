@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { User } from '../../user/domain/user';
 import { AtprotoIdentityDto } from '../../atproto-identity/dto/atproto-identity.dto';
 

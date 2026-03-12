@@ -11,8 +11,6 @@ import { TenantConfig } from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { EventAttendeesEntity } from 'src/event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
-import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
-
 @Injectable()
 export class MailService {
   private tenantConfig: TenantConfig;
@@ -230,7 +228,6 @@ export class MailService {
       },
     });
   }
-
 
   async sendAdminGroupMessage(
     mailData: MailData<{

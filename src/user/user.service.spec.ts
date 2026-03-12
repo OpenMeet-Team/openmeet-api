@@ -246,7 +246,7 @@ describe('UserService', () => {
       // Mock data source with transaction support
       const mockDataSource = {
         query: jest.fn().mockResolvedValue([]),
-        transaction: jest.fn().mockImplementation(async (callback: any) => {
+        transaction: jest.fn().mockImplementation((callback: any) => {
           return callback(mockTransactionalEntityManager);
         }),
       };
@@ -254,7 +254,7 @@ describe('UserService', () => {
       // Override getTenantSpecificRepository to set up our mocks
       jest
         .spyOn(userService as any, 'getTenantSpecificRepository')
-        .mockImplementation(async () => {
+        .mockImplementation(() => {
           (userService as any).usersRepository = mockUsersRepository;
           (userService as any).groupRepository = mockGroupRepository;
           (userService as any).eventRepository = mockEventRepository;
@@ -304,7 +304,7 @@ describe('UserService', () => {
       // Mock data source with transaction support
       const mockDataSource = {
         query: jest.fn().mockResolvedValue([]),
-        transaction: jest.fn().mockImplementation(async (callback: any) => {
+        transaction: jest.fn().mockImplementation((callback: any) => {
           return callback(mockTransactionalEntityManager);
         }),
       };
@@ -312,7 +312,7 @@ describe('UserService', () => {
       // Override getTenantSpecificRepository to set up our mocks
       jest
         .spyOn(userService as any, 'getTenantSpecificRepository')
-        .mockImplementation(async () => {
+        .mockImplementation(() => {
           (userService as any).usersRepository = mockUsersRepository;
           (userService as any).groupRepository = mockGroupRepository;
           (userService as any).eventRepository = mockEventRepository;
@@ -1742,13 +1742,11 @@ describe('UserService', () => {
         .spyOn(userService, 'findBySocialIdAndProvider')
         .mockResolvedValue(existingInactiveUser as any);
 
-      const updateSpy = jest
-        .spyOn(userService, 'update')
-        .mockResolvedValue({
-          ...existingInactiveUser,
-          email,
-          status: { id: StatusEnum.inactive },
-        } as any);
+      const updateSpy = jest.spyOn(userService, 'update').mockResolvedValue({
+        ...existingInactiveUser,
+        email,
+        status: { id: StatusEnum.inactive },
+      } as any);
 
       jest
         .spyOn(userService as any, 'getTenantSpecificRepository')
@@ -2420,7 +2418,7 @@ describe('UserService', () => {
       mockDataSource = {
         query: jest.fn().mockResolvedValue([]),
         // Mock transaction to execute the callback with our mock entity manager
-        transaction: jest.fn().mockImplementation(async (callback: any) => {
+        transaction: jest.fn().mockImplementation((callback: any) => {
           return callback(mockTransactionalEntityManager);
         }),
       };
@@ -2436,7 +2434,7 @@ describe('UserService', () => {
       // Override getTenantSpecificRepository to not overwrite our mocks
       jest
         .spyOn(userService as any, 'getTenantSpecificRepository')
-        .mockImplementation(async () => {
+        .mockImplementation(() => {
           // Set all our mocks
           (userService as any).usersRepository = mockUsersRepository;
           (userService as any).groupRepository = mockGroupRepository;

@@ -9,7 +9,6 @@ import { REQUEST } from '@nestjs/core';
 
 describe('MetaController', () => {
   let controller: MetaController;
-  let configService: ConfigService;
 
   const mockConfigService = {
     get: jest.fn((key: string, _options?: any) => {
@@ -50,7 +49,6 @@ describe('MetaController', () => {
     }).compile();
 
     controller = module.get<MetaController>(MetaController);
-    configService = module.get<ConfigService>(ConfigService);
   });
 
   describe('stripHtml', () => {

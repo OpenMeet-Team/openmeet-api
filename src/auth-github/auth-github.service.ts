@@ -195,10 +195,10 @@ export class AuthGithubService {
 
     let baseUrl: string;
     if (isMobile) {
-      const customScheme = this.configService.get<string>(
-        'MOBILE_CUSTOM_URL_SCHEME',
-        'net.openmeet.platform',
-      );
+      const customScheme =
+        this.configService.get<string>('MOBILE_CUSTOM_URL_SCHEME', {
+          infer: true,
+        }) ?? 'net.openmeet.platform';
       baseUrl = `${customScheme}:`;
     } else {
       baseUrl = tenantConfig.frontendDomain;
@@ -214,10 +214,9 @@ export class AuthGithubService {
    * because OAuth providers require exact redirect_uri matches.
    */
   public getCallbackRedirectUri(): string {
-    const backendDomain = this.configService.get<string>(
-      'BACKEND_DOMAIN',
-      'http://localhost:3000',
-    );
+    const backendDomain =
+      this.configService.get<string>('BACKEND_DOMAIN', { infer: true }) ??
+      'http://localhost:3000';
     return `${backendDomain}/api/v1/auth/github/callback`;
   }
 

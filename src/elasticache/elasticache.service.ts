@@ -31,20 +31,30 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   private createRedisClient(): RedisClientType {
     return createClient({
       socket: {
-        host: this.configService.get<string>('ELASTICACHE_HOST'),
-        port: this.configService.get<number>('ELASTICACHE_PORT'),
+        host: this.configService.get<string>('ELASTICACHE_HOST', {
+          infer: true,
+        }),
+        port: this.configService.get<number>('ELASTICACHE_PORT', {
+          infer: true,
+        }),
         tls:
-          this.configService.get<string>('ELASTICACHE_TLS') === 'true',
+          this.configService.get<string>('ELASTICACHE_TLS', { infer: true }) ===
+          'true',
         rejectUnauthorized:
-          this.configService.get<string>('ELASTICACHE_REJECT_UNAUTHORIZED') === 'true',
+          this.configService.get<string>('ELASTICACHE_REJECT_UNAUTHORIZED', {
+            infer: true,
+          }) === 'true',
         connectTimeout: this.CONNECTION_TIMEOUT,
         keepAlive: 30000, // Send TCP keepalive every 30 seconds
         noDelay: true, // Disable Nagle's algorithm for lower latency
       },
       // ElastiCache uses AUTH token instead of username/password, if set to true
-      ...(this.configService.get<string>('ELASTICACHE_AUTH') ===
-        'true' && {
-        password: this.configService.get<string>('ELASTICACHE_TOKEN'),
+      ...(this.configService.get<string>('ELASTICACHE_AUTH', {
+        infer: true,
+      }) === 'true' && {
+        password: this.configService.get<string>('ELASTICACHE_TOKEN', {
+          infer: true,
+        }),
       }),
     });
   }
@@ -69,7 +79,7 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   private async connectWithRetry(attempt = 1): Promise<void> {
     try {
       this.logger.log(
-        `Attempting to connect to Redis [${this.configService.get<string>('ELASTICACHE_HOST')}:${this.configService.get<number>('ELASTICACHE_PORT')}] (attempt ${attempt}/${this.MAX_RETRIES})`,
+        `Attempting to connect to Redis [${this.configService.get<string>('ELASTICACHE_HOST', { infer: true })}:${this.configService.get<number>('ELASTICACHE_PORT', { infer: true })}] (attempt ${attempt}/${this.MAX_RETRIES})`,
       );
 
       if (this.redis) {
@@ -120,7 +130,7 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async set(key: string, value: any, ttl?: number): Promise<void> {
+  set(key: string, value: any, ttl?: number): Promise<void> {
     return this.tracer.startActiveSpan('redis.set', async (span) => {
       const startTime = Date.now();
       const keyPrefix = key.includes(':')
@@ -201,7 +211,7 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async get<T>(key: string): Promise<T | null> {
+  get<T>(key: string): Promise<T | null> {
     return this.tracer.startActiveSpan('redis.get', async (span) => {
       const startTime = Date.now();
       // Extract key prefix for grouping (e.g., "atproto:handle:" from full key)
@@ -323,13 +333,17 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
 
   getRedisConfig() {
     return {
-      host: this.configService.get<string>('ELASTICACHE_HOST'),
-      port: this.configService.get<number>('ELASTICACHE_PORT'),
+      host: this.configService.get<string>('ELASTICACHE_HOST', { infer: true }),
+      port: this.configService.get<number>('ELASTICACHE_PORT', { infer: true }),
       tls:
-        this.configService.get<string>('ELASTICACHE_TLS') === 'true',
-      ...(this.configService.get<string>('ELASTICACHE_AUTH') ===
-        'true' && {
-        password: this.configService.get<string>('ELASTICACHE_TOKEN'),
+        this.configService.get<string>('ELASTICACHE_TLS', { infer: true }) ===
+        'true',
+      ...(this.configService.get<string>('ELASTICACHE_AUTH', {
+        infer: true,
+      }) === 'true' && {
+        password: this.configService.get<string>('ELASTICACHE_TOKEN', {
+          infer: true,
+        }),
       }),
     };
   }

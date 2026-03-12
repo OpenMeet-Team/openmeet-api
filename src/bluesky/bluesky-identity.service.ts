@@ -215,7 +215,7 @@ export class BlueskyIdentityService {
    * @param handleOrDid DID or handle to look up
    * @returns Profile information including resolved handle
    */
-  async resolveProfile(handleOrDid: string): Promise<{
+  resolveProfile(handleOrDid: string): Promise<{
     did: string;
     handle: string;
     pdsUrl: string;
@@ -499,7 +499,7 @@ export class BlueskyIdentityService {
    * @param did The DID to extract handle from
    * @returns The handle or DID as fallback
    */
-  async extractHandleFromDid(did: string): Promise<string> {
+  extractHandleFromDid(did: string): Promise<string> {
     return this.tracer.startActiveSpan(
       'atproto.extractHandleFromDid',
       async (span) => {

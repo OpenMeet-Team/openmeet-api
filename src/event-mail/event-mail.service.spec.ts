@@ -255,7 +255,7 @@ describe('EventMailService', () => {
 
       const eventWithUser = { ...mockEvent, user: { id: 99 } };
 
-      userService.findById.mockImplementation(async (id) => {
+      userService.findById.mockImplementation((id) => {
         if (id === 5) return attendee;
         if (id === 99) return optedOutOrganizer; // event owner also opted out
         return null;

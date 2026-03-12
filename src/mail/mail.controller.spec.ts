@@ -32,10 +32,7 @@ describe('MailController', () => {
 
   describe('security guards', () => {
     it('should have TestOnlyGuard applied to the controller', () => {
-      const guards = Reflect.getMetadata(
-        '__guards__',
-        MailController,
-      );
+      const guards = Reflect.getMetadata('__guards__', MailController);
       expect(guards).toBeDefined();
       expect(guards).toContain(TestOnlyGuard);
     });

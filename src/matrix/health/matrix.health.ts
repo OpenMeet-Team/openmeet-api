@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { HealthIndicatorService, HealthIndicatorResult } from '@nestjs/terminus';
+import {
+  HealthIndicatorService,
+  HealthIndicatorResult,
+} from '@nestjs/terminus';
 import axios from 'axios';
 import { MatrixCoreService } from '../services/matrix-core.service';
 

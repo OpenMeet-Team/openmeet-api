@@ -16,7 +16,7 @@ const MAILDEV_URL = `http://${process.env.TESTING_MAIL_HOST || 'localhost'}:${pr
 jest.setTimeout(30000);
 
 describe('Firehose notification suppression (e2e)', () => {
-  beforeAll(async () => {
+  beforeAll(() => {
     if (!SERVICE_API_KEY) {
       throw new Error('SERVICE_API_KEYS not configured');
     }
@@ -108,7 +108,6 @@ describe('Firehose notification suppression (e2e)', () => {
   });
 
   describe('Firehose RSVP ingestion should NOT send calendar invite emails', () => {
-    let eventSlug: string;
     let eventSourceId: string;
 
     beforeAll(async () => {
@@ -157,7 +156,6 @@ describe('Firehose notification suppression (e2e)', () => {
         .send(eventPayload);
 
       expect(response.status).toBe(202);
-      eventSlug = response.body.slug;
 
       // Wait for event to be fully processed
       await new Promise((resolve) => setTimeout(resolve, 2000));

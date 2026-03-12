@@ -605,10 +605,7 @@ export class EventAnnouncementService {
   }
 
   @OnEvent('event.deleted')
-  async handleEventDeleted(params: {
-    event: EventEntity;
-    tenantId: string;
-  }) {
+  async handleEventDeleted(params: { event: EventEntity; tenantId: string }) {
     this.logger.log(
       'Processing event deletion announcement (physical deletion)',
       {
