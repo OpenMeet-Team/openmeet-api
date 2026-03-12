@@ -24,7 +24,7 @@ import { getOidcCookieOptions } from '../utils/cookie-config';
 import { OAuthPlatform } from '../auth/types/oauth.types';
 import { LinkAtprotoDto } from './dto/link-atproto.dto';
 import { UserService } from '../user/user.service';
-import { ModuleRef } from '@nestjs/core';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 
 @ApiTags('Auth')
 @Controller({
@@ -39,8 +39,13 @@ export class AuthBlueskyController {
     private readonly moduleRef: ModuleRef,
   ) {}
 
-  private async getUserService(): Promise<UserService> {
-    return await this.moduleRef.resolve(UserService, undefined, {
+  private async getUserService(tenantId: string): Promise<UserService> {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    return await this.moduleRef.resolve(UserService, contextId, {
       strict: false,
     });
   }
@@ -85,7 +90,7 @@ export class AuthBlueskyController {
       userId,
     });
 
-    const userService = await this.getUserService();
+    const userService = await this.getUserService(tenantId);
     const user = await userService.findById(userId, tenantId);
     if (!user) {
       throw new NotFoundException('User not found');
