@@ -6,7 +6,7 @@ import {
   Logger,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
+import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { ConfigService } from '@nestjs/config';
 import { Agent } from '@atproto/api';
@@ -46,8 +46,13 @@ export class AuthBlueskyService {
    * Must be resolved per-request as UserService has Scope.REQUEST.
    * Using strict: false to search across all modules.
    */
-  private async getUserService(): Promise<UserService> {
-    return await this.moduleRef.resolve(UserService, undefined, {
+  private async getUserService(tenantId: string): Promise<UserService> {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    return await this.moduleRef.resolve(UserService, contextId, {
       strict: false,
     });
   }
@@ -55,9 +60,16 @@ export class AuthBlueskyService {
   /**
    * Get RoleService via ModuleRef.resolve() for REQUEST-scoped providers.
    * RoleService has Scope.REQUEST, so it must be resolved per-request.
+   * A synthetic tenant context is registered so transitive dependencies
+   * (e.g. EventAttendeeService) can access request.tenantId.
    */
-  private async getRoleService(): Promise<RoleService> {
-    return await this.moduleRef.resolve(RoleService, undefined, {
+  private async getRoleService(tenantId: string): Promise<RoleService> {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    return await this.moduleRef.resolve(RoleService, contextId, {
       strict: false,
     });
   }
@@ -65,9 +77,18 @@ export class AuthBlueskyService {
   /**
    * Get ShadowAccountService via ModuleRef.resolve().
    * Using strict: false to search across all modules without adding circular imports.
+   * A synthetic tenant context is registered so transitive dependencies
+   * can access request.tenantId.
    */
-  private async getShadowAccountService(): Promise<ShadowAccountService> {
-    return await this.moduleRef.resolve(ShadowAccountService, undefined, {
+  private async getShadowAccountService(
+    tenantId: string,
+  ): Promise<ShadowAccountService> {
+    const contextId = ContextIdFactory.create();
+    this.moduleRef.registerRequestByContextId(
+      { tenantId, headers: { 'x-tenant-id': tenantId } },
+      contextId,
+    );
+    return await this.moduleRef.resolve(ShadowAccountService, contextId, {
       strict: false,
     });
   }
@@ -94,7 +115,7 @@ export class AuthBlueskyService {
     user: UserEntity | null;
     foundVia: 'atproto-identity' | 'legacy-bluesky' | null;
   }> {
-    const userService = await this.getUserService();
+    const userService = await this.getUserService(tenantId);
 
     // PRIMARY: Look up by DID in userAtprotoIdentities
     const identity = await this.userAtprotoIdentityService.findByDid(
@@ -172,7 +193,7 @@ export class AuthBlueskyService {
     },
     tenantId: string,
   ): Promise<LoginResponseDto> {
-    const userService = await this.getUserService();
+    const userService = await this.getUserService(tenantId);
 
     // Build the social data object for auth service methods
     const socialData = {
@@ -197,7 +218,7 @@ export class AuthBlueskyService {
       });
 
       if (!existingUser.role) {
-        const roleService = await this.getRoleService();
+        const roleService = await this.getRoleService(tenantId);
         const roleEntity = await roleService.findByName(
           RoleEnum.User,
           tenantId,
@@ -235,7 +256,8 @@ export class AuthBlueskyService {
       // This is best-effort: don't block login if claiming fails.
       // Matches the error handling in validateSocialLogin() in auth.service.ts.
       try {
-        const shadowAccountService = await this.getShadowAccountService();
+        const shadowAccountService =
+          await this.getShadowAccountService(tenantId);
         const claimedUser = await shadowAccountService.claimShadowAccount(
           existingUser.id,
           profileData.did,
@@ -489,7 +511,7 @@ export class AuthBlueskyService {
       existingUserEmail: existingUser?.email,
     });
 
-    const userService = await this.getUserService();
+    const userService = await this.getUserService(tenantId);
 
     let loginResponse;
 
@@ -974,7 +996,7 @@ export class AuthBlueskyService {
     const userByUlid = await this.findUserByUlid(tenantId, linkData.userUlid);
 
     if (userByUlid) {
-      const userService = await this.getUserService();
+      const userService = await this.getUserService(tenantId);
       await userService.update(
         userByUlid.id,
         {
@@ -1035,7 +1057,7 @@ export class AuthBlueskyService {
     tenantId: string,
     userUlid: string,
   ): Promise<any | null> {
-    const userService = await this.getUserService();
+    const userService = await this.getUserService(tenantId);
     try {
       return await userService.findByUlid(userUlid, tenantId);
     } catch {

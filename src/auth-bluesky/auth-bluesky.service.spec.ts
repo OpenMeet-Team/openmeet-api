@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ModuleRef } from '@nestjs/core';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { ConfigService } from '@nestjs/config';
@@ -3170,5 +3171,109 @@ describe('AuthBlueskyService - loginExistingUser', () => {
         'tenant-123',
       );
     });
+  });
+});
+
+describe('AuthBlueskyService - Tenant context for ModuleRef.resolve()', () => {
+  let service: AuthBlueskyService;
+  let moduleRef: ModuleRef;
+  let mockUserService: {
+    findBySocialIdAndProvider: jest.Mock;
+    findByUlid: jest.Mock;
+  };
+  let mockUserAtprotoIdentityService: {
+    findByDid: jest.Mock;
+    findByUserUlid: jest.Mock;
+    create: jest.Mock;
+  };
+
+  beforeEach(async () => {
+    mockUserService = {
+      findBySocialIdAndProvider: jest.fn().mockResolvedValue(null),
+      findByUlid: jest.fn().mockResolvedValue(null),
+    };
+
+    mockUserAtprotoIdentityService = {
+      findByDid: jest.fn().mockResolvedValue(null),
+      findByUserUlid: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthBlueskyService,
+        {
+          provide: TenantConnectionService,
+          useValue: {},
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn() },
+        },
+        {
+          provide: AuthService,
+          useValue: {},
+        },
+        {
+          provide: ElastiCacheService,
+          useValue: { set: jest.fn(), get: jest.fn(), del: jest.fn() },
+        },
+        {
+          provide: BlueskyService,
+          useValue: {},
+        },
+        {
+          provide: BlueskyIdentityService,
+          useValue: {},
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: mockUserAtprotoIdentityService,
+        },
+        {
+          provide: UserService,
+          useValue: mockUserService,
+        },
+        {
+          provide: EventSeriesOccurrenceService,
+          useValue: {},
+        },
+      ],
+    }).compile();
+
+    service = module.get<AuthBlueskyService>(AuthBlueskyService);
+    moduleRef = module.get<ModuleRef>(ModuleRef);
+  });
+
+  it('should call registerRequestByContextId with tenant context when resolving UserService', async () => {
+    const registerSpy = jest.spyOn(moduleRef, 'registerRequestByContextId');
+
+    // findUserByAtprotoIdentity calls getUserService(tenantId) internally
+    await service.findUserByAtprotoIdentity('test-tenant', 'did:plc:test123');
+
+    expect(registerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'test-tenant',
+        headers: { 'x-tenant-id': 'test-tenant' },
+      }),
+      expect.anything(), // contextId
+    );
+  });
+
+  it('should pass contextId to moduleRef.resolve instead of undefined', async () => {
+    const resolveSpy = jest.spyOn(moduleRef, 'resolve');
+
+    await service.findUserByAtprotoIdentity('test-tenant', 'did:plc:test123');
+
+    // The second argument should be a contextId object, not undefined
+    expect(resolveSpy).toHaveBeenCalledWith(
+      UserService,
+      expect.anything(), // contextId (not undefined)
+      expect.objectContaining({ strict: false }),
+    );
+    // Verify it's NOT undefined
+    const contextIdArg = resolveSpy.mock.calls[0][1];
+    expect(contextIdArg).toBeDefined();
+    expect(contextIdArg).not.toBeUndefined();
   });
 });
