@@ -672,10 +672,12 @@ describe('AtprotoServiceAuthService', () => {
 
         const token1 = makeJwt(validHeader, {
           ...validPayload,
+          jti: 'token-1',
           exp: Math.floor(Date.now() / 1000) + 120,
         });
         const token2 = makeJwt(validHeader, {
           ...validPayload,
+          jti: 'token-2',
           exp: Math.floor(Date.now() / 1000) + 180,
         });
 

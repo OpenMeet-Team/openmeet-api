@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+
 import { IdResolver } from '@atproto/identity';
 import { verifySignature } from '@atproto/crypto';
 import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
@@ -194,8 +194,7 @@ export class AtprotoServiceAuthService {
       throw new UnauthorizedException('Service temporarily unavailable');
     }
 
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-    const replayKey = `service-auth:used:${tenantId}:${tokenHash}`;
+    const replayKey = `service-auth:used:${tenantId}:${jti}`;
 
     const alreadyUsed = await this.elastiCacheService.get<string>(replayKey);
     if (alreadyUsed) {
