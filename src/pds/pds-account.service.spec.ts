@@ -9,7 +9,6 @@ import { PdsApiError } from './pds.errors';
 describe('PdsAccountService', () => {
   let service: PdsAccountService;
   let httpService: jest.Mocked<HttpService>;
-  let configService: jest.Mocked<ConfigService>;
 
   const mockConfig = {
     'pds.url': 'https://pds-dev.openmeet.net',
@@ -50,7 +49,6 @@ describe('PdsAccountService', () => {
 
     service = module.get<PdsAccountService>(PdsAccountService);
     httpService = module.get(HttpService) as jest.Mocked<HttpService>;
-    configService = module.get(ConfigService) as jest.Mocked<ConfigService>;
   });
 
   describe('createAccount()', () => {

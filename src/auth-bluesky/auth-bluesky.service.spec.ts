@@ -92,11 +92,17 @@ describe('AuthBlueskyService - Error Handling', () => {
   describe('createAuthUrl', () => {
     it('should throw BadRequestException when tenantId is undefined', async () => {
       await expect(
-        service.createAuthUrl('test.bsky.social', undefined as unknown as string),
+        service.createAuthUrl(
+          'test.bsky.social',
+          undefined as unknown as string,
+        ),
       ).rejects.toThrow(BadRequestException);
 
       await expect(
-        service.createAuthUrl('test.bsky.social', undefined as unknown as string),
+        service.createAuthUrl(
+          'test.bsky.social',
+          undefined as unknown as string,
+        ),
       ).rejects.toThrow('tenantId query parameter is required');
     });
 
@@ -135,7 +141,9 @@ describe('AuthBlueskyService - Error Handling', () => {
           .fn()
           .mockRejectedValue(new Error('Network error during authorize')),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
       // Act & Assert
       await expect(
@@ -148,7 +156,9 @@ describe('AuthBlueskyService - Error Handling', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(null),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
       // Act & Assert
       await expect(
@@ -162,7 +172,9 @@ describe('AuthBlueskyService - Error Handling', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
       // Act
       const result = await service.createAuthUrl(
@@ -186,7 +198,9 @@ describe('AuthBlueskyService - Error Handling', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
       // Act
       await service.createAuthUrl('test.bsky.social', 'tenant-123', 'android');
@@ -206,7 +220,9 @@ describe('AuthBlueskyService - Error Handling', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
       // Act
       await service.createAuthUrl('test.bsky.social', 'tenant-123');
@@ -221,7 +237,9 @@ describe('AuthBlueskyService - Error Handling', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
       // Act
       await service.createAuthUrl('test.bsky.social', 'tenant-123', 'ios');
@@ -239,7 +257,9 @@ describe('AuthBlueskyService - Error Handling', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
       await service.createAuthUrl(
         'test.bsky.social',
@@ -260,7 +280,9 @@ describe('AuthBlueskyService - Error Handling', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
       await service.createAuthUrl('test.bsky.social', 'tenant-123');
 
@@ -447,7 +469,7 @@ describe('AuthBlueskyService - handleAuthCallback avatar pass-through', () => {
   });
 
   describe('avatar pass-through to validateSocialLogin', () => {
-    it('should pass avatar URL to validateSocialLogin when profile has avatar', async () => {
+    it('should pass avatar URL to validateSocialLogin when profile has avatar', () => {
       // Arrange: Mock the OAuth client callback and profile retrieval
       const mockSession = { did: 'did:plc:test123' };
       // We need to mock the Agent constructor - this is tricky
@@ -1159,7 +1181,9 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
       // Mock successful verification read
       mockElastiCacheService.get.mockResolvedValueOnce(
         JSON.stringify({
@@ -1201,7 +1225,9 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
       // Mock successful verification read
       mockElastiCacheService.get.mockResolvedValueOnce(
         JSON.stringify({
@@ -1237,7 +1263,9 @@ describe('AuthBlueskyService - AT Protocol Identity Lookup', () => {
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
-      jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+      jest
+        .spyOn(service, 'initializeClient')
+        .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
       // Mock failed verification - Redis set succeeded but get returns null
       mockElastiCacheService.get.mockResolvedValueOnce(null);
 
@@ -2115,7 +2143,9 @@ describe('AuthBlueskyService - Account Linking Login Flow', () => {
       }),
     };
 
-    jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+    jest
+      .spyOn(service, 'initializeClient')
+      .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
 
     // We cannot easily mock the Agent constructor, so we mock getProfileFromParams
     // and override the internal flow by spying on specific methods.
@@ -2511,7 +2541,9 @@ describe('AuthBlueskyService - Shadow Account Conversion', () => {
       }),
     };
 
-    jest.spyOn(service, 'initializeClient').mockResolvedValue(mockClient as unknown as NodeOAuthClient);
+    jest
+      .spyOn(service, 'initializeClient')
+      .mockResolvedValue(mockClient as unknown as NodeOAuthClient);
     jest.spyOn(service, 'getStoredPlatform').mockResolvedValue(undefined);
     jest
       .spyOn(service, 'ensureAtprotoIdentityRecord')

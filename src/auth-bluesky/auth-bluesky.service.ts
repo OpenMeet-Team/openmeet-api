@@ -336,6 +336,7 @@ export class AuthBlueskyService {
 
       const allowedDomainsRaw = this.configService.get<string>(
         'ALLOWED_REDIRECT_DOMAINS',
+        { infer: true },
       );
       const allowedDomains = allowedDomainsRaw
         ? allowedDomainsRaw.split(',').map((s) => s.trim())
@@ -357,7 +358,9 @@ export class AuthBlueskyService {
     let baseUrl: string;
     if (isMobile) {
       const customScheme =
-        this.configService.get<string>('MOBILE_CUSTOM_URL_SCHEME') ?? 'net.openmeet.platform';
+        this.configService.get<string>('MOBILE_CUSTOM_URL_SCHEME', {
+          infer: true,
+        }) ?? 'net.openmeet.platform';
       baseUrl = `${customScheme}:`;
     } else {
       baseUrl = tenantConfig.frontendDomain;

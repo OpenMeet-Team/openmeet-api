@@ -2,8 +2,6 @@ import request from 'supertest';
 import {
   TESTING_APP_URL,
   TESTING_TENANT_ID,
-  TESTING_MAIL_HOST,
-  TESTING_MAIL_PORT,
   TESTING_PDS_URL,
 } from '../utils/constants';
 import { mailDevService } from '../utils/maildev-service';
@@ -48,7 +46,7 @@ describe('Series Occurrence AT Protocol Publishing (e2e)', () => {
   const waitForBackend = (ms = 1000) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
-  beforeAll(async () => {
+  beforeAll(() => {
     serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
   });
 

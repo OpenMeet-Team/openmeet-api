@@ -244,7 +244,7 @@ describe('Shadow Account Direct Login Path (E2E)', () => {
   });
 
   describe('Test Endpoints Production Safety', () => {
-    it('test endpoints should be accessible in test environment', async () => {
+    it('should allow test endpoints to be accessible in test environment', async () => {
       const testDID = `did:plc:safety${Date.now()}`;
       const response = await serverApp
         .post('/api/v1/test/shadow-accounts')
@@ -257,7 +257,7 @@ describe('Shadow Account Direct Login Path (E2E)', () => {
       expect([200, 201]).toContain(response.status);
     });
 
-    it('test helpers module should be excluded from production (conditional import)', async () => {
+    it('should exclude test helpers module from production (conditional import)', async () => {
       // This test verifies the production safety mechanism.
       // The TestHelpersModule is conditionally imported in AppModule:
       //   ...(process.env.NODE_ENV !== 'production' ? [TestHelpersModule] : [])

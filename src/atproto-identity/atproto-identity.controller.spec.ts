@@ -26,7 +26,6 @@ describe('AtprotoIdentityController', () => {
   let atprotoIdentityService: AtprotoIdentityService;
   let recoveryService: AtprotoIdentityRecoveryService;
   let userService: UserService;
-  let configService: ConfigService;
   let pdsAccountService: PdsAccountService;
   let pdsSessionService: PdsSessionService;
   let blueskyService: BlueskyService;
@@ -164,7 +163,6 @@ describe('AtprotoIdentityController', () => {
       AtprotoIdentityRecoveryService,
     );
     userService = module.get<UserService>(UserService);
-    configService = module.get<ConfigService>(ConfigService);
     pdsAccountService = module.get<PdsAccountService>(PdsAccountService);
     pdsSessionService = module.get<PdsSessionService>(PdsSessionService);
     blueskyService = module.get<BlueskyService>(BlueskyService);
@@ -970,9 +968,9 @@ describe('AtprotoIdentityController', () => {
       jest.spyOn(userService, 'findById').mockResolvedValueOnce(null);
 
       // Act & Assert
-      await expect(
-        controller.disconnectSession(mockRequest),
-      ).rejects.toThrow(NotFoundException);
+      await expect(controller.disconnectSession(mockRequest)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should propagate NotFoundException from pdsSessionService', async () => {
@@ -984,9 +982,9 @@ describe('AtprotoIdentityController', () => {
         );
 
       // Act & Assert
-      await expect(
-        controller.disconnectSession(mockRequest),
-      ).rejects.toThrow(NotFoundException);
+      await expect(controller.disconnectSession(mockRequest)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

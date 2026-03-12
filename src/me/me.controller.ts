@@ -22,10 +22,7 @@ export class MeController {
       'Includes isOrganizer, attendeeStatus, and attendeeRole fields.',
   })
   @Trace('me.getMyEvents')
-  async getMyEvents(
-    @AuthUser() user: User,
-    @Query() query: MyEventsQueryDto,
-  ) {
+  async getMyEvents(@AuthUser() user: User, @Query() query: MyEventsQueryDto) {
     return this.eventQueryService.getMyEvents(user.id, query);
   }
 }

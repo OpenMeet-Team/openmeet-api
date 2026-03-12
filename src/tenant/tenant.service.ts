@@ -12,7 +12,7 @@ export class TenantConnectionService implements OnModuleInit {
 
   async onModuleInit() {}
 
-  async getTenantConnection(tenantId: string): Promise<DataSource> {
+  getTenantConnection(tenantId: string): Promise<DataSource> {
     return this.tracer.startActiveSpan(
       'getTenantConnection',
       { kind: SpanKind.CLIENT },
@@ -98,7 +98,7 @@ export class TenantConnectionService implements OnModuleInit {
     );
   }
 
-  async getAllTenantIds(): Promise<string[]> {
+  getAllTenantIds(): Promise<string[]> {
     return this.tracer.startActiveSpan(
       'getAllTenantIds',
       { kind: SpanKind.CLIENT },

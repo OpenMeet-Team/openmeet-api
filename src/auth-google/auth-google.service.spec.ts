@@ -4,8 +4,6 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { ConfigService } from '@nestjs/config';
 import { REQUEST } from '@nestjs/core';
 import { AuthService } from '../auth/auth.service';
-import { OAuthPlatform } from '../auth/types/oauth.types';
-
 // Mock google-auth-library
 jest.mock('google-auth-library', () => ({
   OAuth2Client: jest.fn().mockImplementation(() => ({
@@ -161,11 +159,7 @@ describe('AuthGoogleService', () => {
     });
 
     it('should use default scheme when MOBILE_CUSTOM_URL_SCHEME is not set', () => {
-      mockConfigService.get.mockImplementation(
-        (key: string, defaultValue?: string) => {
-          return defaultValue;
-        },
-      );
+      mockConfigService.get.mockReturnValue(undefined);
 
       const result = service.buildRedirectUrl(
         'tenant-123',

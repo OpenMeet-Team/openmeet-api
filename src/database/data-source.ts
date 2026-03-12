@@ -413,7 +413,7 @@ export const AppDataSource = (tenantId: string) => {
 
   // Enhance initialize method with retry logic
   const originalInitialize = dataSource.initialize.bind(dataSource);
-  dataSource.initialize = async (): Promise<DataSource> => {
+  dataSource.initialize = (): Promise<DataSource> => {
     return tracer.startActiveSpan(
       'initialize-data-source',
       { kind: SpanKind.CLIENT },

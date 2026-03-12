@@ -34,8 +34,10 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
       { tenantId: testTenantId, headers: { 'x-tenant-id': testTenantId } },
       contextId,
     );
-    matrixRoomService =
-      await moduleFixture.resolve<MatrixRoomService>(MatrixRoomService, contextId);
+    matrixRoomService = await moduleFixture.resolve<MatrixRoomService>(
+      MatrixRoomService,
+      contextId,
+    );
     roomAliasUtils = moduleFixture.get<RoomAliasUtils>(RoomAliasUtils);
     globalMatrixValidationService =
       moduleFixture.get<GlobalMatrixValidationService>(
@@ -130,9 +132,7 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
         matrixRoomService.inviteUser(roomAlias, userMatrixId),
       ).resolves.not.toThrow();
 
-      console.log(
-        `Successfully invited ${userMatrixId} to room ${roomAlias}`,
-      );
+      console.log(`Successfully invited ${userMatrixId} to room ${roomAlias}`);
     });
 
     it('should test the complete RSVP -> invitation flow', async () => {

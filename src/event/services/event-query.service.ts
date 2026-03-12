@@ -1891,9 +1891,7 @@ export class EventQueryService {
       .andWhere('att.userId = :userId', { userId })
       .getMany();
 
-    const attendeeMap = new Map(
-      attendeeRecords.map((a) => [a.event?.id, a]),
-    );
+    const attendeeMap = new Map(attendeeRecords.map((a) => [a.event?.id, a]));
 
     return events.map((event) => {
       const attendee = attendeeMap.get(event.id);

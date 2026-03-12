@@ -1859,7 +1859,7 @@ describe('EventManagementService', () => {
   describe('AT Protocol Publishing Error Propagation', () => {
     let mockAtprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
 
-    beforeEach(async () => {
+    beforeEach(() => {
       // Reset mocks before each test
       mockRepository.findOne.mockReset();
       mockRepository.save.mockReset();
@@ -2008,7 +2008,7 @@ describe('EventManagementService', () => {
       };
       mockTenantConnectionService.getTenantConnection.mockResolvedValue({
         getRepository: jest.fn().mockReturnValue(mockRepository),
-        transaction: jest.fn().mockImplementation(async (cb) => {
+        transaction: jest.fn().mockImplementation((cb) => {
           return cb(mockTransactionalManager);
         }),
       } as any);
@@ -2160,7 +2160,7 @@ describe('EventManagementService', () => {
   describe('ATProto Auto-Retry on Update', () => {
     let mockAtprotoPublisherService: jest.Mocked<AtprotoPublisherService>;
 
-    beforeEach(async () => {
+    beforeEach(() => {
       // Reset mocks before each test
       mockRepository.findOne.mockReset();
       mockRepository.save.mockReset();
@@ -3002,7 +3002,7 @@ describe('EventManagementService', () => {
       };
       mockTenantConnectionService.getTenantConnection.mockResolvedValue({
         getRepository: jest.fn().mockReturnValue(mockRepository),
-        transaction: jest.fn().mockImplementation(async (cb) => {
+        transaction: jest.fn().mockImplementation((cb) => {
           return cb(mockTransactionalManager);
         }),
       } as any);

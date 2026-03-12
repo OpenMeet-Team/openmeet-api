@@ -36,7 +36,7 @@ export class ShadowAccountService {
    * @param preferences Additional provider-specific preferences
    * @returns The user entity for the shadow account
    */
-  async findOrCreateShadowAccount(
+  findOrCreateShadowAccount(
     externalId: string,
     displayName: string,
     provider: AuthProvidersEnum,
@@ -203,7 +203,7 @@ export class ShadowAccountService {
    * @param tenantId ID of the tenant
    * @returns The shadow user entity or null if not found
    */
-  async findShadowAccountByExternalId(
+  findShadowAccountByExternalId(
     externalId: string,
     provider: AuthProvidersEnum,
     tenantId: string,
@@ -254,7 +254,7 @@ export class ShadowAccountService {
    * @param tenantId ID of the tenant
    * @returns The updated user entity or null if no shadow account exists
    */
-  async claimShadowAccount(
+  claimShadowAccount(
     userId: number,
     externalId: string,
     provider: AuthProvidersEnum,
@@ -356,7 +356,7 @@ export class ShadowAccountService {
    * @param realUserId ID of the real user
    * @param queryRunner Active query runner for transaction
    */
-  private async transferEventOwnership(
+  private transferEventOwnership(
     shadowId: number,
     realUserId: number,
     queryRunner: any,
@@ -397,7 +397,7 @@ export class ShadowAccountService {
    * @param tenantId ID of the tenant
    * @returns List of shadow account user entities
    */
-  async findAllShadowAccounts(tenantId: string): Promise<UserEntity[]> {
+  findAllShadowAccounts(tenantId: string): Promise<UserEntity[]> {
     return this.tracer.startActiveSpan(
       'findAllShadowAccounts',
       { kind: SpanKind.CLIENT },
@@ -441,7 +441,7 @@ export class ShadowAccountService {
    * @param tenantId ID of the tenant
    * @returns List of shadow account user entities
    */
-  async findShadowAccountsByProvider(
+  findShadowAccountsByProvider(
     provider: AuthProvidersEnum,
     tenantId: string,
   ): Promise<UserEntity[]> {

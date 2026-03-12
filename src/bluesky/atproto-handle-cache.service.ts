@@ -91,7 +91,7 @@ export class AtprotoHandleCacheService {
    * @param did The DID to resolve
    * @returns The resolved handle or DID as fallback
    */
-  async resolveHandle(did: string): Promise<string> {
+  resolveHandle(did: string): Promise<string> {
     return this.tracer.startActiveSpan(
       'atproto.resolveHandle',
       async (span) => {
@@ -211,7 +211,7 @@ export class AtprotoHandleCacheService {
    * @param dids Array of DIDs to resolve
    * @returns Map of DID to resolved handle
    */
-  async resolveHandles(dids: string[]): Promise<Map<string, string>> {
+  resolveHandles(dids: string[]): Promise<Map<string, string>> {
     return this.tracer.startActiveSpan(
       'atproto.resolveHandles',
       async (span) => {

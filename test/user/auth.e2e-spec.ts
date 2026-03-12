@@ -406,16 +406,17 @@ describe('Auth Module', () => {
         })
         .expect(200);
 
-      const hash = await serverEmail.get('/email').then(({ body }) =>
-        body
-          .find((letter) => {
-            return (
-              letter.to[0].address.toLowerCase() ===
-                newUserNewEmail.toLowerCase() &&
-              /confirm-new-email\?hash=/.test(letter.text)
-            );
-          })
-          ?.text.match(/confirm-new-email\?hash=([^\s\]]+)/)?.[1],
+      const hash = await serverEmail.get('/email').then(
+        ({ body }) =>
+          body
+            .find((letter) => {
+              return (
+                letter.to[0].address.toLowerCase() ===
+                  newUserNewEmail.toLowerCase() &&
+                /confirm-new-email\?hash=/.test(letter.text)
+              );
+            })
+            ?.text.match(/confirm-new-email\?hash=([^\s\]]+)/)?.[1],
       );
 
       await serverApp

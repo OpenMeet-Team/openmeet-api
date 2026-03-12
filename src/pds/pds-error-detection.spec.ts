@@ -8,41 +8,41 @@ import { PdsApiError } from './pds.errors';
 describe('pds-error-detection', () => {
   describe('isServiceNotConfiguredError', () => {
     describe('should return true for "service not configured" errors', () => {
-      it('when message contains "No service configured"', () => {
+      it('should return true when message contains "No service configured"', () => {
         const error = new Error(
           'No service configured for com.atproto.admin.searchAccounts',
         );
         expect(isServiceNotConfiguredError(error)).toBe(true);
       });
 
-      it('when message contains "service not configured" (case-insensitive)', () => {
+      it('should return true when message contains "service not configured" (case-insensitive)', () => {
         const error = new Error('Service Not Configured for this endpoint');
         expect(isServiceNotConfiguredError(error)).toBe(true);
       });
 
-      it('when message contains "not implemented"', () => {
+      it('should return true when message contains "not implemented"', () => {
         const error = new Error('Method not implemented');
         expect(isServiceNotConfiguredError(error)).toBe(true);
       });
 
-      it('when message contains "not available"', () => {
+      it('should return true when message contains "not available"', () => {
         const error = new Error('Endpoint not available');
         expect(isServiceNotConfiguredError(error)).toBe(true);
       });
 
-      it('when message contains "method not supported"', () => {
+      it('should return true when message contains "method not supported"', () => {
         const error = new Error('Method not supported');
         expect(isServiceNotConfiguredError(error)).toBe(true);
       });
     });
 
     describe('should return true for HTTP 501 status code', () => {
-      it('when PdsApiError has statusCode 501', () => {
+      it('should return true when PdsApiError has statusCode 501', () => {
         const error = new PdsApiError('Some random message', 501);
         expect(isServiceNotConfiguredError(error)).toBe(true);
       });
 
-      it('when AxiosError has status 501', () => {
+      it('should return true when AxiosError has status 501', () => {
         const error: AxiosError = {
           isAxiosError: true,
           response: {
@@ -62,34 +62,34 @@ describe('pds-error-detection', () => {
     });
 
     describe('should return false for unrelated errors', () => {
-      it('when message is a different error', () => {
+      it('should return false when message is a different error', () => {
         const error = new Error('Network error');
         expect(isServiceNotConfiguredError(error)).toBe(false);
       });
 
-      it('when message is empty', () => {
+      it('should return false when message is empty', () => {
         const error = new Error('');
         expect(isServiceNotConfiguredError(error)).toBe(false);
       });
 
-      it('when error is null', () => {
+      it('should return false when error is null', () => {
         expect(isServiceNotConfiguredError(null)).toBe(false);
       });
 
-      it('when error is undefined', () => {
+      it('should return false when error is undefined', () => {
         expect(isServiceNotConfiguredError(undefined)).toBe(false);
       });
 
-      it('when error is a string', () => {
+      it('should return false when error is a string', () => {
         expect(isServiceNotConfiguredError('some error')).toBe(false);
       });
 
-      it('when PdsApiError has different status code (400)', () => {
+      it('should return false when PdsApiError has different status code (400)', () => {
         const error = new PdsApiError('Invalid request', 400);
         expect(isServiceNotConfiguredError(error)).toBe(false);
       });
 
-      it('when AxiosError has status 400 without matching message', () => {
+      it('should return false when AxiosError has status 400 without matching message', () => {
         const error: AxiosError = {
           isAxiosError: true,
           response: {
@@ -109,7 +109,7 @@ describe('pds-error-detection', () => {
     });
 
     describe('should handle AxiosError with message in response data', () => {
-      it('when response.data.message contains pattern', () => {
+      it('should match when response.data.message contains pattern', () => {
         const error: AxiosError = {
           isAxiosError: true,
           response: {
@@ -130,7 +130,7 @@ describe('pds-error-detection', () => {
         expect(isServiceNotConfiguredError(error)).toBe(true);
       });
 
-      it('when response.data.error contains pattern', () => {
+      it('should match when response.data.error contains pattern', () => {
         const error: AxiosError = {
           isAxiosError: true,
           response: {

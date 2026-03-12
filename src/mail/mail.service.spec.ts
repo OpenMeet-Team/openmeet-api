@@ -200,6 +200,4 @@ describe('MailService', () => {
       expect(result).toBeUndefined();
     });
   });
-
-
 });
