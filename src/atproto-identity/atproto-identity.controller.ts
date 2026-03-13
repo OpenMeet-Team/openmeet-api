@@ -41,6 +41,7 @@ import { PdsApiError } from '../pds/pds.errors';
 import { NullableType } from '../utils/types/nullable.type';
 import { AllConfigType } from '../config/config.type';
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
+import { AuthBlueskyService } from '../auth-bluesky/auth-bluesky.service';
 
 @ApiTags('AT Protocol Identity')
 @Controller({
@@ -58,6 +59,7 @@ export class AtprotoIdentityController {
     private readonly userService: UserService,
     private readonly blueskyService: BlueskyService,
     private readonly configService: ConfigService<AllConfigType>,
+    private readonly authBlueskyService: AuthBlueskyService,
   ) {}
 
   /**
@@ -467,6 +469,26 @@ export class AtprotoIdentityController {
     }
     // Note: custodial WITHOUT credentials (post-ownership) = false
 
+    // Check scope mismatch for non-custodial (OAuth) sessions
+    let scopeMismatch = false;
+    let missingScopes: string[] = [];
+    if (hasActiveSession && !identity.isCustodial) {
+      try {
+        const mismatchData = await this.authBlueskyService.getScopeMismatch(
+          identity.did,
+        );
+        if (mismatchData && mismatchData.length > 0) {
+          scopeMismatch = true;
+          missingScopes = mismatchData;
+        }
+      } catch (error) {
+        this.logger.warn('Failed to check scope mismatch', {
+          did: identity.did,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     return {
       did: identity.did,
       handle: identity.handle,
@@ -474,6 +496,8 @@ export class AtprotoIdentityController {
       isCustodial: identity.isCustodial,
       isOurPds: identity.pdsUrl === ourPdsUrl,
       hasActiveSession,
+      scopeMismatch,
+      missingScopes,
       validHandleDomains,
       createdAt: identity.createdAt,
       updatedAt: identity.updatedAt,

@@ -6,6 +6,7 @@ import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto
 import { PdsModule } from '../pds/pds.module';
 import { UserModule } from '../user/user.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+import { AuthBlueskyModule } from '../auth-bluesky/auth-bluesky.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
     PdsModule,
     forwardRef(() => UserModule),
     forwardRef(() => BlueskyModule),
+    forwardRef(() => AuthBlueskyModule),
   ],
   controllers: [AtprotoIdentityController],
   providers: [AtprotoIdentityService, AtprotoIdentityRecoveryService],

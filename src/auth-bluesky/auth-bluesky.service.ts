@@ -22,7 +22,11 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { RoleService } from '../role/role.service';
 import { RoleEnum } from '../role/role.enum';
 import { ShadowAccountService } from '../shadow-account/shadow-account.service';
-import { initializeOAuthClient } from '../utils/bluesky';
+import {
+  initializeOAuthClient,
+  getAtprotoConfiguredScopes,
+} from '../utils/bluesky';
+import { checkScopeMismatch } from '../utils/check-scope-mismatch';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { LoginResponseDto } from '../auth/dto/login-response.dto';
 
@@ -428,6 +432,39 @@ export class AuthBlueskyService {
     const restoredSession = await client.restore(oauthSession.did);
     this.logger.debug('Restored session with tokens');
 
+    // Check for scope mismatch between configured and granted scopes
+    try {
+      const tokenInfo = await restoredSession.getTokenInfo(false);
+      if (tokenInfo?.scope) {
+        const configuredScopes = getAtprotoConfiguredScopes(this.configService);
+        const missingScopes = checkScopeMismatch(
+          configuredScopes,
+          tokenInfo.scope,
+        );
+        if (missingScopes.length > 0) {
+          this.logger.warn('OAuth scope mismatch detected', {
+            did: oauthSession.did,
+            missingScopes,
+          });
+          await this.elasticacheService.set(
+            `bluesky:scope-mismatch:${oauthSession.did}`,
+            JSON.stringify(missingScopes),
+            86400 * 30, // 30 day TTL - cleared on successful re-auth
+          );
+        } else {
+          // Scopes match - clear any existing mismatch flag
+          await this.elasticacheService.del(
+            `bluesky:scope-mismatch:${oauthSession.did}`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.warn('Failed to check scope mismatch', {
+        did: oauthSession.did,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     // Check if this is a link callback
     const linkData = appState ? await this.getStoredLinkData(appState) : null;
 
@@ -700,6 +737,7 @@ export class AuthBlueskyService {
       this.logger.debug('Calling client.authorize', { appState });
       const url = await client.authorize(handle, {
         state: appState,
+        scope: getAtprotoConfiguredScopes(this.configService),
       });
 
       if (!url) {
@@ -809,7 +847,10 @@ export class AuthBlueskyService {
         );
       }
 
-      const url = await client.authorize(handle, { state: appState });
+      const url = await client.authorize(handle, {
+        state: appState,
+        scope: getAtprotoConfiguredScopes(this.configService),
+      });
 
       if (!url) {
         throw new Error('Failed to create authorization URL');
@@ -1068,6 +1109,22 @@ export class AuthBlueskyService {
 
   async resumeSession(tenantId: string, did: string) {
     return await this.blueskyService.tryResumeSession(tenantId, did);
+  }
+
+  /**
+   * Check if a user's OAuth session has stale scopes.
+   * Returns the list of missing scopes, or null if no mismatch.
+   */
+  async getScopeMismatch(did: string): Promise<string[] | null> {
+    const data = await this.elasticacheService.get<string>(
+      `bluesky:scope-mismatch:${did}`,
+    );
+    if (!data) return null;
+    try {
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
   }
 
   /**
