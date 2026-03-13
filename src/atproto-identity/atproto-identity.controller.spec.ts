@@ -14,6 +14,7 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { UserService } from '../user/user.service';
 import { ConfigService } from '@nestjs/config';
 import { BlueskyService } from '../bluesky/bluesky.service';
+import { AuthBlueskyService } from '../auth-bluesky/auth-bluesky.service';
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsSessionService } from '../pds/pds-session.service';
@@ -112,6 +113,10 @@ describe('AtprotoIdentityController', () => {
       tryResumeSession: jest.fn(),
     };
 
+    const mockAuthBlueskyService = {
+      getScopeMismatch: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AtprotoIdentityController],
       providers: [
@@ -146,6 +151,10 @@ describe('AtprotoIdentityController', () => {
         {
           provide: BlueskyService,
           useValue: mockBlueskyService,
+        },
+        {
+          provide: AuthBlueskyService,
+          useValue: mockAuthBlueskyService,
         },
       ],
     }).compile();
@@ -195,6 +204,8 @@ describe('AtprotoIdentityController', () => {
         isCustodial: true,
         isOurPds: true,
         hasActiveSession: true,
+        scopeMismatch: false,
+        missingScopes: [],
         validHandleDomains: ['.opnmt.me'],
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
@@ -334,6 +345,8 @@ describe('AtprotoIdentityController', () => {
         isCustodial: true,
         isOurPds: true,
         hasActiveSession: true,
+        scopeMismatch: false,
+        missingScopes: [],
         validHandleDomains: ['.opnmt.me'],
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
