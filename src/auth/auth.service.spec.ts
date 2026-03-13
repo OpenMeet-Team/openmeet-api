@@ -801,6 +801,8 @@ describe('AuthService', () => {
         isCustodial: true,
         isOurPds: true,
         hasActiveSession: false,
+        scopeMismatch: false,
+        missingScopes: [],
         validHandleDomains: ['.opnmt.me'],
         createdAt: new Date('2025-01-01T00:00:00Z'),
         updatedAt: new Date('2025-01-01T00:00:00Z'),
