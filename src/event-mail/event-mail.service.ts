@@ -44,7 +44,10 @@ export class EventMailService {
 
         await this.mailService.sendMailAttendeeGuestJoined({
           to: admin.email,
-          data: { eventAttendee },
+          data: {
+            eventAttendee,
+            requireApproval: !!eventAttendee.event.requireApproval,
+          },
         });
       }
     }

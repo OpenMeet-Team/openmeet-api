@@ -172,17 +172,42 @@ describe('MailService', () => {
   });
 
   describe('sendMailAttendeeGuestJoined', () => {
-    it('should send mail to user', async () => {
-      jest
-        .spyOn(mailService, 'sendMailAttendeeGuestJoined')
-        .mockResolvedValue();
-      const result = await mailService.sendMailAttendeeGuestJoined({
+    it('should use "applied to attend" subject when requireApproval is true', async () => {
+      await mailService.sendMailAttendeeGuestJoined({
         to: mockUser.email as string,
         data: {
           eventAttendee: mockEventAttendee,
+          requireApproval: true,
         },
       });
-      expect(result).toBeUndefined();
+
+      expect(mockMailerService.sendMjmlMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'New attendee applied to attend your event',
+          context: expect.objectContaining({
+            requireApproval: true,
+          }),
+        }),
+      );
+    });
+
+    it('should use "joined" subject when requireApproval is false', async () => {
+      await mailService.sendMailAttendeeGuestJoined({
+        to: mockUser.email as string,
+        data: {
+          eventAttendee: mockEventAttendee,
+          requireApproval: false,
+        },
+      });
+
+      expect(mockMailerService.sendMjmlMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'New attendee joined your event',
+          context: expect.objectContaining({
+            requireApproval: false,
+          }),
+        }),
+      );
     });
   });
 
