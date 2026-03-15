@@ -277,63 +277,53 @@ describe('EventQueryService', () => {
         ...mockEventEntity,
         id: 2,
         slug: 'external-event',
-        userId: 99,
+        sourceId: 'at://did:plc:followed1/community.lexicon.calendar.event/abc',
         startDate: new Date('2026-01-02'),
       };
 
-      const mockGetRawMany = jest.fn().mockResolvedValue([
-        { eventId: 1, count: '3' },
-        { eventId: 2, count: '1' },
-      ]);
-      const mockQueryBuilder = {
+      // Query builder for external events query (sourceId/atprotoUri LIKE)
+      const mockExternalQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setParameter: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([externalEvent]),
+      };
+
+      const mockAttendeeQb = {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
-        from: jest.fn().mockReturnThis(),
-        innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
-        getRawMany: mockGetRawMany,
-        getRawOne: jest.fn(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { eventId: 1, count: '3' },
+          { eventId: 2, count: '1' },
+        ]),
       };
 
       const mockDataSource = {
         getRepository: jest.fn().mockImplementation((entity) => {
           if (entity.name === 'EventAttendeesEntity') {
             return {
-              createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
             };
           }
+          // EventEntity repo — used for both native find() and external createQueryBuilder()
           return {
-            find: jest
-              .fn()
-              .mockResolvedValueOnce([nativeEvent]) // native group events
-              .mockResolvedValueOnce([externalEvent]), // external events by user IDs
-            createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+            find: jest.fn().mockResolvedValue([nativeEvent]),
+            createQueryBuilder: jest.fn().mockReturnValue(mockExternalQb),
           };
         }),
-        createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
       };
 
       jest
         .spyOn(service['tenantConnectionService'], 'getTenantConnection')
         .mockResolvedValue(mockDataSource as any);
 
-      // Return followed DIDs
       mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
         'did:plc:followed1',
       ]);
-
-      // Mock resolveDidToUserIds via the dataSource query builder
-      // Shadow users query returns userId 99
-      mockQueryBuilder.getRawMany
-        .mockResolvedValueOnce([{ id: 99 }]) // shadow users
-        .mockResolvedValueOnce([]) // real users
-        .mockResolvedValueOnce([
-          // attendee counts for combined
-          { eventId: 1, count: '3' },
-          { eventId: 2, count: '1' },
-        ]);
 
       const result = await service.findEventsForGroup(1, 10);
 
@@ -344,45 +334,43 @@ describe('EventQueryService', () => {
     });
 
     it('should deduplicate: native wins over external when event appears in both', async () => {
-      // Event created by a followed DID but also belongs to the group natively
       const dualEvent = {
         ...mockEventEntity,
         id: 1,
         slug: 'dual-event',
         groupId: 1,
-        userId: 99,
+        sourceId: 'at://did:plc:followed1/community.lexicon.calendar.event/abc',
       };
 
-      const mockGetRawMany = jest
-        .fn()
-        .mockResolvedValue([{ eventId: 1, count: '5' }]);
-      const mockQueryBuilder = {
+      const mockExternalQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setParameter: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([{ ...dualEvent }]),
+      };
+
+      const mockAttendeeQb = {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
-        from: jest.fn().mockReturnThis(),
-        innerJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
-        getRawMany: mockGetRawMany,
+        getRawMany: jest.fn().mockResolvedValue([{ eventId: 1, count: '5' }]),
       };
 
       const mockDataSource = {
         getRepository: jest.fn().mockImplementation((entity) => {
           if (entity.name === 'EventAttendeesEntity') {
             return {
-              createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
             };
           }
           return {
-            find: jest
-              .fn()
-              .mockResolvedValueOnce([dualEvent]) // native query returns it
-              .mockResolvedValueOnce([dualEvent]), // external query also returns it
-            createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+            find: jest.fn().mockResolvedValue([dualEvent]),
+            createQueryBuilder: jest.fn().mockReturnValue(mockExternalQb),
           };
         }),
-        createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
       };
 
       jest
@@ -393,15 +381,8 @@ describe('EventQueryService', () => {
         'did:plc:followed1',
       ]);
 
-      // resolveDidToUserIds returns userId 99
-      mockQueryBuilder.getRawMany
-        .mockResolvedValueOnce([{ id: 99 }]) // shadow users
-        .mockResolvedValueOnce([]) // real users
-        .mockResolvedValueOnce([{ eventId: 1, count: '5' }]); // attendee counts
-
       const result = await service.findEventsForGroup(1, 10);
 
-      // Should only appear once, with origin 'group' (native wins)
       expect(result).toHaveLength(1);
       expect((result[0] as any).origin).toBe('group');
     });

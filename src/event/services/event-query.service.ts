@@ -632,39 +632,6 @@ export class EventQueryService {
     return events.map((event) => this.addRecurrenceInformation(event));
   }
 
-  @Trace('event-query.resolveDidToUserIds')
-  private async resolveDidToUserIds(dids: string[]): Promise<number[]> {
-    if (dids.length === 0) return [];
-
-    const tenantId = this.request.tenantId;
-    const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
-
-    // Path 1: Shadow users — DID stored as users.socialId with provider = 'bluesky'
-    const shadowUsers = await dataSource
-      .createQueryBuilder()
-      .select('u.id', 'id')
-      .from('users', 'u')
-      .where('u."socialId" IN (:...dids)', { dids })
-      .andWhere("u.provider = 'bluesky'")
-      .getRawMany();
-
-    // Path 2: Real users — DID stored in userAtprotoIdentities.did, joined via userUlid
-    const realUsers = await dataSource
-      .createQueryBuilder()
-      .select('u.id', 'id')
-      .from('users', 'u')
-      .innerJoin('userAtprotoIdentities', 'uai', 'uai."userUlid" = u.ulid')
-      .where('uai.did IN (:...dids)', { dids })
-      .getRawMany();
-
-    const userIds = new Set<number>();
-    for (const row of [...shadowUsers, ...realUsers]) {
-      userIds.add(row.id);
-    }
-    return Array.from(userIds);
-  }
-
   @Trace('event-query.findEventsForGroup')
   async findEventsForGroup(
     groupId: number,
@@ -707,25 +674,52 @@ export class EventQueryService {
     });
 
     // Query 2: External events from followed DIDs
+    // Match events directly by AT Protocol URI prefix — no user ID resolution needed.
+    // Events have DID in sourceId (at://did/collection/rkey, firehose-ingested)
+    // and atprotoUri (at://did/collection/rkey, published via OpenMeet).
     let externalEvents: EventEntity[] = [];
     const followedDids =
       await this.groupDidFollowService.getFollowedDidsForGroup(groupId);
 
     if (followedDids.length > 0) {
-      const userIds = await this.resolveDidToUserIds(followedDids);
+      const tenantId = this.request.tenantId;
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(tenantId);
+      const eventRepo = dataSource.getRepository(EventEntity);
 
-      if (userIds.length > 0) {
-        const externalWhere: FindOptionsWhere<EventEntity> = {
-          user: { id: In(userIds) },
-          status: statusFilter,
-          ...dateWhere,
-        };
+      const qb = eventRepo
+        .createQueryBuilder('event')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('event.series', 'series')
+        .leftJoinAndSelect('event.image', 'image')
+        .where('event.status IN (:...statuses)', {
+          statuses: [EventStatus.Published, EventStatus.Cancelled],
+        });
 
-        externalEvents = await this.eventRepository.find({
-          where: externalWhere,
-          relations: ['group', 'series', 'image'],
+      // Build OR conditions for each followed DID prefix
+      const didConditions = followedDids.map((did, i) => {
+        qb.setParameter(`did${i}`, `at://${did}/%`);
+        return `(event."sourceId" LIKE :did${i} OR event."atprotoUri" LIKE :did${i})`;
+      });
+      qb.andWhere(`(${didConditions.join(' OR ')})`);
+
+      // Apply date filters
+      if (dateFilter?.startDate && dateFilter?.endDate) {
+        qb.andWhere('event."startDate" BETWEEN :start AND :end', {
+          start: new Date(dateFilter.startDate),
+          end: new Date(dateFilter.endDate),
+        });
+      } else if (dateFilter?.startDate) {
+        qb.andWhere('event."startDate" >= :start', {
+          start: new Date(dateFilter.startDate),
+        });
+      } else if (dateFilter?.endDate) {
+        qb.andWhere('event."startDate" <= :end', {
+          end: new Date(dateFilter.endDate),
         });
       }
+
+      externalEvents = await qb.getMany();
     }
 
     // Deduplicate first, then mark origin (avoids overwriting native events
