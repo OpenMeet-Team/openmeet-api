@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+
 import { IdResolver } from '@atproto/identity';
 import { verifySignature } from '@atproto/crypto';
 import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
@@ -48,7 +48,7 @@ export class AtprotoServiceAuthService {
    *
    * The JWT is signed by the user's PDS via com.atproto.server.getServiceAuth.
    * We verify:
-   *   1. JWT structure and claims (aud, lxm, exp, iss)
+   *   1. JWT structure and claims (aud, lxm, exp, iss, jti)
    *   2. Cryptographic signature against the user's DID document
    *   3. User exists in OpenMeet (auto-created if not)
    *
@@ -83,15 +83,20 @@ export class AtprotoServiceAuthService {
     }
 
     // Step 2: Validate claims
-    const { iss, aud, lxm, exp } = payload as {
+    const { iss, aud, lxm, exp, jti } = payload as {
       iss?: string;
       aud?: string;
       lxm?: string;
       exp?: number;
+      jti?: string;
     };
 
     if (!iss) {
       throw new BadRequestException('JWT missing required claim: iss');
+    }
+
+    if (!jti) {
+      throw new BadRequestException('JWT missing required claim: jti');
     }
 
     const serviceDid =
@@ -189,8 +194,7 @@ export class AtprotoServiceAuthService {
       throw new UnauthorizedException('Service temporarily unavailable');
     }
 
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-    const replayKey = `service-auth:used:${tenantId}:${tokenHash}`;
+    const replayKey = `service-auth:used:${tenantId}:${jti}`;
 
     const alreadyUsed = await this.elastiCacheService.get<string>(replayKey);
     if (alreadyUsed) {
