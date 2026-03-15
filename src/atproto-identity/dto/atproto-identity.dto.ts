@@ -53,6 +53,21 @@ export class AtprotoIdentityDto {
   validHandleDomains: string[];
 
   @ApiProperty({
+    description:
+      'Whether the OAuth session has stale scopes that need re-authorization',
+    example: false,
+  })
+  scopeMismatch: boolean;
+
+  @ApiProperty({
+    description:
+      'List of scopes missing from the current OAuth grant (empty if no mismatch)',
+    example: [],
+    type: [String],
+  })
+  missingScopes: string[];
+
+  @ApiProperty({
     description: 'When the identity was created',
   })
   createdAt: Date;

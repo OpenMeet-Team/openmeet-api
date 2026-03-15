@@ -702,6 +702,8 @@ export class AuthService {
             isCustodial: identity.isCustodial,
             isOurPds: identity.pdsUrl === ourPdsUrl,
             hasActiveSession,
+            scopeMismatch: false,
+            missingScopes: [],
             validHandleDomains,
             createdAt: identity.createdAt,
             updatedAt: identity.updatedAt,

@@ -13,6 +13,24 @@ import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { createRequestLock } from '../auth-bluesky/stores/redlock';
 
 /**
+ * Default OAuth scopes if ATPROTO_OAUTH_SCOPES env var is not set.
+ */
+const DEFAULT_ATPROTO_OAUTH_SCOPES =
+  'atproto account:email rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app#bsky_appview repo:community.lexicon.calendar.event repo:community.lexicon.calendar.rsvp';
+
+/**
+ * Get the configured ATProto OAuth scopes from env var or default.
+ */
+export function getAtprotoConfiguredScopes(
+  configService: ConfigService,
+): string {
+  return (
+    configService.get<string>('ATPROTO_OAUTH_SCOPES', { infer: true }) ||
+    DEFAULT_ATPROTO_OAUTH_SCOPES
+  );
+}
+
+/**
  * Restores and initializes the OAuth client using the tenant configuration,
  * backend domain, and the available keys.
  *
@@ -69,8 +87,7 @@ export async function initializeOAuthClient(
       redirect_uris: [`${baseUrl}/api/v1/auth/bluesky/t/${tenantId}/callback`],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      scope:
-        'atproto account:email rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app#bsky_appview repo:community.lexicon.calendar.event repo:community.lexicon.calendar.rsvp',
+      scope: getAtprotoConfiguredScopes(configService),
       application_type: 'web',
       token_endpoint_auth_method: 'private_key_jwt',
       token_endpoint_auth_signing_alg: 'ES256',
