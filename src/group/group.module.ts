@@ -23,6 +23,7 @@ import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
 // ChatModule removed - Matrix Application Service handles room operations directly
 import { ConfigModule } from '@nestjs/config';
+import { GroupDIDFollowModule } from '../group-did-follow/group-did-follow.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ConfigModule } from '@nestjs/config';
     EventMailModule,
     BlueskyModule,
     // ChatModule removed - Matrix Application Service handles room operations directly
+    GroupDIDFollowModule,
   ],
   controllers: [GroupController],
   providers: [

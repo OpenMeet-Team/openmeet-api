@@ -43,6 +43,7 @@ import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupDIDFollowService } from '../../group-did-follow/group-did-follow.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -57,6 +58,8 @@ export class EventQueryService {
     @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupMemberService: GroupMemberService,
+    @Inject(forwardRef(() => GroupDIDFollowService))
+    private readonly groupDidFollowService: GroupDIDFollowService,
   ) {
     void this.initializeRepository();
   }
@@ -629,6 +632,39 @@ export class EventQueryService {
     return events.map((event) => this.addRecurrenceInformation(event));
   }
 
+  @Trace('event-query.resolveDidToUserIds')
+  private async resolveDidToUserIds(dids: string[]): Promise<number[]> {
+    if (dids.length === 0) return [];
+
+    const tenantId = this.request.tenantId;
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+
+    // Path 1: Shadow users — DID stored as users.socialId with provider = 'bluesky'
+    const shadowUsers = await dataSource
+      .createQueryBuilder()
+      .select('u.id', 'id')
+      .from('users', 'u')
+      .where('u."socialId" IN (:...dids)', { dids })
+      .andWhere("u.provider = 'bluesky'")
+      .getRawMany();
+
+    // Path 2: Real users — DID stored in userAtprotoIdentities.did, joined via userUlid
+    const realUsers = await dataSource
+      .createQueryBuilder()
+      .select('u.id', 'id')
+      .from('users', 'u')
+      .innerJoin('userAtprotoIdentities', 'uai', 'uai."userUlid" = u.ulid')
+      .where('uai.did IN (:...dids)', { dids })
+      .getRawMany();
+
+    const userIds = new Set<number>();
+    for (const row of [...shadowUsers, ...realUsers]) {
+      userIds.add(row.id);
+    }
+    return Array.from(userIds);
+  }
+
   @Trace('event-query.findEventsForGroup')
   async findEventsForGroup(
     groupId: number,
@@ -636,34 +672,87 @@ export class EventQueryService {
     dateFilter?: { startDate?: string; endDate?: string },
   ): Promise<EventEntity[]> {
     await this.initializeRepository();
-    // Only load relations needed for list view (EventsItemComponent)
-    // Removed: 'user', 'categories' - not displayed in list view
-    const where: FindOptionsWhere<EventEntity> = {
-      group: { id: groupId },
-      status: In([EventStatus.Published, EventStatus.Cancelled]),
-    };
 
-    // Only add date filters if provided (backward compatible — no params = all events)
+    const statusFilter = In([EventStatus.Published, EventStatus.Cancelled]);
+
+    // Build date filter (shared by both queries)
+    const dateWhere: FindOptionsWhere<EventEntity> = {};
     if (dateFilter?.startDate && dateFilter?.endDate) {
-      where.startDate = Between(
+      dateWhere.startDate = Between(
         new Date(dateFilter.startDate),
         new Date(dateFilter.endDate),
       );
     } else if (dateFilter?.startDate) {
-      where.startDate = MoreThanOrEqual(new Date(dateFilter.startDate));
+      dateWhere.startDate = MoreThanOrEqual(new Date(dateFilter.startDate));
     } else if (dateFilter?.endDate) {
-      where.startDate = LessThanOrEqual(new Date(dateFilter.endDate));
+      dateWhere.startDate = LessThanOrEqual(new Date(dateFilter.endDate));
     }
 
-    const events = await this.eventRepository.find({
-      where,
+    // Query 1: Native group events (existing behavior)
+    const nativeWhere: FindOptionsWhere<EventEntity> = {
+      group: { id: groupId },
+      status: statusFilter,
+      ...dateWhere,
+    };
+
+    const nativeEvents = await this.eventRepository.find({
+      where: nativeWhere,
       relations: ['group', 'series', 'image'],
-      take: limit,
+      take: limit || undefined,
     });
 
+    // Mark native events
+    nativeEvents.forEach((event) => {
+      (event as any).origin = 'group';
+    });
+
+    // Query 2: External events from followed DIDs
+    let externalEvents: EventEntity[] = [];
+    const followedDids =
+      await this.groupDidFollowService.getFollowedDidsForGroup(groupId);
+
+    if (followedDids.length > 0) {
+      const userIds = await this.resolveDidToUserIds(followedDids);
+
+      if (userIds.length > 0) {
+        const externalWhere: FindOptionsWhere<EventEntity> = {
+          user: { id: In(userIds) },
+          status: statusFilter,
+          ...dateWhere,
+        };
+
+        externalEvents = await this.eventRepository.find({
+          where: externalWhere,
+          relations: ['group', 'series', 'image'],
+        });
+      }
+    }
+
+    // Deduplicate first, then mark origin (avoids overwriting native events
+    // when TypeORM returns the same entity instance from both queries)
+    const nativeIds = new Set(nativeEvents.map((e) => e.id));
+    const dedupedExternal = externalEvents.filter((e) => !nativeIds.has(e.id));
+
+    // Mark origin after deduplication
+    dedupedExternal.forEach((event) => {
+      (event as any).origin = 'external';
+    });
+
+    const allEvents = [...nativeEvents, ...dedupedExternal];
+
+    // Sort by startDate ascending
+    allEvents.sort((a, b) => {
+      const aDate = a.startDate ? new Date(a.startDate).getTime() : 0;
+      const bDate = b.startDate ? new Date(b.startDate).getTime() : 0;
+      return aDate - bDate;
+    });
+
+    // Apply limit after merge (limit=0 means no limit, matching TypeORM's take:0 behavior)
+    const limited = limit > 0 ? allEvents.slice(0, limit) : allEvents;
+
     // Batch fetch attendee counts in a single query (avoids N+1)
-    if (events.length > 0) {
-      const eventIds = events.map((e) => e.id);
+    if (limited.length > 0) {
+      const eventIds = limited.map((e) => e.id);
       const counts = await this.eventAttendeesRepository
         .createQueryBuilder('att')
         .select('att.eventId', 'eventId')
@@ -678,13 +767,13 @@ export class EventQueryService {
       const countMap = new Map(
         counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
       );
-      events.forEach((event) => {
+      limited.forEach((event) => {
         (event as any).attendeesCount = countMap.get(event.id) || 0;
       });
     }
 
     // Add recurrence descriptions
-    return events.map((event) => this.addRecurrenceInformation(event));
+    return limited.map((event) => this.addRecurrenceInformation(event));
   }
 
   @Trace('event-query.findUpcomingEventsForGroup')

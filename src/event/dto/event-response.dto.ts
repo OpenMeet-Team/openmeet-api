@@ -161,6 +161,12 @@ export class EventResponseDto {
   @ApiPropertyOptional()
   conferenceData?: Record<string, any>;
 
+  @ApiPropertyOptional({
+    description: 'Event origin: group (native) or external (via DID follow)',
+    enum: ['group', 'external'],
+  })
+  origin?: 'group' | 'external';
+
   // Computed fields
   @ApiPropertyOptional()
   attendeesCount?: number;
@@ -237,6 +243,7 @@ export class EventResponseDto {
       this.resources = partial.resources;
       this.color = partial.color;
       this.conferenceData = partial.conferenceData;
+      this.origin = partial.origin;
       this.attendeesCount = partial.attendeesCount;
       this.nextOccurrence = partial.nextOccurrence;
       this.upcomingOccurrences = partial.upcomingOccurrences;
