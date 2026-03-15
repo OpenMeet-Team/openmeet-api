@@ -31,6 +31,7 @@ import { EventQueryService } from '../event/services/event-query.service';
 import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { mockEventQueryService } from '../test/mocks';
 import { GroupMailService } from '../group-mail/group-mail.service';
+import { GroupDIDFollowService } from '../group-did-follow/group-did-follow.service';
 
 describe('GroupController', () => {
   let controller: GroupController;
@@ -75,6 +76,15 @@ describe('GroupController', () => {
         {
           provide: GroupMailService,
           useValue: mockGroupMailService,
+        },
+        {
+          provide: GroupDIDFollowService,
+          useValue: {
+            addFollow: jest.fn(),
+            listFollows: jest.fn().mockResolvedValue([]),
+            removeFollow: jest.fn(),
+            getFollowedDidsForGroup: jest.fn().mockResolvedValue([]),
+          },
         },
         // Mock Reflector
         {

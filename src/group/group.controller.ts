@@ -9,9 +9,17 @@ import {
   Query,
   UseGuards,
   Optional,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { VisibilityGuard } from '../shared/guard/visibility.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiBody,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
@@ -39,6 +47,9 @@ import {
 import { ContactAdminsDto } from './dto/contact-admins.dto';
 import { DashboardGroupsSummaryDto } from './dto/dashboard-groups-summary.dto';
 import { DashboardGroupsQueryDto } from './dto/dashboard-groups-query.dto';
+import { GroupDIDFollowService } from '../group-did-follow/group-did-follow.service';
+import { CreateGroupDIDFollowDto } from '../group-did-follow/dto/create-group-did-follow.dto';
+import { GroupDIDFollowResponseDto } from '../group-did-follow/dto/group-did-follow-response.dto';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -48,6 +59,7 @@ export class GroupController {
   constructor(
     private readonly groupService: GroupService,
     private readonly groupMailService: GroupMailService,
+    private readonly groupDidFollowService: GroupDIDFollowService,
   ) {}
 
   @Permissions({
@@ -372,5 +384,53 @@ export class GroupController {
       contactAdminsDto.subject,
       contactAdminsDto.message,
     );
+  }
+
+  @Post(':slug/did-follows')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Follow a DID for this group' })
+  @ApiBody({ type: CreateGroupDIDFollowDto })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    type: GroupDIDFollowResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'Already following this DID',
+  })
+  @UseGuards(JWTAuthGuard)
+  async createDidFollow(
+    @Param('slug') slug: string,
+    @Body() dto: CreateGroupDIDFollowDto,
+    @AuthUser() user: User,
+  ): Promise<GroupDIDFollowResponseDto> {
+    return this.groupDidFollowService.addFollow(slug, dto, user.id);
+  }
+
+  @Get(':slug/did-follows')
+  @ApiOperation({ summary: 'List DID follows for this group' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    type: [GroupDIDFollowResponseDto],
+  })
+  @UseGuards(JWTAuthGuard)
+  async listDidFollows(
+    @Param('slug') slug: string,
+    @AuthUser() user: User,
+  ): Promise<GroupDIDFollowResponseDto[]> {
+    return this.groupDidFollowService.listFollows(slug, user.id);
+  }
+
+  @Delete(':slug/did-follows/:did')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remove a DID follow from this group' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT })
+  @UseGuards(JWTAuthGuard)
+  async removeDidFollow(
+    @Param('slug') slug: string,
+    @Param('did') did: string,
+    @AuthUser() user: User,
+  ): Promise<void> {
+    return this.groupDidFollowService.removeFollow(slug, did, user.id);
   }
 }

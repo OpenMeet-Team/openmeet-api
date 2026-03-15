@@ -29,6 +29,7 @@ import { RsvpIntegrationController } from './rsvp-integration.controller';
 import { RsvpIntegrationService } from './services/rsvp-integration.service';
 import { MetricsModule } from '../metrics/metrics.module';
 import { AtprotoPublisherModule } from '../atproto-publisher/atproto-publisher.module';
+import { GroupDIDFollowModule } from '../group-did-follow/group-did-follow.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { AtprotoPublisherModule } from '../atproto-publisher/atproto-publisher.m
     forwardRef(() => EventSeriesModule),
     MetricsModule,
     AtprotoPublisherModule,
+    forwardRef(() => GroupDIDFollowModule),
   ],
   controllers: [
     EventController,

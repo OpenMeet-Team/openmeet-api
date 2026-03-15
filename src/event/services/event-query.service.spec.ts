@@ -15,6 +15,7 @@ import { EventQueryService } from './event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupDIDFollowService } from '../../group-did-follow/group-did-follow.service';
 import { mockRepository } from '../../test/mocks';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 import { instanceToPlain } from 'class-transformer';
@@ -42,6 +43,7 @@ describe('EventQueryService', () => {
   let service: EventQueryService;
   let eventRepository: jest.Mocked<Repository<EventEntity>>; // Use mocked type
   let mockGroupMemberService: jest.Mocked<GroupMemberService>; // Add declaration for the mock service
+  let mockGroupDIDFollowService: { getFollowedDidsForGroup: jest.Mock };
 
   beforeEach(async () => {
     // Define the mock repository behavior here
@@ -73,6 +75,11 @@ describe('EventQueryService', () => {
       // ... other methods if needed
     } as unknown as jest.Mocked<GroupMemberService>;
 
+    // Define mock GroupDIDFollowService behavior
+    mockGroupDIDFollowService = {
+      getFollowedDidsForGroup: jest.fn().mockResolvedValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventQueryService,
@@ -103,6 +110,10 @@ describe('EventQueryService', () => {
         {
           provide: GroupMemberService, // Re-add the provider
           useValue: mockGroupMemberService, // Use the defined mock
+        },
+        {
+          provide: GroupDIDFollowService,
+          useValue: mockGroupDIDFollowService,
         },
         // Remove providers for unused services (Matrix, GroupMember, Recurrence)
         {
@@ -209,6 +220,175 @@ describe('EventQueryService', () => {
 
       // Verify batch query was used
       expect(mockGetRawMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('findEventsForGroup - origin field', () => {
+    it('should mark native group events with origin "group"', async () => {
+      const mockEvents = [
+        { ...mockEventEntity, id: 1, slug: 'native-event-1' },
+      ];
+
+      const mockGetRawMany = jest
+        .fn()
+        .mockResolvedValue([{ eventId: 1, count: '3' }]);
+      const mockQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: mockGetRawMany,
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+              };
+            }
+            return {
+              find: jest.fn().mockResolvedValue(mockEvents),
+              createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+            };
+          }),
+        } as any);
+
+      // No followed DIDs
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([]);
+
+      const result = await service.findEventsForGroup(1, 10);
+
+      expect(result).toHaveLength(1);
+      expect((result[0] as any).origin).toBe('group');
+    });
+
+    it('should include external events from followed DIDs with origin "external"', async () => {
+      const nativeEvent = {
+        ...mockEventEntity,
+        id: 1,
+        slug: 'native-event',
+        groupId: 1,
+      };
+      const externalEvent = {
+        ...mockEventEntity,
+        id: 2,
+        slug: 'external-event',
+        sourceId: 'at://did:plc:followed1/community.lexicon.calendar.event/abc',
+        startDate: new Date('2026-01-02'),
+      };
+
+      // Query builder for external events query (sourceId/atprotoUri LIKE)
+      const mockExternalQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setParameter: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([externalEvent]),
+      };
+
+      const mockAttendeeQb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { eventId: 1, count: '3' },
+          { eventId: 2, count: '1' },
+        ]),
+      };
+
+      const mockDataSource = {
+        getRepository: jest.fn().mockImplementation((entity) => {
+          if (entity.name === 'EventAttendeesEntity') {
+            return {
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+            };
+          }
+          // EventEntity repo — used for both native find() and external createQueryBuilder()
+          return {
+            find: jest.fn().mockResolvedValue([nativeEvent]),
+            createQueryBuilder: jest.fn().mockReturnValue(mockExternalQb),
+          };
+        }),
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue(mockDataSource as any);
+
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
+        'did:plc:followed1',
+      ]);
+
+      const result = await service.findEventsForGroup(1, 10);
+
+      expect(result.length).toBeGreaterThanOrEqual(2);
+      const origins = result.map((e) => (e as any).origin);
+      expect(origins).toContain('group');
+      expect(origins).toContain('external');
+    });
+
+    it('should deduplicate: native wins over external when event appears in both', async () => {
+      const dualEvent = {
+        ...mockEventEntity,
+        id: 1,
+        slug: 'dual-event',
+        groupId: 1,
+        sourceId: 'at://did:plc:followed1/community.lexicon.calendar.event/abc',
+      };
+
+      const mockExternalQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setParameter: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([{ ...dualEvent }]),
+      };
+
+      const mockAttendeeQb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ eventId: 1, count: '5' }]),
+      };
+
+      const mockDataSource = {
+        getRepository: jest.fn().mockImplementation((entity) => {
+          if (entity.name === 'EventAttendeesEntity') {
+            return {
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+            };
+          }
+          return {
+            find: jest.fn().mockResolvedValue([dualEvent]),
+            createQueryBuilder: jest.fn().mockReturnValue(mockExternalQb),
+          };
+        }),
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue(mockDataSource as any);
+
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
+        'did:plc:followed1',
+      ]);
+
+      const result = await service.findEventsForGroup(1, 10);
+
+      expect(result).toHaveLength(1);
+      expect((result[0] as any).origin).toBe('group');
     });
   });
 
