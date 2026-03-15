@@ -857,6 +857,132 @@ describe('AuthService', () => {
     });
   });
 
+  describe('me - Scope Mismatch Detection', () => {
+    const mockUser = {
+      id: 1,
+      ulid: '01234567890123456789012345',
+      slug: 'test-user',
+      role: { id: 1 },
+    };
+    const jwtPayload = {
+      id: 1,
+      sessionId: 'test-session',
+      role: { id: 1 },
+      slug: 'test-user',
+      tenantId: 'test-tenant',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    };
+
+    const baseIdentity = {
+      id: 1,
+      userUlid: '01234567890123456789012345',
+      did: 'did:plc:abc123',
+      handle: 'external-user.bsky.social',
+      pdsUrl: 'https://bsky.social',
+      isCustodial: false,
+      createdAt: new Date('2025-01-01T00:00:00Z'),
+      updatedAt: new Date('2025-01-01T00:00:00Z'),
+    };
+
+    beforeEach(() => {
+      mockUserService.findById.mockResolvedValue(mockUser);
+      mockUserService.resolveBlueskyHandle.mockResolvedValue(undefined);
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'pds.url') return 'https://pds.openmeet.net';
+        if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
+        if (key === 'ATPROTO_OAUTH_SCOPES')
+          return 'atproto repo:community.lexicon.calendar.fake';
+        return null;
+      });
+    });
+
+    it('should detect scope mismatch when granted scopes are narrower than configured', async () => {
+      // Arrange: non-custodial user with session that has limited scope
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        baseIdentity,
+      );
+      const mockAgent = {
+        sessionManager: {
+          getTokenInfo: jest.fn().mockResolvedValue({ scope: 'atproto' }),
+        },
+      };
+      mockBlueskyService.tryResumeSession.mockResolvedValue(mockAgent);
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(result?.atprotoIdentity?.scopeMismatch).toBe(true);
+      expect(result?.atprotoIdentity?.missingScopes).toEqual([
+        'repo:community.lexicon.calendar.fake',
+      ]);
+    });
+
+    it('should report no scope mismatch when all scopes are granted', async () => {
+      // Arrange: non-custodial user with session that has all scopes
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        baseIdentity,
+      );
+      const mockAgent = {
+        sessionManager: {
+          getTokenInfo: jest.fn().mockResolvedValue({
+            scope: 'atproto repo:community.lexicon.calendar.fake',
+          }),
+        },
+      };
+      mockBlueskyService.tryResumeSession.mockResolvedValue(mockAgent);
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(result?.atprotoIdentity?.scopeMismatch).toBe(false);
+      expect(result?.atprotoIdentity?.missingScopes).toEqual([]);
+    });
+
+    it('should report no scope mismatch for custodial users', async () => {
+      // Arrange: custodial user (no tryResumeSession call)
+      const custodialIdentity = {
+        ...baseIdentity,
+        isCustodial: true,
+        pdsUrl: 'https://pds.openmeet.net',
+        pdsCredentials: 'encrypted-creds',
+      };
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        custodialIdentity,
+      );
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(result?.atprotoIdentity?.scopeMismatch).toBe(false);
+      expect(result?.atprotoIdentity?.missingScopes).toEqual([]);
+      expect(mockBlueskyService.tryResumeSession).not.toHaveBeenCalled();
+    });
+
+    it('should gracefully fallback when getTokenInfo throws', async () => {
+      // Arrange: non-custodial user where getTokenInfo fails
+      mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        baseIdentity,
+      );
+      const mockAgent = {
+        sessionManager: {
+          getTokenInfo: jest.fn().mockRejectedValue(new Error('token expired')),
+        },
+      };
+      mockBlueskyService.tryResumeSession.mockResolvedValue(mockAgent);
+
+      // Act
+      const result = await authService.me(jwtPayload);
+
+      // Assert
+      expect(result?.atprotoIdentity?.scopeMismatch).toBe(false);
+      expect(result?.atprotoIdentity?.missingScopes).toEqual([]);
+    });
+  });
+
   describe('validateSocialLogin - PDS Account Auto-Creation', () => {
     const mockGoogleUser = {
       id: 42,

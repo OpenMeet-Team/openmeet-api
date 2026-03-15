@@ -61,6 +61,9 @@ import { MeResponse } from './dto/me-response.dto';
 import { AtprotoIdentityDto } from '../atproto-identity/dto/atproto-identity.dto';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { getTenantConfig } from '../utils/tenant-config';
+import { checkScopeMismatch } from '../utils/check-scope-mismatch';
+import { getAtprotoConfiguredScopes } from '../utils/bluesky';
+import { OAuthSession } from '@atproto/oauth-client';
 import { CreateLoginLinkResponseDto } from './dto/create-login-link-response.dto';
 
 @Injectable()
@@ -678,6 +681,8 @@ export class AuthService {
 
           // Determine hasActiveSession based on identity type
           let hasActiveSession = false;
+          let scopeHasMismatch = false;
+          let scopeMissingScopes: string[] = [];
           if (identity.isCustodial && identity.pdsCredentials) {
             // Custodial with credentials can always create a session
             hasActiveSession = true;
@@ -689,6 +694,27 @@ export class AuthService {
                 identity.did,
               );
               hasActiveSession = !!session;
+
+              // Read scope from the already-restored session
+              if (session) {
+                try {
+                  const oauthSession =
+                    session.sessionManager as unknown as OAuthSession;
+                  const tokenInfo = await oauthSession.getTokenInfo(false);
+                  if (tokenInfo?.scope) {
+                    const configuredScopes = getAtprotoConfiguredScopes(
+                      this.configService,
+                    );
+                    scopeMissingScopes = checkScopeMismatch(
+                      configuredScopes,
+                      tokenInfo.scope,
+                    );
+                    scopeHasMismatch = scopeMissingScopes.length > 0;
+                  }
+                } catch {
+                  // Best-effort — don't block /auth/me if scope check fails
+                }
+              }
             } catch {
               // Session check failed, assume no active session
               hasActiveSession = false;
@@ -702,8 +728,8 @@ export class AuthService {
             isCustodial: identity.isCustodial,
             isOurPds: identity.pdsUrl === ourPdsUrl,
             hasActiveSession,
-            scopeMismatch: false,
-            missingScopes: [],
+            scopeMismatch: scopeHasMismatch,
+            missingScopes: scopeMissingScopes,
             validHandleDomains,
             createdAt: identity.createdAt,
             updatedAt: identity.updatedAt,
