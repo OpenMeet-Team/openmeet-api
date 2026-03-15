@@ -8,6 +8,7 @@
             Hello,
           </mj-text>
 
+          <% if (requireApproval) { %>
           <mj-text>
             A new event attendee <strong>
               <a href="<%= tenantConfig?.frontendDomain + '/members/' + eventAttendee?.user?.slug %>"><%= eventAttendee?.user?.firstName %> <%= eventAttendee?.user?.lastName %></a>
@@ -27,6 +28,19 @@
           <mj-text>
             Please review their request and change their status or role on the event.
           </mj-text>
+          <% } else { %>
+          <mj-text>
+            A new event attendee <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/members/' + eventAttendee?.user?.slug %>"><%= eventAttendee?.user?.firstName %> <%= eventAttendee?.user?.lastName %></a>
+            </strong>, has joined your event <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/events/' + eventAttendee?.event?.slug %>"><%= eventAttendee?.event?.name %></a>
+            </strong>.
+          </mj-text>
+
+          <mj-text>
+            You can view the event attendees anytime.
+          </mj-text>
+          <% } %>
 
         </mj-column>
       </mj-section>

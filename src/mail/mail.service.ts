@@ -199,17 +199,26 @@ export class MailService {
   }
 
   async sendMailAttendeeGuestJoined(
-    mailData: MailData<{ eventAttendee: EventAttendeesEntity }>,
+    mailData: MailData<{
+      eventAttendee: EventAttendeesEntity;
+      requireApproval: boolean;
+    }>,
   ) {
     this.getTenantConfig();
+
+    const { eventAttendee, requireApproval } = mailData.data;
+    const subject = requireApproval
+      ? 'New attendee applied to attend your event'
+      : 'New attendee joined your event';
 
     await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      subject: 'New attendee applied to attend your event',
+      subject,
       templateName: 'event/attendee-guest-joined',
       context: {
-        eventAttendee: mailData.data.eventAttendee,
+        eventAttendee,
+        requireApproval,
       },
     });
   }

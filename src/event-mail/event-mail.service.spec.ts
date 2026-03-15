@@ -98,7 +98,10 @@ describe('EventMailService', () => {
       expect(mailService.sendMailAttendeeGuestJoined).toHaveBeenCalledTimes(1);
       expect(mailService.sendMailAttendeeGuestJoined).toHaveBeenCalledWith({
         to: 'optedin@example.com',
-        data: { eventAttendee: mockEventAttendee },
+        data: {
+          eventAttendee: mockEventAttendee,
+          requireApproval: false,
+        },
       });
     });
 
@@ -117,6 +120,89 @@ describe('EventMailService', () => {
       await service.sendMailAttendeeGuestJoined(mockEventAttendee);
 
       expect(mailService.sendMailAttendeeGuestJoined).toHaveBeenCalledTimes(1);
+    });
+
+    it('should pass requireApproval: true when event has requireApproval enabled', async () => {
+      const eventWithApproval = {
+        ...mockEvent,
+        requireApproval: true,
+      };
+      const attendeeWithApproval = {
+        ...mockEventAttendee,
+        event: eventWithApproval,
+      };
+      const admin = {
+        ...mockUser,
+        id: 10,
+        email: 'admin@example.com',
+      };
+
+      eventAttendeeService.getMailServiceEventAttendeesByPermission.mockResolvedValue(
+        [admin] as any,
+      );
+
+      await service.sendMailAttendeeGuestJoined(attendeeWithApproval as any);
+
+      expect(mailService.sendMailAttendeeGuestJoined).toHaveBeenCalledWith({
+        to: 'admin@example.com',
+        data: {
+          eventAttendee: attendeeWithApproval,
+          requireApproval: true,
+        },
+      });
+    });
+
+    it('should pass requireApproval: false when event does not require approval', async () => {
+      const eventWithoutApproval = {
+        ...mockEvent,
+        requireApproval: false,
+      };
+      const attendeeWithoutApproval = {
+        ...mockEventAttendee,
+        event: eventWithoutApproval,
+      };
+      const admin = {
+        ...mockUser,
+        id: 10,
+        email: 'admin@example.com',
+      };
+
+      eventAttendeeService.getMailServiceEventAttendeesByPermission.mockResolvedValue(
+        [admin] as any,
+      );
+
+      await service.sendMailAttendeeGuestJoined(attendeeWithoutApproval as any);
+
+      expect(mailService.sendMailAttendeeGuestJoined).toHaveBeenCalledWith({
+        to: 'admin@example.com',
+        data: {
+          eventAttendee: attendeeWithoutApproval,
+          requireApproval: false,
+        },
+      });
+    });
+
+    it('should pass requireApproval: false when requireApproval is undefined', async () => {
+      // mockEvent does not have requireApproval set
+      const admin = {
+        ...mockUser,
+        id: 10,
+        email: 'admin@example.com',
+      };
+
+      eventAttendeeService.getMailServiceEventAttendeesByPermission.mockResolvedValue(
+        [admin] as any,
+      );
+
+      await service.sendMailAttendeeGuestJoined(mockEventAttendee);
+
+      expect(mailService.sendMailAttendeeGuestJoined).toHaveBeenCalledWith({
+        to: 'admin@example.com',
+        data: {
+          eventAttendee: mockEventAttendee,
+          requireApproval: false,
+        },
+      });
     });
 
     it('should return early when event is undefined', async () => {
