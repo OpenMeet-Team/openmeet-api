@@ -719,9 +719,11 @@ export class EventQueryService {
         });
       }
 
-      // Limit external results to avoid unbounded fetches (default 200)
-      qb.orderBy('event."startDate"', 'DESC');
-      qb.take(limit || 200);
+      // Limit external results to avoid unbounded fetches (default 200).
+      // Use raw ORDER BY + LIMIT to avoid TypeORM metadata resolution
+      // which fails on tenant-scoped connections (databaseName undefined).
+      qb.addOrderBy('event.startDate', 'DESC');
+      qb.limit(limit || 200);
 
       externalEvents = await qb.getMany();
     }
