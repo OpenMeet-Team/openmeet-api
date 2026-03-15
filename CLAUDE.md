@@ -35,6 +35,28 @@ OpenMeet API is a NestJS-based multi-tenant backend for event management and com
 - `src/bluesky/` → eventually `src/atproto/`
 - `BLUESKY_KEY_*` env vars → eventually `ATPROTO_KEY_*`
 
+## AT Protocol Data Architecture: Public vs Private
+
+OpenMeet is a **permissioned data appview**. This is the ATProto-recommended pattern where identity is decentralized (DIDs) but authorization is centralized (server-side RBAC).
+
+**The core rule: public data goes on-protocol, private data stays in our database.**
+
+| Data | Where It Lives | Why |
+|------|---------------|-----|
+| Public events | User's PDS + OpenMeet DB | Discoverable, federable, user-owned |
+| Private events | OpenMeet DB only | Never published to any PDS — invisible to other appviews |
+| RSVPs to public events | User's PDS + OpenMeet DB | User's social activity, portable |
+| Attendee lists for private events | OpenMeet DB only | Membership info is access-controlled |
+| Group membership/permissions | OpenMeet DB only | Authorization state, not identity |
+| User identity (DID, handle) | PDS + OpenMeet DB | Decentralized, portable |
+
+**Why not encrypt private data on PDS?** ATProto repos are public by design. Encryption on PDS leaks metadata (existence of records) and requires key management infrastructure (Keyhive) that doesn't exist yet. Server-side access control is simpler, sufficient, and what the ATProto team recommends for this use case.
+
+**When building features:**
+- If the data should be visible to other ATProto apps → publish to PDS
+- If the data is gated by group membership, visibility settings, or permissions → keep in DB only
+- Events with `visibility: 'private'` should never get `atprotoUri`/`atprotoRkey` fields populated
+
 ## Development Commands
 
 ```bash
