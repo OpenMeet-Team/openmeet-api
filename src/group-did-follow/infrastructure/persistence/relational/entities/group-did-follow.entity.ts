@@ -12,7 +12,7 @@ import { GroupEntity } from '../../../../../group/infrastructure/persistence/rel
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 
-@Entity({ name: 'group_did_follows' })
+@Entity({ name: 'groupDidFollows' })
 export class GroupDIDFollowEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
