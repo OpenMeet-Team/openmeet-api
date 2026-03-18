@@ -6,12 +6,14 @@ export interface BlueskyGeoLocation {
   latitude: string; // ATProto expects string, not number
   longitude: string; // ATProto expects string, not number
   name?: string;
+  source?: string; // 'openmeet' tag for read-modify-write merge
 }
 
 export interface BlueskyUriLocation {
   $type: 'community.lexicon.calendar.event#uri';
   uri: string;
   name?: string;
+  source?: string; // 'openmeet' tag for read-modify-write merge
 }
 
 export type BlueskyLocation = BlueskyGeoLocation | BlueskyUriLocation;
@@ -20,6 +22,7 @@ export interface BlueskyEventUri {
   $type?: 'community.lexicon.calendar.event#uri';
   uri: string;
   name?: string;
+  source?: string; // 'openmeet' tag for read-modify-write merge
 }
 
 export enum EventSourceType {

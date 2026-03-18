@@ -301,12 +301,14 @@ export class EventManagementService {
 
         try {
           // Create in Bluesky first to get the rkey
-          const { rkey } = await this.blueskyService.createEventRecord(
-            event,
-            createEventDto.sourceId ?? '',
-            createEventDto.sourceData?.handle ?? '',
-            this.request.tenantId,
-          );
+          const { rkey, record: publishedRecord } =
+            await this.blueskyService.createEventRecord(
+              event,
+              createEventDto.sourceId ?? '',
+              createEventDto.sourceData?.handle ?? '',
+              this.request.tenantId,
+            );
+          event.atprotoRecord = publishedRecord;
 
           this.logger.debug('Successfully created Bluesky event');
 
@@ -501,6 +503,7 @@ export class EventManagementService {
           atprotoUri: publishResult.atprotoUri,
           atprotoRkey: publishResult.atprotoRkey,
           atprotoCid: publishResult.atprotoCid,
+          atprotoRecord: publishResult.atprotoRecord,
         });
 
         this.logger.debug(
@@ -924,12 +927,14 @@ export class EventManagementService {
         });
 
         // Update the record in Bluesky
-        await this.blueskyService.createEventRecord(
-          updatedEvent,
-          did,
-          handle,
-          this.request.tenantId,
-        );
+        const { record: publishedRecord } =
+          await this.blueskyService.createEventRecord(
+            updatedEvent,
+            did,
+            handle,
+            this.request.tenantId,
+          );
+        updatedEvent.atprotoRecord = publishedRecord;
 
         // Update the sourceId with proper AT Protocol URI
         updatedEvent.sourceId = this.blueskyIdService.createUri(
@@ -1010,6 +1015,7 @@ export class EventManagementService {
             atprotoUri: publishResult.atprotoUri,
             atprotoRkey: publishResult.atprotoRkey,
             atprotoCid: publishResult.atprotoCid,
+            atprotoRecord: publishResult.atprotoRecord,
           });
 
           this.logger.debug(
@@ -2430,6 +2436,7 @@ export class EventManagementService {
         atprotoUri: publishResult.atprotoUri,
         atprotoRkey: publishResult.atprotoRkey,
         atprotoCid: publishResult.atprotoCid,
+        atprotoRecord: publishResult.atprotoRecord,
       });
 
       this.logger.debug(

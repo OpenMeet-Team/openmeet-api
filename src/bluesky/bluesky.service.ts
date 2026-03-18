@@ -16,6 +16,7 @@ import {
   BLUESKY_COLLECTIONS,
 } from './BlueskyTypes';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
+import { mergeArrayField } from './atproto-record-merge.utils';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
@@ -306,7 +307,7 @@ export class BlueskyService {
     handle: string,
     tenantId: string,
     providedAgent?: Agent,
-  ): Promise<{ rkey: string; cid: string }> {
+  ): Promise<{ rkey: string; cid: string; record: Record<string, unknown> }> {
     this.logger.debug('Creating Bluesky event record:', {
       event: {
         name: event.name,
@@ -359,6 +360,10 @@ export class BlueskyService {
         cancelled: 'community.lexicon.calendar.event#cancelled',
       };
 
+      const sourceId =
+        this.configService.get<string>('ATPROTO_SOURCE_ID', { infer: true }) ||
+        'net.openmeet';
+
       const locations: BlueskyLocation[] = [];
 
       // Add physical location if exists
@@ -369,6 +374,7 @@ export class BlueskyService {
           latitude: String(event.lat),
           longitude: String(event.lon),
           name: event.location,
+          source: sourceId,
         });
       }
 
@@ -379,6 +385,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: ensureUri(event.locationOnline),
           name: 'Online Meeting Link',
+          source: sourceId,
         });
       }
 
@@ -418,6 +425,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: imageUrl,
           name: 'Event Image',
+          source: sourceId,
         });
       } else if (event.image) {
         // Log a warning if we have an image but no path
@@ -433,6 +441,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: ensureUri(event.locationOnline),
           name: 'Online Meeting Link',
+          source: sourceId,
         });
       }
 
@@ -455,6 +464,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: openmeetEventUrl,
           name: 'OpenMeet Event',
+          source: sourceId,
         });
       } else {
         this.logger.debug(
@@ -462,14 +472,19 @@ export class BlueskyService {
         );
       }
 
+      // Load stored PDS record as merge base (preserves unknown fields from other apps)
+      const base: Record<string, unknown> = event.atprotoRecord ?? {};
+
       const recordData: any = stripNullish({
+        ...base,
         $type: 'community.lexicon.calendar.event',
         name: event.name,
         description: event.description,
         createdAt:
-          event.createdAt instanceof Date
+          (base.createdAt as string) ??
+          (event.createdAt instanceof Date
             ? event.createdAt.toISOString()
-            : event.createdAt,
+            : event.createdAt),
         startsAt:
           event.startDate instanceof Date
             ? event.startDate.toISOString()
@@ -480,17 +495,22 @@ export class BlueskyService {
             : event.endDate,
         mode: modeMap[event.type] || modeMap['in-person'],
         status: statusMap[event.status] || statusMap['published'],
-        locations,
-        uris,
+        locations: mergeArrayField(
+          base.locations as any[],
+          locations,
+          sourceId,
+        ),
+        uris: mergeArrayField(base.uris as any[], uris, sourceId),
       });
 
-      // Add openmeet-specific metadata in record
+      // Add openmeet-specific metadata in record, or clean up if event left series
       if (event.series) {
-        // Add series information to help with discovery
         recordData.openMeetMeta = {
           seriesSlug: event.series.slug,
           isRecurring: true,
         };
+      } else {
+        delete recordData.openMeetMeta;
       }
 
       // Validate record against AT Protocol lexicon schema
@@ -524,7 +544,7 @@ export class BlueskyService {
       this.logger.log(
         `Event ${event.name} posted to Bluesky for user ${handle}`,
       );
-      return { rkey, cid: result.data.cid };
+      return { rkey, cid: result.data.cid, record: recordData };
     } catch (error: any) {
       this.logger.error('Failed to create Bluesky event:', {
         error: error.message,

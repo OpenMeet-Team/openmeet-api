@@ -12,6 +12,7 @@ export async function markAtprotoSynced<T extends object>(
     atprotoUri?: string;
     atprotoRkey?: string;
     atprotoCid?: string;
+    atprotoRecord?: Record<string, unknown>;
   },
 ): Promise<void> {
   await repo

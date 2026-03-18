@@ -99,6 +99,13 @@ export class ExternalEventSourceDto {
   @IsString()
   @IsOptional()
   handle?: string;
+
+  @ApiPropertyOptional({
+    description: 'Raw AT Protocol record from PDS (for round-trip fidelity)',
+  })
+  @IsObject()
+  @IsOptional()
+  rawRecord?: Record<string, unknown>;
 }
 
 export class ExternalEventDto {
