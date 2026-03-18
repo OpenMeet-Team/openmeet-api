@@ -112,3 +112,88 @@ describe('isLegacyOpenMeetEntry', () => {
     ).toBe(false);
   });
 });
+
+describe('stripNullish + spread invariant', () => {
+  // Inline stripNullish for testing the invariant directly
+  function stripNullish(obj: Record<string, any>): Record<string, any> {
+    return Object.fromEntries(
+      Object.entries(obj).filter(([, v]) => v !== null && v !== undefined),
+    );
+  }
+
+  it('should remove stale base value when OpenMeet field is undefined', () => {
+    const base = { endsAt: '2026-04-01T00:00:00Z', speakers: ['Alice'] };
+    const result = stripNullish({
+      ...base,
+      endsAt: undefined,
+    });
+    expect(result).not.toHaveProperty('endsAt');
+    expect(result.speakers).toEqual(['Alice']);
+  });
+
+  it('should remove stale base value when OpenMeet field is null', () => {
+    const base = { description: 'Old desc', talkType: 'keynote' };
+    const result = stripNullish({
+      ...base,
+      description: null,
+    });
+    expect(result).not.toHaveProperty('description');
+    expect(result.talkType).toBe('keynote');
+  });
+
+  it('should overwrite base value with OpenMeet value', () => {
+    const base = { name: 'Old Name', speakers: ['Alice'] };
+    const result = stripNullish({
+      ...base,
+      name: 'New Name',
+    });
+    expect(result.name).toBe('New Name');
+    expect(result.speakers).toEqual(['Alice']);
+  });
+
+  it('should preserve unknown fields from base', () => {
+    const base = {
+      speakers: ['Alice'],
+      talkType: 'keynote',
+      category: 'tech',
+    };
+    const result = stripNullish({
+      ...base,
+      name: 'My Event',
+      startsAt: '2026-06-01T10:00:00Z',
+    });
+    expect(result.speakers).toEqual(['Alice']);
+    expect(result.talkType).toBe('keynote');
+    expect(result.category).toBe('tech');
+    expect(result.name).toBe('My Event');
+  });
+
+  it('should handle empty base (first publish)', () => {
+    const result = stripNullish({
+      ...{},
+      name: 'New Event',
+      endsAt: undefined,
+    });
+    expect(result.name).toBe('New Event');
+    expect(result).not.toHaveProperty('endsAt');
+  });
+
+  it('should handle undefined spread (atprotoRecord is null)', () => {
+    const base = undefined as any;
+    const result = stripNullish({
+      ...base,
+      name: 'New Event',
+    });
+    expect(result.name).toBe('New Event');
+  });
+
+  it('should preserve createdAt from base on update', () => {
+    const base = { createdAt: '2026-01-01T00:00:00Z' };
+    const result = stripNullish({
+      ...base,
+      name: 'Updated Event',
+      createdAt: base.createdAt,
+    });
+    expect(result.createdAt).toBe('2026-01-01T00:00:00Z');
+  });
+});
