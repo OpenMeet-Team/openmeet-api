@@ -30,6 +30,9 @@ export interface PublishResult {
   /** The Content Identifier (CID) of the published record, used for StrongRef */
   atprotoCid?: string;
 
+  /** Full published record for JSONB storage — preserves unknown fields from other apps */
+  atprotoRecord?: Record<string, unknown>;
+
   /** Error message when action is 'error' */
   error?: string;
 
