@@ -318,6 +318,7 @@ export class AtprotoPublisherService {
 
     let rkey: string;
     let cid: string;
+    let publishedRecord: Record<string, unknown> | undefined;
     try {
       const result = await this.blueskyService.createEventRecord(
         event,
@@ -328,6 +329,7 @@ export class AtprotoPublisherService {
       );
       rkey = result.rkey;
       cid = result.cid;
+      publishedRecord = result.record;
     } catch (error) {
       // Handle swapRecord conflict (409 InvalidSwap)
       if (
@@ -368,6 +370,7 @@ export class AtprotoPublisherService {
       atprotoUri,
       atprotoRkey: rkey,
       atprotoCid: cid,
+      atprotoRecord: publishedRecord,
     };
   }
 
