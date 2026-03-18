@@ -96,6 +96,7 @@ export class AtprotoSyncScheduler {
             atprotoUri: result.atprotoUri,
             atprotoRkey: result.atprotoRkey,
             atprotoCid: result.atprotoCid,
+            atprotoRecord: result.atprotoRecord,
           });
           this.logger.log(`Retry-synced event ${event.slug} to ATProto`);
         }
