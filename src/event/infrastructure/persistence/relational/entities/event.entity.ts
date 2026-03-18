@@ -207,6 +207,14 @@ export class EventEntity
   atprotoCid: string | null;
 
   /**
+   * Full AT Protocol record as stored on PDS.
+   * Used as merge base when publishing — preserves unknown fields from other apps.
+   * Populated on first publish and on firehose ingest.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  atprotoRecord: Record<string, unknown> | null;
+
+  /**
    * When this event was last synced to the user's PDS.
    * Compare with updatedAt to detect changes needing re-sync.
    */
