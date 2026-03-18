@@ -1745,5 +1745,212 @@ describe('BlueskyService', () => {
         );
       }
     });
+
+    it('should preserve unknown fields from atprotoRecord when publishing', async () => {
+      const event = {
+        name: 'Test Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.Hybrid,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        atprotoRecord: {
+          $type: 'community.lexicon.calendar.event',
+          name: 'Old Name',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          speakers: ['Alice', 'Bob'],
+          talkType: 'workshop',
+        },
+      } as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      expect(result.record.speakers).toEqual(['Alice', 'Bob']);
+      expect(result.record.talkType).toBe('workshop');
+      expect(result.record.name).toBe('Test Event');
+    });
+
+    it('should preserve createdAt from stored atprotoRecord on update', async () => {
+      const event = {
+        name: 'Test Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2026-03-17T00:00:00.000Z'),
+        atprotoRecord: { createdAt: '2026-01-01T00:00:00.000Z' },
+      } as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      expect(result.record.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    });
+
+    it('should build record from columns when atprotoRecord is null', async () => {
+      const event = {
+        name: 'Test Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        atprotoRecord: null,
+      } as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      expect(result.record.name).toBe('Test Event');
+      expect(result.record).not.toHaveProperty('speakers');
+    });
+
+    it('should preserve other apps uri entries and replace OpenMeet entries', async () => {
+      const event = {
+        name: 'Test Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event',
+        atprotoRecord: {
+          uris: [
+            {
+              uri: 'https://conf.example.com/schedule',
+              name: 'Schedule',
+            },
+            {
+              uri: 'https://platform.openmeet.net/events/old',
+              name: 'OpenMeet Event',
+              source: 'openmeet',
+            },
+          ],
+        },
+      } as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      const uris = result.record.uris as any[];
+      expect(
+        uris.find((u) => u.uri === 'https://conf.example.com/schedule'),
+      ).toBeDefined();
+      expect(
+        uris.filter((u) => u.source === 'openmeet').length,
+      ).toBeGreaterThan(0);
+      expect(
+        uris.find((u) => u.uri === 'https://platform.openmeet.net/events/old'),
+      ).toBeUndefined();
+    });
+
+    it('should remove openMeetMeta when event is not in a series', async () => {
+      const event = {
+        name: 'Test Event',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        series: null,
+        atprotoRecord: {
+          openMeetMeta: { seriesSlug: 'old-series', isRecurring: true },
+        },
+      } as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      expect(result.record).not.toHaveProperty('openMeetMeta');
+    });
+
+    it('should preserve unknown fields through a full publish cycle', async () => {
+      const event = {
+        name: 'Updated Talk Title',
+        description: 'Test Description',
+        startDate: new Date('2026-06-15T10:00:00.000Z'),
+        endDate: null,
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event',
+        atprotoRecord: {
+          $type: 'community.lexicon.calendar.event',
+          name: 'ATmosphere Talk',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          startsAt: '2026-06-15T10:00:00.000Z',
+          speakers: ['Alice', 'Bob'],
+          talkType: 'workshop',
+          category: 'atproto',
+          uris: [
+            {
+              uri: 'https://conf.atmosphere.org/talk/42',
+              name: 'Talk Page',
+            },
+            {
+              uri: 'https://platform.openmeet.net/events/old-slug',
+              name: 'OpenMeet Event',
+              source: 'openmeet',
+            },
+          ],
+        },
+      } as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      // Unknown top-level fields preserved
+      expect(result.record.speakers).toEqual(['Alice', 'Bob']);
+      expect(result.record.talkType).toBe('workshop');
+      expect(result.record.category).toBe('atproto');
+
+      // OpenMeet fields updated
+      expect(result.record.name).toBe('Updated Talk Title');
+      expect(result.record).not.toHaveProperty('endsAt');
+
+      // createdAt preserved from PDS
+      expect(result.record.createdAt).toBe('2026-01-01T00:00:00.000Z');
+
+      // URI array: ATmosphereConf entry preserved, OpenMeet entry replaced
+      const uris = result.record.uris as any[];
+      expect(
+        uris.find((u) => u.uri === 'https://conf.atmosphere.org/talk/42'),
+      ).toBeDefined();
+      expect(uris.find((u) => u.uri?.includes('old-slug'))).toBeUndefined();
+    });
   });
 });
