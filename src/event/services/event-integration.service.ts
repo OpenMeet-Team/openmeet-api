@@ -580,6 +580,11 @@ export class EventIntegrationService {
       };
     }
 
+    // Store raw PDS record for round-trip fidelity
+    if (eventData.source.rawRecord) {
+      newEvent.atprotoRecord = eventData.source.rawRecord;
+    }
+
     newEvent.lastSyncedAt = new Date();
 
     // Set the user (shadow account or real account)
@@ -715,6 +720,11 @@ export class EventIntegrationService {
         ...existingEvent.sourceData,
         ...eventData.source.metadata,
       };
+    }
+
+    // Update stored PDS record for round-trip fidelity
+    if (eventData.source.rawRecord) {
+      existingEvent.atprotoRecord = eventData.source.rawRecord;
     }
 
     // Handle image if provided
