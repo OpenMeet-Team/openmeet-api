@@ -78,6 +78,19 @@ describe('markAtprotoSynced', () => {
     expect(typeof setArg.atprotoSyncedAt).toBe('function');
   });
 
+  it('should persist atprotoRecord when provided', async () => {
+    const atprotoRecord = { name: 'Test', speakers: ['Alice'] };
+    await markAtprotoSynced(mockRepo as any, 1, {
+      atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/tid123',
+      atprotoRkey: 'tid123',
+      atprotoCid: 'bafytest',
+      atprotoRecord,
+    });
+    expect(mockQueryBuilder.set).toHaveBeenCalledWith(
+      expect.objectContaining({ atprotoRecord }),
+    );
+  });
+
   it('should work with a non-EventEntity repository', async () => {
     const nonEventQueryBuilder: Record<string, jest.Mock> = {
       update: jest.fn().mockReturnThis(),
