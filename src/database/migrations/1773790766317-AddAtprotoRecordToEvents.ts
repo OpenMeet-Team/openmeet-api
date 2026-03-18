@@ -9,7 +9,7 @@ export class AddAtprotoRecordToEvents1773790766317
     const schema = queryRunner.connection.options.name || 'public';
 
     await queryRunner.query(`
-      ALTER TABLE "${schema}"."event"
+      ALTER TABLE "${schema}"."events"
       ADD COLUMN IF NOT EXISTS "atprotoRecord" jsonb
     `);
   }
@@ -18,7 +18,7 @@ export class AddAtprotoRecordToEvents1773790766317
     const schema = queryRunner.connection.options.name || 'public';
 
     await queryRunner.query(`
-      ALTER TABLE "${schema}"."event"
+      ALTER TABLE "${schema}"."events"
       DROP COLUMN IF EXISTS "atprotoRecord"
     `);
   }
