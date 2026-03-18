@@ -1762,7 +1762,7 @@ describe('BlueskyService', () => {
           speakers: ['Alice', 'Bob'],
           talkType: 'workshop',
         },
-      } as EventEntity;
+      } as unknown as EventEntity;
 
       const result = await service.createEventRecord(
         event,
@@ -1787,7 +1787,7 @@ describe('BlueskyService', () => {
         status: EventStatus.Published,
         createdAt: new Date('2026-03-17T00:00:00.000Z'),
         atprotoRecord: { createdAt: '2026-01-01T00:00:00.000Z' },
-      } as EventEntity;
+      } as unknown as EventEntity;
 
       const result = await service.createEventRecord(
         event,
@@ -1810,7 +1810,7 @@ describe('BlueskyService', () => {
         status: EventStatus.Published,
         createdAt: new Date('2023-11-01T00:00:00Z'),
         atprotoRecord: null,
-      } as EventEntity;
+      } as unknown as EventEntity;
 
       const result = await service.createEventRecord(
         event,
@@ -1846,7 +1846,7 @@ describe('BlueskyService', () => {
             },
           ],
         },
-      } as EventEntity;
+      } as unknown as EventEntity;
 
       const result = await service.createEventRecord(
         event,
@@ -1880,7 +1880,7 @@ describe('BlueskyService', () => {
         atprotoRecord: {
           openMeetMeta: { seriesSlug: 'old-series', isRecurring: true },
         },
-      } as EventEntity;
+      } as unknown as EventEntity;
 
       const result = await service.createEventRecord(
         event,
@@ -1923,7 +1923,7 @@ describe('BlueskyService', () => {
             },
           ],
         },
-      } as EventEntity;
+      } as unknown as EventEntity;
 
       const result = await service.createEventRecord(
         event,

@@ -354,6 +354,7 @@ describe('AtprotoPublisherService', () => {
       blueskyService.createEventRecord.mockResolvedValue({
         rkey,
         cid: 'bafyreimockcid',
+        record: { name: 'Test Event' },
       });
 
       const result = await service.publishEvent(event, tenantId);
@@ -386,7 +387,11 @@ describe('AtprotoPublisherService', () => {
         mockIdentity,
       );
       pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
-      blueskyService.createEventRecord.mockResolvedValue({ rkey, cid });
+      blueskyService.createEventRecord.mockResolvedValue({
+        rkey,
+        cid,
+        record: { name: 'Test Event' },
+      });
 
       const result = await service.publishEvent(event, tenantId);
 
@@ -417,6 +422,7 @@ describe('AtprotoPublisherService', () => {
       blueskyService.createEventRecord.mockResolvedValue({
         rkey,
         cid: 'bafyreimockcid',
+        record: { name: 'Test Event' },
       });
 
       const result = await service.publishEvent(event, tenantId);
@@ -446,6 +452,7 @@ describe('AtprotoPublisherService', () => {
       blueskyService.createEventRecord.mockResolvedValue({
         rkey: 'rkey',
         cid: 'bafyreimockcid',
+        record: { name: 'Test Event' },
       });
 
       const result = await service.publishEvent(event, tenantId, {
@@ -664,6 +671,7 @@ describe('AtprotoPublisherService', () => {
         blueskyService.createEventRecord.mockResolvedValue({
           rkey,
           cid: 'bafyreimockcid',
+          record: { name: 'Test Event' },
         });
 
         await service.publishEvent(event, tenantId);
@@ -721,6 +729,7 @@ describe('AtprotoPublisherService', () => {
         blueskyService.createEventRecord.mockResolvedValue({
           rkey,
           cid: 'bafyreimockcid',
+          record: { name: 'Test Event' },
         });
 
         const result = await service.publishEvent(event, tenantId);
