@@ -1044,6 +1044,7 @@ describe('BlueskyService', () => {
         latitude: '51.5074',
         longitude: '-0.1278',
         name: 'Conference Center',
+        source: 'openmeet',
       });
 
       // Check URI location
@@ -1055,6 +1056,7 @@ describe('BlueskyService', () => {
         $type: 'community.lexicon.calendar.event#uri',
         uri: 'https://meet.google.com/abc-defg-hij',
         name: 'Online Meeting Link',
+        source: 'openmeet',
       });
     });
 

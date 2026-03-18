@@ -16,6 +16,7 @@ import {
   BLUESKY_COLLECTIONS,
 } from './BlueskyTypes';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
+import { mergeArrayField } from './atproto-record-merge.utils';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
@@ -369,6 +370,7 @@ export class BlueskyService {
           latitude: String(event.lat),
           longitude: String(event.lon),
           name: event.location,
+          source: 'openmeet',
         });
       }
 
@@ -379,6 +381,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: ensureUri(event.locationOnline),
           name: 'Online Meeting Link',
+          source: 'openmeet',
         });
       }
 
@@ -418,6 +421,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: imageUrl,
           name: 'Event Image',
+          source: 'openmeet',
         });
       } else if (event.image) {
         // Log a warning if we have an image but no path
@@ -433,6 +437,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: ensureUri(event.locationOnline),
           name: 'Online Meeting Link',
+          source: 'openmeet',
         });
       }
 
@@ -455,6 +460,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: openmeetEventUrl,
           name: 'OpenMeet Event',
+          source: 'openmeet',
         });
       } else {
         this.logger.debug(
@@ -462,14 +468,19 @@ export class BlueskyService {
         );
       }
 
+      // Load stored PDS record as merge base (preserves unknown fields from other apps)
+      const base: Record<string, unknown> = event.atprotoRecord ?? {};
+
       const recordData: any = stripNullish({
+        ...base,
         $type: 'community.lexicon.calendar.event',
         name: event.name,
         description: event.description,
         createdAt:
-          event.createdAt instanceof Date
+          (base.createdAt as string) ??
+          (event.createdAt instanceof Date
             ? event.createdAt.toISOString()
-            : event.createdAt,
+            : event.createdAt),
         startsAt:
           event.startDate instanceof Date
             ? event.startDate.toISOString()
@@ -480,17 +491,18 @@ export class BlueskyService {
             : event.endDate,
         mode: modeMap[event.type] || modeMap['in-person'],
         status: statusMap[event.status] || statusMap['published'],
-        locations,
-        uris,
+        locations: mergeArrayField(base.locations as any[], locations),
+        uris: mergeArrayField(base.uris as any[], uris),
       });
 
-      // Add openmeet-specific metadata in record
+      // Add openmeet-specific metadata in record, or clean up if event left series
       if (event.series) {
-        // Add series information to help with discovery
         recordData.openMeetMeta = {
           seriesSlug: event.series.slug,
           isRecurring: true,
         };
+      } else {
+        delete recordData.openMeetMeta;
       }
 
       // Validate record against AT Protocol lexicon schema
