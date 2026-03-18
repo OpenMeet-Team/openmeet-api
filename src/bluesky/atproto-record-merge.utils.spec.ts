@@ -4,6 +4,8 @@ import {
 } from './atproto-record-merge.utils';
 
 describe('mergeArrayField', () => {
+  const sourceId = 'net.openmeet';
+
   it('should preserve entries from other apps', () => {
     const pdsArray = [
       { uri: 'https://conf.example.com/talk-42', name: 'Schedule' },
@@ -12,10 +14,10 @@ describe('mergeArrayField', () => {
       {
         uri: 'https://platform.openmeet.net/events/foo',
         name: 'OpenMeet Event',
-        source: 'openmeet',
+        source: sourceId,
       },
     ];
-    const result = mergeArrayField(pdsArray, openMeetEntries);
+    const result = mergeArrayField(pdsArray, openMeetEntries, sourceId);
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual(pdsArray[0]);
     expect(result[1]).toEqual(openMeetEntries[0]);
@@ -26,7 +28,7 @@ describe('mergeArrayField', () => {
       {
         uri: 'https://old-cdn.openmeet.net/old.jpg',
         name: 'Event Image',
-        source: 'openmeet',
+        source: sourceId,
       },
       { uri: 'https://conf.example.com/talk-42', name: 'Schedule' },
     ];
@@ -34,10 +36,10 @@ describe('mergeArrayField', () => {
       {
         uri: 'https://cdn.openmeet.net/new.jpg',
         name: 'Event Image',
-        source: 'openmeet',
+        source: sourceId,
       },
     ];
-    const result = mergeArrayField(pdsArray, openMeetEntries);
+    const result = mergeArrayField(pdsArray, openMeetEntries, sourceId);
     expect(result).toHaveLength(2);
     expect(result[0].uri).toBe('https://conf.example.com/talk-42');
     expect(result[1].uri).toBe('https://cdn.openmeet.net/new.jpg');
@@ -48,11 +50,11 @@ describe('mergeArrayField', () => {
       {
         uri: 'https://cdn.openmeet.net/img.jpg',
         name: 'Event Image',
-        source: 'openmeet',
+        source: sourceId,
       },
       { uri: 'https://conf.example.com/talk-42', name: 'Schedule' },
     ];
-    const result = mergeArrayField(pdsArray, []);
+    const result = mergeArrayField(pdsArray, [], sourceId);
     expect(result).toHaveLength(1);
     expect(result[0].uri).toBe('https://conf.example.com/talk-42');
   });
@@ -62,16 +64,31 @@ describe('mergeArrayField', () => {
       {
         uri: 'https://platform.openmeet.net/events/foo',
         name: 'OpenMeet Event',
-        source: 'openmeet',
+        source: sourceId,
       },
     ];
-    const result = mergeArrayField(undefined, openMeetEntries);
+    const result = mergeArrayField(undefined, openMeetEntries, sourceId);
     expect(result).toHaveLength(1);
   });
 
   it('should handle empty arrays', () => {
-    const result = mergeArrayField([], []);
+    const result = mergeArrayField([], [], sourceId);
     expect(result).toEqual([]);
+  });
+
+  it('should use sourceId parameter to filter entries', () => {
+    const customSourceId = 'com.example.app';
+    const pdsArray = [
+      { uri: 'https://example.com/a', name: 'A', source: customSourceId },
+      { uri: 'https://other.com/b', name: 'B', source: 'net.other' },
+    ];
+    const newEntries = [
+      { uri: 'https://example.com/c', name: 'C', source: customSourceId },
+    ];
+    const result = mergeArrayField(pdsArray, newEntries, customSourceId);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual(pdsArray[1]); // other app's entry preserved
+    expect(result[1]).toEqual(newEntries[0]); // new entry appended
   });
 });
 

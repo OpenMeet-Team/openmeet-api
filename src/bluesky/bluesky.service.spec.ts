@@ -113,6 +113,7 @@ const mockConfigService = {
       'app.backendDomain': 'https://api.openmeet.net',
       APP_URL: 'https://platform.openmeet.net',
       BACKEND_DOMAIN: 'https://api.openmeet.net',
+      ATPROTO_SOURCE_ID: 'net.openmeet',
     };
     return map[key];
   }),
@@ -1044,7 +1045,7 @@ describe('BlueskyService', () => {
         latitude: '51.5074',
         longitude: '-0.1278',
         name: 'Conference Center',
-        source: 'openmeet',
+        source: 'net.openmeet',
       });
 
       // Check URI location
@@ -1056,7 +1057,7 @@ describe('BlueskyService', () => {
         $type: 'community.lexicon.calendar.event#uri',
         uri: 'https://meet.google.com/abc-defg-hij',
         name: 'Online Meeting Link',
-        source: 'openmeet',
+        source: 'net.openmeet',
       });
     });
 
@@ -1842,7 +1843,7 @@ describe('BlueskyService', () => {
             {
               uri: 'https://platform.openmeet.net/events/old',
               name: 'OpenMeet Event',
-              source: 'openmeet',
+              source: 'net.openmeet',
             },
           ],
         },
@@ -1861,7 +1862,7 @@ describe('BlueskyService', () => {
         uris.find((u) => u.uri === 'https://conf.example.com/schedule'),
       ).toBeDefined();
       expect(
-        uris.filter((u) => u.source === 'openmeet').length,
+        uris.filter((u) => u.source === 'net.openmeet').length,
       ).toBeGreaterThan(0);
       expect(
         uris.find((u) => u.uri === 'https://platform.openmeet.net/events/old'),
@@ -1919,7 +1920,7 @@ describe('BlueskyService', () => {
             {
               uri: 'https://platform.openmeet.net/events/old-slug',
               name: 'OpenMeet Event',
-              source: 'openmeet',
+              source: 'net.openmeet',
             },
           ],
         },

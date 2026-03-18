@@ -1,6 +1,6 @@
 /**
  * Merge an array field from a PDS record with OpenMeet's current entries.
- * - Removes old OpenMeet entries (tagged with source: 'openmeet')
+ * - Removes old entries tagged with the given sourceId
  * - Removes legacy untagged OpenMeet entries (identified by URL pattern)
  * - Appends OpenMeet's current entries
  * - Preserves all other apps' entries
@@ -8,9 +8,10 @@
 export function mergeArrayField(
   pdsArray: any[] | undefined,
   openMeetEntries: any[],
+  sourceId: string,
 ): any[] {
   const othersEntries = (pdsArray ?? []).filter(
-    (entry) => entry.source !== 'openmeet' && !isLegacyOpenMeetEntry(entry),
+    (entry) => entry.source !== sourceId && !isLegacyOpenMeetEntry(entry),
   );
   return [...othersEntries, ...openMeetEntries];
 }

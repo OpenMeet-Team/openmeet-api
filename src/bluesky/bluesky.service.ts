@@ -360,6 +360,10 @@ export class BlueskyService {
         cancelled: 'community.lexicon.calendar.event#cancelled',
       };
 
+      const sourceId =
+        this.configService.get<string>('ATPROTO_SOURCE_ID', { infer: true }) ||
+        'net.openmeet';
+
       const locations: BlueskyLocation[] = [];
 
       // Add physical location if exists
@@ -370,7 +374,7 @@ export class BlueskyService {
           latitude: String(event.lat),
           longitude: String(event.lon),
           name: event.location,
-          source: 'openmeet',
+          source: sourceId,
         });
       }
 
@@ -381,7 +385,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: ensureUri(event.locationOnline),
           name: 'Online Meeting Link',
-          source: 'openmeet',
+          source: sourceId,
         });
       }
 
@@ -421,7 +425,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: imageUrl,
           name: 'Event Image',
-          source: 'openmeet',
+          source: sourceId,
         });
       } else if (event.image) {
         // Log a warning if we have an image but no path
@@ -437,7 +441,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: ensureUri(event.locationOnline),
           name: 'Online Meeting Link',
-          source: 'openmeet',
+          source: sourceId,
         });
       }
 
@@ -460,7 +464,7 @@ export class BlueskyService {
           $type: 'community.lexicon.calendar.event#uri',
           uri: openmeetEventUrl,
           name: 'OpenMeet Event',
-          source: 'openmeet',
+          source: sourceId,
         });
       } else {
         this.logger.debug(
@@ -491,8 +495,12 @@ export class BlueskyService {
             : event.endDate,
         mode: modeMap[event.type] || modeMap['in-person'],
         status: statusMap[event.status] || statusMap['published'],
-        locations: mergeArrayField(base.locations as any[], locations),
-        uris: mergeArrayField(base.uris as any[], uris),
+        locations: mergeArrayField(
+          base.locations as any[],
+          locations,
+          sourceId,
+        ),
+        uris: mergeArrayField(base.uris as any[], uris, sourceId),
       });
 
       // Add openmeet-specific metadata in record, or clean up if event left series
