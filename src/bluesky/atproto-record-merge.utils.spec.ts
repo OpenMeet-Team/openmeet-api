@@ -85,13 +85,28 @@ describe('isLegacyOpenMeetEntry', () => {
     ).toBe(true);
   });
 
-  it('should identify CDN image by domain pattern', () => {
+  it('should identify CDN image by cloudfront domain + OpenMeet name', () => {
     expect(
       isLegacyOpenMeetEntry({
         uri: 'https://d1234.cloudfront.net/uploads/img.jpg',
-        name: 'Image',
+        name: 'Event Image',
       }),
     ).toBe(true);
+    expect(
+      isLegacyOpenMeetEntry({
+        uri: 'https://d1234.cloudfront.net/uploads/link',
+        name: 'Online Meeting Link',
+      }),
+    ).toBe(true);
+  });
+
+  it('should NOT match third-party CloudFront URLs', () => {
+    expect(
+      isLegacyOpenMeetEntry({
+        uri: 'https://d9999.cloudfront.net/some-asset.jpg',
+        name: 'Conference Photo',
+      }),
+    ).toBe(false);
   });
 
   it('should identify openmeet.net URLs', () => {
@@ -110,6 +125,13 @@ describe('isLegacyOpenMeetEntry', () => {
         name: 'Schedule',
       }),
     ).toBe(false);
+  });
+
+  it('should handle null, undefined, and missing uri gracefully', () => {
+    expect(isLegacyOpenMeetEntry(null)).toBe(false);
+    expect(isLegacyOpenMeetEntry(undefined)).toBe(false);
+    expect(isLegacyOpenMeetEntry({ name: 'foo' })).toBe(false);
+    expect(isLegacyOpenMeetEntry({})).toBe(false);
   });
 });
 

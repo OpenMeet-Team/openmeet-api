@@ -28,8 +28,13 @@ export function isLegacyOpenMeetEntry(entry: any): boolean {
   // OpenMeet platform URLs
   if (entry.uri.includes('openmeet.net')) return true;
 
-  // CloudFront CDN URLs (OpenMeet image hosting)
-  if (entry.uri.includes('cloudfront.net')) return true;
+  // CloudFront CDN URLs with OpenMeet-specific name labels.
+  // Must also match name to avoid false positives — CloudFront is widely used.
+  if (
+    entry.uri.includes('cloudfront.net') &&
+    (entry.name === 'Event Image' || entry.name === 'Online Meeting Link')
+  )
+    return true;
 
   return false;
 }
