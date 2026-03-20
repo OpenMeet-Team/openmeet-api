@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
@@ -24,7 +25,27 @@ export class DIDApiService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly configService: ConfigService,
   ) {}
+
+  private buildImageUrl(image: any): string | null {
+    if (!image?.path) return null;
+    const cloudfrontDomain = this.configService.get<string>(
+      'file.cloudfrontDistributionDomain',
+      { infer: true },
+    );
+    const fileDriver = this.configService.get<string>('file.driver', {
+      infer: true,
+    });
+    if (fileDriver === 'cloudfront' && cloudfrontDomain) {
+      return `https://${cloudfrontDomain}/${image.path}`;
+    }
+    const backendDomain = this.configService.get<string>('app.backendDomain', {
+      infer: true,
+    });
+    const separator = image.path.startsWith('/') ? '' : '/';
+    return `${backendDomain}${separator}${image.path}`;
+  }
 
   private async getRepositories() {
     const tenantId = this.request.tenantId;
@@ -103,7 +124,7 @@ export class DIDApiService {
         role: roleName || 'member',
         memberCount: (group as any).groupMembersCount || 0,
         upcomingEventCount: upcomingCountMap[group.id] || 0,
-        image: group.image || null,
+        image: this.buildImageUrl(group.image),
       };
     });
 
@@ -272,7 +293,9 @@ export class DIDApiService {
           : null,
         attendeesCount: attendeeCountMap[raw.event_id] || 0,
         userRsvpStatus: raw.userRsvpStatus || null,
-        image: raw.image_id ? { id: raw.image_id, path: raw.image_path } : null,
+        image: this.buildImageUrl(
+          raw.image_id ? { path: raw.image_path } : null,
+        ),
       };
     });
 
@@ -426,7 +449,7 @@ export class DIDApiService {
         : null,
       attendeesCount,
       userRsvpStatus: attendance?.status || null,
-      image: event.image || null,
+      image: this.buildImageUrl(event.image),
     };
   }
 }

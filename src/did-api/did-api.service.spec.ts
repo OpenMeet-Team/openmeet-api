@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DIDApiService } from './did-api.service';
+import { ConfigService } from '@nestjs/config';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import {
@@ -92,6 +93,16 @@ describe('DIDApiService', () => {
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              if (key === 'file.driver') return 'local';
+              if (key === 'app.backendDomain') return 'http://localhost:3000';
+              return null;
+            }),
+          },
         },
       ],
     }).compile();
@@ -205,6 +216,10 @@ describe('DIDApiService', () => {
           {
             provide: TenantConnectionService,
             useValue: mockTenantConnectionService,
+          },
+          {
+            provide: ConfigService,
+            useValue: { get: jest.fn(() => null) },
           },
         ],
       }).compile();
