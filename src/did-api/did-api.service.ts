@@ -4,6 +4,7 @@ import {
   Inject,
   NotFoundException,
   ForbiddenException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
@@ -27,6 +28,9 @@ export class DIDApiService {
 
   private async getRepositories() {
     const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      throw new UnauthorizedException('Tenant ID is required');
+    }
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     return {
@@ -41,7 +45,7 @@ export class DIDApiService {
    * Get all groups the user belongs to, with role and counts.
    */
   async getMyGroups(userId: number) {
-    const { groupRepo } = await this.getRepositories();
+    const { groupRepo, eventRepo } = await this.getRepositories();
 
     const groups = await groupRepo
       .createQueryBuilder('group')
@@ -49,47 +53,59 @@ export class DIDApiService {
       .innerJoin('gm.user', 'user', 'user.id = :userId', { userId })
       .leftJoinAndSelect('gm.groupRole', 'groupRole')
       .leftJoinAndSelect('group.image', 'image')
+      .addSelect('gm.id')
+      .addSelect('groupRole.name')
       .loadRelationCountAndMap('group.groupMembersCount', 'group.groupMembers')
       .getMany();
 
-    // For each group, find the user's membership to get their role
-    // The groupMembers relation was joined but not selected, so we query separately
-    const result = await Promise.all(
-      groups.map(async (group) => {
-        // Get the user's membership for this group
-        const { groupMemberRepo } = await this.getRepositories();
-        const membership = await groupMemberRepo
-          .createQueryBuilder('gm')
-          .leftJoinAndSelect('gm.groupRole', 'groupRole')
-          .innerJoin('gm.user', 'user', 'user.id = :userId', { userId })
-          .innerJoin('gm.group', 'group', 'group.id = :groupId', {
-            groupId: group.id,
-          })
-          .getOne();
+    // Batch upcoming event counts for all groups in one query
+    const groupIds = groups.map((g) => g.id);
+    let upcomingCountMap: Record<number, number> = {};
+    if (groupIds.length > 0) {
+      const counts = await eventRepo
+        .createQueryBuilder('event')
+        .select('event.groupId', 'groupId')
+        .addSelect('COUNT(event.id)', 'count')
+        .where('event.groupId IN (:...groupIds)', { groupIds })
+        .andWhere('event.startDate > :now', { now: new Date() })
+        .andWhere('event.status = :status', {
+          status: EventStatus.Published,
+        })
+        .groupBy('event.groupId')
+        .getRawMany();
 
-        // Count upcoming events for this group
-        const { eventRepo } = await this.getRepositories();
-        const upcomingEventCount = await eventRepo
-          .createQueryBuilder('event')
-          .where('event.group = :groupId', { groupId: group.id })
-          .andWhere('event.startDate > :now', { now: new Date() })
-          .andWhere('event.status = :status', {
-            status: EventStatus.Published,
-          })
-          .getCount();
+      upcomingCountMap = counts.reduce(
+        (map, row) => {
+          map[row.groupId] = parseInt(row.count, 10);
+          return map;
+        },
+        {} as Record<number, number>,
+      );
+    }
 
-        return {
-          slug: group.slug,
-          name: group.name,
-          description: group.description,
-          visibility: group.visibility,
-          role: membership?.groupRole?.name || 'member',
-          memberCount: (group as any).groupMembersCount || 0,
-          upcomingEventCount,
-          image: group.image || null,
-        };
-      }),
-    );
+    // The groupRole is already loaded via leftJoinAndSelect on the joined gm.
+    // TypeORM hydrates gm.groupRole on the GroupMemberEntity relation.
+    // Since we innerJoin'd on groupMembers with the user filter, each group's
+    // groupMembers array contains only the current user's membership.
+    const result = groups.map((group) => {
+      // groupMembers was joined (innerJoin) but not selected with AndSelect,
+      // however groupRole was leftJoinAndSelect'd through gm.
+      // We need to get the role from the raw query result.
+      // Since the join filters to this user only, groupMembers[0] is their membership.
+      const membership = (group as any).groupMembers?.[0];
+      const roleName = membership?.groupRole?.name;
+
+      return {
+        slug: group.slug,
+        name: group.name,
+        description: group.description,
+        visibility: group.visibility,
+        role: roleName || 'member',
+        memberCount: (group as any).groupMembersCount || 0,
+        upcomingEventCount: upcomingCountMap[group.id] || 0,
+        image: group.image || null,
+      };
+    });
 
     return { groups: result };
   }
@@ -112,7 +128,8 @@ export class DIDApiService {
       : new Date(Date.now() + 90 * 86400000);
     const includePublic = query.includePublic || false;
 
-    // Build the query using a union-like approach via OR conditions
+    // Build the query using raw table joins to avoid TypeORM metadata errors.
+    // groupMembers is joined as a raw table, so groupRoles must also be raw.
     const qb = eventRepo
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.group', 'eventGroup')
@@ -123,7 +140,7 @@ export class DIDApiService {
         'gm.groupId = eventGroup.id AND gm.userId = :userId',
         { userId },
       )
-      .leftJoin('gm.groupRole', 'groupRole')
+      .leftJoin('groupRoles', 'groupRole', 'groupRole.id = gm.groupRoleId')
       .leftJoin(
         'eventAttendees',
         'ea',
@@ -139,6 +156,11 @@ export class DIDApiService {
       .andWhere('event.startDate <= :toDate', { toDate });
 
     // Core visibility filter
+    const nonPublicVisibilities = [
+      EventVisibility.Private,
+      EventVisibility.Unlisted,
+    ];
+
     if (includePublic) {
       // Private/unlisted in my groups OR anything I'm attending
       qb.andWhere(
@@ -146,30 +168,16 @@ export class DIDApiService {
           '(event.visibility IN (:...nonPublicVisibilities) AND gm.id IS NOT NULL) ' +
           'OR (ea.id IS NOT NULL)' +
           ')',
-        {
-          nonPublicVisibilities: [
-            EventVisibility.Private,
-            EventVisibility.Unlisted,
-          ],
-        },
+        { nonPublicVisibilities },
       );
     } else {
-      // Only private/unlisted events in my groups OR private/unlisted events I'm attending
+      // Non-public events where user has access via group membership or attendance
       qb.andWhere(
         '(' +
-          '(event.visibility IN (:...nonPublicVisibilities) AND gm.id IS NOT NULL) ' +
-          'OR (event.visibility IN (:...nonPublicVisibilities2) AND ea.id IS NOT NULL)' +
+          'event.visibility IN (:...nonPublicVisibilities) ' +
+          'AND (gm.id IS NOT NULL OR ea.id IS NOT NULL)' +
           ')',
-        {
-          nonPublicVisibilities: [
-            EventVisibility.Private,
-            EventVisibility.Unlisted,
-          ],
-          nonPublicVisibilities2: [
-            EventVisibility.Private,
-            EventVisibility.Unlisted,
-          ],
-        },
+        { nonPublicVisibilities },
       );
     }
 
@@ -180,21 +188,14 @@ export class DIDApiService {
       });
     }
 
-    // Cursor-based pagination: cursor is the event ID to start after
+    // Cursor-based pagination: cursor is base64-encoded JSON with id and startDate
     if (query.cursor) {
-      const cursorId = parseInt(query.cursor, 10);
-      if (!isNaN(cursorId)) {
-        // Get the startDate of the cursor event for proper ordering
-        const cursorEvent = await eventRepo.findOne({
-          where: { id: cursorId },
-          select: ['id', 'startDate'],
-        });
-        if (cursorEvent) {
-          qb.andWhere(
-            '(event.startDate > :cursorDate OR (event.startDate = :cursorDate AND event.id > :cursorId))',
-            { cursorDate: cursorEvent.startDate, cursorId },
-          );
-        }
+      const decoded = this.decodeCursor(query.cursor);
+      if (decoded) {
+        qb.andWhere(
+          '(event.startDate > :cursorDate OR (event.startDate = :cursorDate AND event.id > :cursorId))',
+          { cursorDate: decoded.startDate, cursorId: decoded.id },
+        );
       }
     }
 
@@ -203,21 +204,27 @@ export class DIDApiService {
     // Fetch one extra to determine if there's a next page
     qb.take(limit + 1);
 
-    const rawAndEntities = await qb.getRawAndEntities();
-    const events = rawAndEntities.entities;
-    const rawResults = rawAndEntities.raw;
+    // Use getRawMany to get correct addSelect aliases.
+    // getRawAndEntities returns raw keys as tableAlias_columnName which breaks aliases.
+    const rawResults = await qb.getRawMany();
+
+    // Separate entities from raw: we need to reconstruct from raw rows
+    // since getRawMany flattens everything. The entity columns use the
+    // event_ prefix from the main alias.
+    const hasMore = rawResults.length > limit;
+    if (hasMore) {
+      rawResults.pop();
+    }
 
     // Determine cursor for next page
     let nextCursor: string | null = null;
-    if (events.length > limit) {
-      events.pop();
-      rawResults.pop();
-      const lastEvent = events[events.length - 1];
-      nextCursor = String(lastEvent.id);
+    if (hasMore && rawResults.length > 0) {
+      const lastRaw = rawResults[rawResults.length - 1];
+      nextCursor = this.encodeCursor(lastRaw.event_id, lastRaw.event_startDate);
     }
 
     // Build attendee count map
-    const eventIds = events.map((e) => e.id);
+    const eventIds = rawResults.map((r) => r.event_id).filter(Boolean);
     let attendeeCountMap: Record<number, number> = {};
     if (eventIds.length > 0) {
       const attendeeCounts = await eventRepo
@@ -241,31 +248,31 @@ export class DIDApiService {
       );
     }
 
-    // Map events to response shape
-    const mappedEvents = events.map((event, index) => {
-      const raw = rawResults[index];
+    // Map raw rows to response shape
+    const mappedEvents = rawResults.map((raw) => {
+      const hasGroup = raw.eventGroup_id != null;
       return {
-        slug: event.slug,
-        name: event.name,
-        description: event.description,
-        startDate: event.startDate,
-        endDate: event.endDate,
-        location: event.location || null,
-        locationOnline: event.locationOnline || null,
-        type: event.type,
-        visibility: event.visibility,
-        status: event.status,
-        atprotoUri: event.atprotoUri || null,
-        group: event.group
+        slug: raw.event_slug,
+        name: raw.event_name,
+        description: raw.event_description,
+        startDate: raw.event_startDate,
+        endDate: raw.event_endDate,
+        location: raw.event_location || null,
+        locationOnline: raw.event_locationOnline || null,
+        type: raw.event_type,
+        visibility: raw.event_visibility,
+        status: raw.event_status,
+        atprotoUri: raw.event_atprotoUri || null,
+        group: hasGroup
           ? {
-              slug: event.group.slug,
-              name: event.group.name,
-              role: raw?.userGroupRole || null,
+              slug: raw.eventGroup_slug,
+              name: raw.eventGroup_name,
+              role: raw.userGroupRole || null,
             }
           : null,
-        attendeesCount: attendeeCountMap[event.id] || 0,
-        userRsvpStatus: raw?.userRsvpStatus || null,
-        image: event.image || null,
+        attendeesCount: attendeeCountMap[raw.event_id] || 0,
+        userRsvpStatus: raw.userRsvpStatus || null,
+        image: raw.image_id ? { id: raw.image_id, path: raw.image_path } : null,
       };
     });
 
@@ -273,6 +280,39 @@ export class DIDApiService {
       events: mappedEvents,
       cursor: nextCursor,
     };
+  }
+
+  /**
+   * Encode cursor as base64 JSON containing id and startDate.
+   */
+  private encodeCursor(id: number, startDate: Date | string): string {
+    const dateStr =
+      startDate instanceof Date ? startDate.toISOString() : startDate;
+    return Buffer.from(JSON.stringify({ id, startDate: dateStr })).toString(
+      'base64',
+    );
+  }
+
+  /**
+   * Decode cursor from base64 JSON. Returns null if invalid.
+   */
+  private decodeCursor(
+    cursor: string,
+  ): { id: number; startDate: string } | null {
+    try {
+      const decoded = JSON.parse(
+        Buffer.from(cursor, 'base64').toString('utf-8'),
+      );
+      if (
+        typeof decoded.id === 'number' &&
+        typeof decoded.startDate === 'string'
+      ) {
+        return decoded;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**
