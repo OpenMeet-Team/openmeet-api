@@ -71,12 +71,11 @@ export class DIDApiService {
 
     const groups = await groupRepo
       .createQueryBuilder('group')
-      .innerJoin('group.groupMembers', 'gm')
-      .innerJoin('gm.user', 'user', 'user.id = :userId', { userId })
+      .innerJoinAndSelect('group.groupMembers', 'gm', 'gm.userId = :userId', {
+        userId,
+      })
       .leftJoinAndSelect('gm.groupRole', 'groupRole')
       .leftJoinAndSelect('group.image', 'image')
-      .addSelect('gm.id')
-      .addSelect('groupRole.name')
       .loadRelationCountAndMap('group.groupMembersCount', 'group.groupMembers')
       .getMany();
 
