@@ -70,6 +70,7 @@ import { DidWebModule } from './did-web/did-web.module';
 import { UserAtprotoIdentityModule } from './user-atproto-identity/user-atproto-identity.module';
 import { AtprotoIdentityModule } from './atproto-identity/atproto-identity.module';
 import { MeModule } from './me/me.module';
+import { DIDApiModule } from './did-api/did-api.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -177,6 +178,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     UserAtprotoIdentityModule,
     AtprotoIdentityModule,
     MeModule,
+    DIDApiModule,
     // Conditionally import test helpers only in non-production environments
     ...(process.env.NODE_ENV !== 'production'
       ? [TestHelpersModule, MailPreviewModule]
@@ -201,9 +203,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   exports: ['AUDIT_LOGGER'],
 })
 export class AppModule {
-  constructor(
-    private readonly tenantConnectionService: TenantConnectionService,
-  ) {
+  constructor(_tenantConnectionService: TenantConnectionService) {
     // Ensure that TenantConnectionService is instantiated when the application starts
     // This ensures the onModuleInit hook is triggered
 
