@@ -13,6 +13,7 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { Not } from 'typeorm';
 import { DIDEventsQueryDto } from './dto/did-events-query.dto';
 import {
   EventVisibility,
@@ -165,8 +166,8 @@ export class DIDApiService {
       .leftJoin(
         'eventAttendees',
         'ea',
-        'ea.eventId = event.id AND ea.userId = :userId',
-        { userId },
+        'ea.eventId = event.id AND ea.userId = :userId AND ea.status != :rejectedStatus',
+        { userId, rejectedStatus: EventAttendeeStatus.Rejected },
       )
       .addSelect('groupRole.name', 'userGroupRole')
       .addSelect('ea.status', 'userRsvpStatus')
@@ -373,11 +374,12 @@ export class DIDApiService {
   ): Promise<boolean> {
     const { groupMemberRepo, eventAttendeeRepo } = await this.getRepositories();
 
-    // Check if user is attending this event
+    // Check if user is attending this event (rejected users are excluded)
     const attendance = await eventAttendeeRepo.findOne({
       where: {
         event: { id: event.id },
         user: { id: userId },
+        status: Not(EventAttendeeStatus.Rejected),
       },
     });
     if (attendance) return true;
