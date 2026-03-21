@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { BlueskyController } from './bluesky.controller';
+import { AtprotoResolveController } from './atproto-resolve.controller';
 import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
@@ -26,7 +27,7 @@ import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto
     UserAtprotoIdentityModule,
     forwardRef(() => EventModule),
   ],
-  controllers: [BlueskyController],
+  controllers: [BlueskyController, AtprotoResolveController],
   providers: [
     BlueskyService,
     BlueskyIdService,
