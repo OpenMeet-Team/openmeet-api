@@ -103,9 +103,14 @@ export class AtprotoServiceAuthService {
       this.configService.get<string>('SERVICE_DID', { infer: true }) ||
       'did:web:api.openmeet.net';
 
-    if (aud !== serviceDid) {
+    // Accept aud with or without #openmeet service fragment.
+    // PDS OAuth scopes require the fragment (e.g. did:web:api.openmeet.net#openmeet)
+    // to match the DID document's service id, so clients may send either form.
+    const baseDid = serviceDid.split('#')[0];
+    const validAuds = new Set([baseDid, `${baseDid}#openmeet`]);
+    if (!aud || !validAuds.has(aud)) {
       this.logger.warn(
-        `Service auth rejected: aud mismatch (got ${aud}, expected ${serviceDid})`,
+        `Service auth rejected: aud mismatch (got ${aud}, expected ${baseDid} or ${baseDid}#openmeet)`,
       );
       throw new UnauthorizedException('Invalid audience');
     }

@@ -134,6 +134,19 @@ describe('AtprotoServiceAuthService', () => {
       );
     });
 
+    it('should accept a JWT with #openmeet service fragment in aud', async () => {
+      const token = makeJwt(validHeader, {
+        ...validPayload,
+        aud: 'did:web:api.openmeet.net#openmeet',
+      });
+
+      // Should not throw on aud validation — will fail later on signature
+      // verification, which confirms aud check passed.
+      await expect(service.verifyAndExchange(token, 'tenant1')).rejects.toThrow(
+        UnauthorizedException, // "Could not resolve DID", not "Invalid audience"
+      );
+    });
+
     it('should reject a JWT with wrong lxm', async () => {
       const token = makeJwt(validHeader, {
         ...validPayload,
