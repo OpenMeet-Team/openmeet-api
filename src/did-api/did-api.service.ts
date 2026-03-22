@@ -395,6 +395,44 @@ export class DIDApiService {
     hybrid: 'community.lexicon.calendar.event#hybrid',
   };
 
+  /**
+   * Shared field normalization for both list and detail responses.
+   * Maps OpenMeet internal fields to community.lexicon.calendar.event names.
+   */
+  private formatEventFields(fields: {
+    startDate: any;
+    endDate: any;
+    location: string | null;
+    locationOnline: string | null;
+    type: string;
+    atprotoUri: string | null;
+    imageUrl: string | null;
+    name: string;
+  }) {
+    return {
+      startsAt: fields.startDate
+        ? new Date(fields.startDate).toISOString()
+        : null,
+      endsAt: fields.endDate ? new Date(fields.endDate).toISOString() : null,
+      locations: fields.location
+        ? [
+            {
+              $type: 'community.lexicon.location.address',
+              description: fields.location,
+            },
+          ]
+        : [],
+      uris: fields.locationOnline
+        ? [{ uri: fields.locationOnline, name: 'Online' }]
+        : [],
+      mode: DIDApiService.MODE_MAP[fields.type] || fields.type,
+      uri: fields.atprotoUri || null,
+      media: fields.imageUrl
+        ? [{ role: 'thumbnail', alt: fields.name, url: fields.imageUrl }]
+        : [],
+    };
+  }
+
   private mapEventListItem(
     raw: any,
     attendeeCountMap: Record<number, number>,
@@ -404,36 +442,25 @@ export class DIDApiService {
     const imageUrl = this.buildImageUrl(
       raw.image_id ? { path: raw.image_path } : null,
     );
-
-    const startDate = raw.event_startDate;
-    const endDate = raw.event_endDate;
-    const location = raw.event_location || null;
-    const locationOnline = raw.event_locationOnline || null;
     const identity = raw.user_ulid ? didMap.get(raw.user_ulid) : null;
 
     return {
       slug: raw.event_slug,
       name: raw.event_name,
       description: raw.event_description,
-      startsAt: startDate ? new Date(startDate).toISOString() : null,
-      endsAt: endDate ? new Date(endDate).toISOString() : null,
-      locations: location
-        ? [
-            {
-              $type: 'community.lexicon.location.address',
-              description: location,
-            },
-          ]
-        : [],
-      uris: locationOnline ? [{ uri: locationOnline, name: 'Online' }] : [],
-      mode: DIDApiService.MODE_MAP[raw.event_type] || raw.event_type,
+      ...this.formatEventFields({
+        startDate: raw.event_startDate,
+        endDate: raw.event_endDate,
+        location: raw.event_location || null,
+        locationOnline: raw.event_locationOnline || null,
+        type: raw.event_type,
+        atprotoUri: raw.event_atprotoUri,
+        imageUrl,
+        name: raw.event_name,
+      }),
       visibility: raw.event_visibility,
       status: raw.event_status,
-      uri: raw.event_atprotoUri || null,
       did: identity?.did || null,
-      media: imageUrl
-        ? [{ role: 'thumbnail', alt: raw.event_name, url: imageUrl }]
-        : [],
       group: hasGroup
         ? {
             slug: raw.eventGroup_slug,
@@ -506,14 +533,18 @@ export class DIDApiService {
       slug: event.slug,
       name: event.name,
       description: event.description,
-      startDate: event.startDate,
-      endDate: event.endDate,
-      location: event.location || null,
-      locationOnline: event.locationOnline || null,
-      type: event.type,
+      ...this.formatEventFields({
+        startDate: event.startDate,
+        endDate: event.endDate,
+        location: event.location || null,
+        locationOnline: event.locationOnline || null,
+        type: event.type,
+        atprotoUri: event.atprotoUri,
+        imageUrl: this.buildImageUrl(event.image),
+        name: event.name,
+      }),
       visibility: event.visibility,
       status: event.status,
-      atprotoUri: event.atprotoUri || null,
       lat: event.lat != null ? event.lat : null,
       lon: event.lon != null ? event.lon : null,
       timeZone: event.timeZone || null,
@@ -554,7 +585,6 @@ export class DIDApiService {
       }),
       attendeesCount,
       userRsvpStatus: attendance?.status || null,
-      image: this.buildImageUrl(event.image),
     };
   }
 }
