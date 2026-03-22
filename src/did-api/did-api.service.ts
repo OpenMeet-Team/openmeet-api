@@ -391,7 +391,7 @@ export class DIDApiService {
 
   private static readonly MODE_MAP: Record<string, string> = {
     online: 'community.lexicon.calendar.event#virtual',
-    in_person: 'community.lexicon.calendar.event#inperson',
+    'in-person': 'community.lexicon.calendar.event#inperson',
     hybrid: 'community.lexicon.calendar.event#hybrid',
   };
 
@@ -400,8 +400,8 @@ export class DIDApiService {
    * Maps OpenMeet internal fields to community.lexicon.calendar.event names.
    */
   private formatEventFields(fields: {
-    startDate: any;
-    endDate: any;
+    startDate: Date | string;
+    endDate: Date | string | null;
     location: string | null;
     locationOnline: string | null;
     type: string;
@@ -410,9 +410,7 @@ export class DIDApiService {
     name: string;
   }) {
     return {
-      startsAt: fields.startDate
-        ? new Date(fields.startDate).toISOString()
-        : null,
+      startsAt: new Date(fields.startDate).toISOString(),
       endsAt: fields.endDate ? new Date(fields.endDate).toISOString() : null,
       locations: fields.location
         ? [
@@ -524,10 +522,13 @@ export class DIDApiService {
     for (const ea of confirmedAttendees) {
       if (ea.user?.ulid) allUlids.push(ea.user.ulid);
     }
-    const didMap = await this.userAtprotoIdentityService.findByUserUlids(
-      tenantId,
-      allUlids,
-    );
+    const didMap =
+      allUlids.length > 0
+        ? await this.userAtprotoIdentityService.findByUserUlids(
+            tenantId,
+            allUlids,
+          )
+        : new Map();
 
     return {
       slug: event.slug,

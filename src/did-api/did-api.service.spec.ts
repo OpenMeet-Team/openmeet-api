@@ -222,6 +222,35 @@ describe('DIDApiService', () => {
 
       expect(result.slug).toBe('public-event');
       expect(result.attendeesCount).toBe(5);
+
+      // Verify normalized field names (lexicon format)
+      expect(result).toHaveProperty('startsAt');
+      expect(result).toHaveProperty('endsAt');
+      expect(result).toHaveProperty('locations');
+      expect(result).toHaveProperty('uris');
+      expect(result).toHaveProperty('mode');
+      expect(result).toHaveProperty('uri');
+      expect(result).toHaveProperty('media');
+
+      // Verify old field names are absent
+      expect(result).not.toHaveProperty('startDate');
+      expect(result).not.toHaveProperty('endDate');
+      expect(result).not.toHaveProperty('location');
+      expect(result).not.toHaveProperty('locationOnline');
+      expect(result).not.toHaveProperty('type');
+      expect(result).not.toHaveProperty('atprotoUri');
+      expect(result).not.toHaveProperty('image');
+
+      // Verify field values
+      expect(typeof result.startsAt).toBe('string');
+      expect(result.startsAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(result.locations).toEqual([
+        {
+          $type: 'community.lexicon.location.address',
+          description: 'Test Location',
+        },
+      ]);
+      expect(result.mode).toBe('community.lexicon.calendar.event#inperson');
     });
 
     it('should include organizer (user) with displayName, did, handle, and avatar', async () => {
@@ -775,7 +804,7 @@ describe('DIDApiService', () => {
           mode: 'community.lexicon.calendar.event#virtual',
         },
         {
-          type: 'in_person',
+          type: 'in-person',
           mode: 'community.lexicon.calendar.event#inperson',
         },
         {
