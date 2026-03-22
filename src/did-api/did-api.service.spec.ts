@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DIDApiService } from './did-api.service';
 import { ConfigService } from '@nestjs/config';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { REQUEST } from '@nestjs/core';
 import {
   NotFoundException,
@@ -16,6 +17,7 @@ describe('DIDApiService', () => {
   let mockEventRepo: any;
   let mockEventAttendeeRepo: any;
   let mockTenantConnectionService: any;
+  let mockUserAtprotoIdentityService: any;
 
   const mockRequest = { tenantId: 'test-tenant' };
 
@@ -86,6 +88,10 @@ describe('DIDApiService', () => {
       }),
     };
 
+    mockUserAtprotoIdentityService = {
+      findByUserUlids: jest.fn().mockResolvedValue(new Map()),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DIDApiService,
@@ -93,6 +99,10 @@ describe('DIDApiService', () => {
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: mockUserAtprotoIdentityService,
         },
         {
           provide: ConfigService,
@@ -194,15 +204,296 @@ describe('DIDApiService', () => {
         atprotoUri: null,
         group: null,
         image: null,
+        user: null,
+        categories: [],
+        lat: null,
+        lon: null,
+        timeZone: 'UTC',
       };
       mockEventRepo.findOne.mockResolvedValue(publicEvent);
       mockEventAttendeeRepo.findOne.mockResolvedValue(null);
       mockEventAttendeeRepo.count.mockResolvedValue(5);
 
+      const attendeeQb = createQueryBuilderMock();
+      attendeeQb.getMany.mockResolvedValue([]);
+      mockEventAttendeeRepo.createQueryBuilder.mockReturnValue(attendeeQb);
+
       const result = await service.getEventBySlug(1, 'public-event');
 
       expect(result.slug).toBe('public-event');
       expect(result.attendeesCount).toBe(5);
+    });
+
+    it('should include organizer (user) with name, slug, did, and photo', async () => {
+      const publicEvent = {
+        id: 1,
+        slug: 'event-with-organizer',
+        name: 'Event With Organizer',
+        description: 'Test',
+        startDate: new Date(),
+        endDate: new Date(),
+        location: null,
+        locationOnline: null,
+        type: 'in-person',
+        visibility: 'public',
+        status: 'published',
+        atprotoUri: null,
+        group: null,
+        image: null,
+        lat: 40.7128,
+        lon: -74.006,
+        timeZone: 'America/New_York',
+        categories: [],
+        user: {
+          name: 'Jane Organizer',
+          slug: 'jane-organizer-abc123',
+          ulid: 'ulid-jane',
+          photo: { path: 'avatars/jane.jpg' },
+        },
+      };
+      mockEventRepo.findOne.mockResolvedValue(publicEvent);
+      mockEventAttendeeRepo.findOne.mockResolvedValue(null);
+      mockEventAttendeeRepo.count.mockResolvedValue(0);
+      mockUserAtprotoIdentityService.findByUserUlids.mockResolvedValue(
+        new Map([['ulid-jane', { did: 'did:plc:abc123' }]]),
+      );
+
+      const attendeeQb = createQueryBuilderMock();
+      attendeeQb.getMany.mockResolvedValue([]);
+      mockEventAttendeeRepo.createQueryBuilder.mockReturnValue(attendeeQb);
+
+      const result = await service.getEventBySlug(1, 'event-with-organizer');
+
+      expect(result.user).toEqual({
+        name: 'Jane Organizer',
+        slug: 'jane-organizer-abc123',
+        did: 'did:plc:abc123',
+        photo: 'http://localhost:3000/avatars/jane.jpg',
+      });
+    });
+
+    it('should include lat, lon, and timeZone', async () => {
+      const publicEvent = {
+        id: 1,
+        slug: 'geo-event',
+        name: 'Geo Event',
+        description: 'Test',
+        startDate: new Date(),
+        endDate: new Date(),
+        location: 'NYC',
+        locationOnline: null,
+        type: 'in-person',
+        visibility: 'public',
+        status: 'published',
+        atprotoUri: null,
+        group: null,
+        image: null,
+        lat: 40.7128,
+        lon: -74.006,
+        timeZone: 'America/New_York',
+        categories: [],
+        user: null,
+      };
+      mockEventRepo.findOne.mockResolvedValue(publicEvent);
+      mockEventAttendeeRepo.findOne.mockResolvedValue(null);
+      mockEventAttendeeRepo.count.mockResolvedValue(0);
+
+      const attendeeQb = createQueryBuilderMock();
+      attendeeQb.getMany.mockResolvedValue([]);
+      mockEventAttendeeRepo.createQueryBuilder.mockReturnValue(attendeeQb);
+
+      const result = await service.getEventBySlug(1, 'geo-event');
+
+      expect(result.lat).toBe(40.7128);
+      expect(result.lon).toBe(-74.006);
+      expect(result.timeZone).toBe('America/New_York');
+    });
+
+    it('should preserve zero values for lat and lon', async () => {
+      const publicEvent = {
+        id: 1,
+        slug: 'zero-coords',
+        name: 'Zero Coords',
+        description: 'Test',
+        startDate: new Date(),
+        endDate: new Date(),
+        location: 'Gulf of Guinea',
+        locationOnline: null,
+        type: 'in-person',
+        visibility: 'public',
+        status: 'published',
+        atprotoUri: null,
+        group: null,
+        image: null,
+        lat: 0,
+        lon: 0,
+        timeZone: 'UTC',
+        categories: [],
+        user: null,
+      };
+      mockEventRepo.findOne.mockResolvedValue(publicEvent);
+      mockEventAttendeeRepo.findOne.mockResolvedValue(null);
+      mockEventAttendeeRepo.count.mockResolvedValue(0);
+
+      const attendeeQb = createQueryBuilderMock();
+      attendeeQb.getMany.mockResolvedValue([]);
+      mockEventAttendeeRepo.createQueryBuilder.mockReturnValue(attendeeQb);
+
+      const result = await service.getEventBySlug(1, 'zero-coords');
+
+      expect(result.lat).toBe(0);
+      expect(result.lon).toBe(0);
+    });
+
+    it('should include categories', async () => {
+      const publicEvent = {
+        id: 1,
+        slug: 'categorized-event',
+        name: 'Categorized Event',
+        description: 'Test',
+        startDate: new Date(),
+        endDate: new Date(),
+        location: null,
+        locationOnline: null,
+        type: 'online',
+        visibility: 'public',
+        status: 'published',
+        atprotoUri: null,
+        group: null,
+        image: null,
+        lat: null,
+        lon: null,
+        timeZone: 'UTC',
+        user: null,
+        categories: [
+          { name: 'Tech', slug: 'tech' },
+          { name: 'Meetup', slug: 'meetup' },
+        ],
+      };
+      mockEventRepo.findOne.mockResolvedValue(publicEvent);
+      mockEventAttendeeRepo.findOne.mockResolvedValue(null);
+      mockEventAttendeeRepo.count.mockResolvedValue(0);
+
+      const attendeeQb = createQueryBuilderMock();
+      attendeeQb.getMany.mockResolvedValue([]);
+      mockEventAttendeeRepo.createQueryBuilder.mockReturnValue(attendeeQb);
+
+      const result = await service.getEventBySlug(1, 'categorized-event');
+
+      expect(result.categories).toEqual([
+        { name: 'Tech', slug: 'tech' },
+        { name: 'Meetup', slug: 'meetup' },
+      ]);
+    });
+
+    it('should include attendees with user profiles and roles', async () => {
+      const publicEvent = {
+        id: 1,
+        slug: 'event-with-attendees',
+        name: 'Event With Attendees',
+        description: 'Test',
+        startDate: new Date(),
+        endDate: new Date(),
+        location: null,
+        locationOnline: null,
+        type: 'online',
+        visibility: 'public',
+        status: 'published',
+        atprotoUri: null,
+        group: null,
+        image: null,
+        lat: null,
+        lon: null,
+        timeZone: 'UTC',
+        user: null,
+        categories: [],
+      };
+      mockEventRepo.findOne.mockResolvedValue(publicEvent);
+      mockEventAttendeeRepo.findOne.mockResolvedValue(null);
+      mockEventAttendeeRepo.count.mockResolvedValue(2);
+
+      // Mock attendee query
+      const attendeeQb = createQueryBuilderMock();
+      attendeeQb.getMany.mockResolvedValue([
+        {
+          status: 'confirmed',
+          role: { name: 'organizer' },
+          user: {
+            name: 'Alice',
+            slug: 'alice-abc',
+            ulid: 'ulid-alice',
+            photo: { path: 'avatars/alice.jpg' },
+          },
+        },
+        {
+          status: 'confirmed',
+          role: { name: 'attendee' },
+          user: {
+            name: 'Bob',
+            slug: 'bob-xyz',
+            ulid: 'ulid-bob',
+            photo: null,
+          },
+        },
+      ]);
+      mockEventAttendeeRepo.createQueryBuilder.mockReturnValue(attendeeQb);
+      mockUserAtprotoIdentityService.findByUserUlids.mockResolvedValue(
+        new Map([['ulid-alice', { did: 'did:plc:alice' }]]),
+      );
+
+      const result = await service.getEventBySlug(1, 'event-with-attendees');
+
+      expect(result.attendees).toHaveLength(2);
+      expect(result.attendees[0]).toEqual({
+        name: 'Alice',
+        slug: 'alice-abc',
+        did: 'did:plc:alice',
+        photo: 'http://localhost:3000/avatars/alice.jpg',
+        role: 'organizer',
+      });
+      expect(result.attendees[1]).toEqual({
+        name: 'Bob',
+        slug: 'bob-xyz',
+        did: null,
+        photo: null,
+        role: 'attendee',
+      });
+      expect(result.attendeesCount).toBe(2);
+    });
+
+    it('should return null user when event has no organizer', async () => {
+      const publicEvent = {
+        id: 1,
+        slug: 'no-organizer',
+        name: 'No Organizer',
+        description: 'Test',
+        startDate: new Date(),
+        endDate: new Date(),
+        location: null,
+        locationOnline: null,
+        type: 'online',
+        visibility: 'public',
+        status: 'published',
+        atprotoUri: null,
+        group: null,
+        image: null,
+        lat: null,
+        lon: null,
+        timeZone: 'UTC',
+        user: null,
+        categories: [],
+      };
+      mockEventRepo.findOne.mockResolvedValue(publicEvent);
+      mockEventAttendeeRepo.findOne.mockResolvedValue(null);
+      mockEventAttendeeRepo.count.mockResolvedValue(0);
+
+      const attendeeQb = createQueryBuilderMock();
+      attendeeQb.getMany.mockResolvedValue([]);
+      mockEventAttendeeRepo.createQueryBuilder.mockReturnValue(attendeeQb);
+
+      const result = await service.getEventBySlug(1, 'no-organizer');
+
+      expect(result.user).toBeNull();
     });
   });
 
@@ -216,6 +507,10 @@ describe('DIDApiService', () => {
           {
             provide: TenantConnectionService,
             useValue: mockTenantConnectionService,
+          },
+          {
+            provide: UserAtprotoIdentityService,
+            useValue: mockUserAtprotoIdentityService,
           },
           {
             provide: ConfigService,

@@ -92,6 +92,29 @@ export class UserAtprotoIdentityService {
   }
 
   /**
+   * Find AT Protocol identities for multiple user ULIDs.
+   * Returns a map of userUlid -> identity for efficient batch lookups.
+   *
+   * @param tenantId - The tenant ID
+   * @param userUlids - Array of user ULIDs
+   * @returns Map of userUlid to identity
+   */
+  async findByUserUlids(
+    tenantId: string,
+    userUlids: string[],
+  ): Promise<Map<string, UserAtprotoIdentityEntity>> {
+    if (userUlids.length === 0) return new Map();
+    await this.getTenantRepository(tenantId);
+
+    const identities = await this.repository
+      .createQueryBuilder('identity')
+      .where('identity.userUlid IN (:...userUlids)', { userUlids })
+      .getMany();
+
+    return new Map(identities.map((i) => [i.userUlid, i]));
+  }
+
+  /**
    * Delete an AT Protocol identity by user ULID.
    *
    * @param tenantId - The tenant ID

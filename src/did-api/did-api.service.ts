@@ -9,6 +9,7 @@ import {
 import { REQUEST } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
@@ -27,6 +28,7 @@ export class DIDApiService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly configService: ConfigService,
+    private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
   ) {}
 
   private buildImageUrl(image: any): string | null {
@@ -346,7 +348,7 @@ export class DIDApiService {
 
     const event = await eventRepo.findOne({
       where: { slug },
-      relations: ['group', 'image'],
+      relations: ['group', 'image', 'user', 'user.photo', 'categories'],
     });
 
     if (!event) {
@@ -429,6 +431,30 @@ export class DIDApiService {
       },
     });
 
+    // Get all confirmed attendees with user profiles and roles
+    const confirmedAttendees = await eventAttendeeRepo
+      .createQueryBuilder('ea')
+      .leftJoinAndSelect('ea.user', 'user')
+      .leftJoinAndSelect('user.photo', 'photo')
+      .leftJoinAndSelect('ea.role', 'role')
+      .where('ea.eventId = :eventId', { eventId: event.id })
+      .andWhere('ea.status = :status', {
+        status: EventAttendeeStatus.Confirmed,
+      })
+      .getMany();
+
+    // Batch-fetch AT Protocol DIDs for organizer + all attendees
+    const tenantId = this.request.tenantId;
+    const allUlids: string[] = [];
+    if (event.user?.ulid) allUlids.push(event.user.ulid);
+    for (const ea of confirmedAttendees) {
+      if (ea.user?.ulid) allUlids.push(ea.user.ulid);
+    }
+    const didMap = await this.userAtprotoIdentityService.findByUserUlids(
+      tenantId,
+      allUlids,
+    );
+
     return {
       slug: event.slug,
       name: event.name,
@@ -441,6 +467,17 @@ export class DIDApiService {
       visibility: event.visibility,
       status: event.status,
       atprotoUri: event.atprotoUri || null,
+      lat: event.lat != null ? event.lat : null,
+      lon: event.lon != null ? event.lon : null,
+      timeZone: event.timeZone || null,
+      user: event.user
+        ? {
+            name: event.user.name,
+            slug: event.user.slug,
+            did: didMap.get(event.user.ulid)?.did || null,
+            photo: this.buildImageUrl(event.user.photo),
+          }
+        : null,
       group: event.group
         ? {
             slug: event.group.slug,
@@ -448,6 +485,17 @@ export class DIDApiService {
             role: groupRole,
           }
         : null,
+      categories: (event.categories || []).map((cat) => ({
+        name: cat.name,
+        slug: cat.slug,
+      })),
+      attendees: confirmedAttendees.map((ea) => ({
+        name: ea.user?.name || null,
+        slug: ea.user?.slug || null,
+        did: (ea.user?.ulid && didMap.get(ea.user.ulid)?.did) || null,
+        photo: this.buildImageUrl(ea.user?.photo),
+        role: ea.role?.name || null,
+      })),
       attendeesCount,
       userRsvpStatus: attendance?.status || null,
       image: this.buildImageUrl(event.image),

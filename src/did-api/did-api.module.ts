@@ -7,6 +7,7 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { EventAttendeesEntity } from '../event-attendee/infrastructure/persisten
       EventAttendeesEntity,
     ]),
     TenantModule,
+    UserAtprotoIdentityModule,
   ],
   controllers: [DIDApiController],
   providers: [DIDApiService],
