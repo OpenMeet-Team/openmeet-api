@@ -224,7 +224,7 @@ describe('DIDApiService', () => {
       expect(result.attendeesCount).toBe(5);
     });
 
-    it('should include organizer (user) with name, slug, did, and photo', async () => {
+    it('should include organizer (user) with displayName, did, handle, and avatar', async () => {
       const publicEvent = {
         id: 1,
         slug: 'event-with-organizer',
@@ -255,7 +255,9 @@ describe('DIDApiService', () => {
       mockEventAttendeeRepo.findOne.mockResolvedValue(null);
       mockEventAttendeeRepo.count.mockResolvedValue(0);
       mockUserAtprotoIdentityService.findByUserUlids.mockResolvedValue(
-        new Map([['ulid-jane', { did: 'did:plc:abc123' }]]),
+        new Map([
+          ['ulid-jane', { did: 'did:plc:abc123', handle: 'jane.bsky.social' }],
+        ]),
       );
 
       const attendeeQb = createQueryBuilderMock();
@@ -265,10 +267,10 @@ describe('DIDApiService', () => {
       const result = await service.getEventBySlug(1, 'event-with-organizer');
 
       expect(result.user).toEqual({
-        name: 'Jane Organizer',
-        slug: 'jane-organizer-abc123',
         did: 'did:plc:abc123',
-        photo: 'http://localhost:3000/avatars/jane.jpg',
+        handle: 'jane.bsky.social',
+        displayName: 'Jane Organizer',
+        avatar: 'http://localhost:3000/avatars/jane.jpg',
       });
     });
 
@@ -438,24 +440,28 @@ describe('DIDApiService', () => {
       ]);
       mockEventAttendeeRepo.createQueryBuilder.mockReturnValue(attendeeQb);
       mockUserAtprotoIdentityService.findByUserUlids.mockResolvedValue(
-        new Map([['ulid-alice', { did: 'did:plc:alice' }]]),
+        new Map([
+          ['ulid-alice', { did: 'did:plc:alice', handle: 'alice.bsky.social' }],
+        ]),
       );
 
       const result = await service.getEventBySlug(1, 'event-with-attendees');
 
       expect(result.attendees).toHaveLength(2);
       expect(result.attendees[0]).toEqual({
-        name: 'Alice',
-        slug: 'alice-abc',
         did: 'did:plc:alice',
-        photo: 'http://localhost:3000/avatars/alice.jpg',
+        handle: 'alice.bsky.social',
+        name: 'Alice',
+        avatar: 'http://localhost:3000/avatars/alice.jpg',
+        url: '/p/alice.bsky.social',
         role: 'organizer',
       });
       expect(result.attendees[1]).toEqual({
-        name: 'Bob',
-        slug: 'bob-xyz',
         did: null,
-        photo: null,
+        handle: null,
+        name: 'Bob',
+        avatar: null,
+        url: null,
         role: 'attendee',
       });
       expect(result.attendeesCount).toBe(2);

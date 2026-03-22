@@ -471,12 +471,17 @@ export class DIDApiService {
       lon: event.lon != null ? event.lon : null,
       timeZone: event.timeZone || null,
       user: event.user
-        ? {
-            name: event.user.name,
-            slug: event.user.slug,
-            did: didMap.get(event.user.ulid)?.did || null,
-            photo: this.buildImageUrl(event.user.photo),
-          }
+        ? (() => {
+            const identity = event.user.ulid
+              ? didMap.get(event.user.ulid)
+              : null;
+            return {
+              did: identity?.did || null,
+              handle: identity?.handle || null,
+              displayName: event.user.name,
+              avatar: this.buildImageUrl(event.user.photo),
+            };
+          })()
         : null,
       group: event.group
         ? {
@@ -489,13 +494,17 @@ export class DIDApiService {
         name: cat.name,
         slug: cat.slug,
       })),
-      attendees: confirmedAttendees.map((ea) => ({
-        name: ea.user?.name || null,
-        slug: ea.user?.slug || null,
-        did: (ea.user?.ulid && didMap.get(ea.user.ulid)?.did) || null,
-        photo: this.buildImageUrl(ea.user?.photo),
-        role: ea.role?.name || null,
-      })),
+      attendees: confirmedAttendees.map((ea) => {
+        const identity = ea.user?.ulid ? didMap.get(ea.user.ulid) : null;
+        return {
+          did: identity?.did || null,
+          handle: identity?.handle || null,
+          name: ea.user?.name || null,
+          avatar: this.buildImageUrl(ea.user?.photo),
+          url: identity?.did ? `/p/${identity.handle || identity.did}` : null,
+          role: ea.role?.name || null,
+        };
+      }),
       attendeesCount,
       userRsvpStatus: attendance?.status || null,
       image: this.buildImageUrl(event.image),
