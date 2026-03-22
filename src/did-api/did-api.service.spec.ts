@@ -649,4 +649,263 @@ describe('DIDApiService', () => {
       expect(hasVisibilities2).toBe(false);
     });
   });
+
+  describe('getMyEvents FlatEventRecord normalization', () => {
+    function buildRawEventRow(overrides: Record<string, any> = {}) {
+      return {
+        event_id: 1,
+        event_slug: 'test-event-abc123',
+        event_name: 'Test Event',
+        event_description: 'A test event',
+        event_startDate: new Date('2026-04-01T10:00:00.000Z'),
+        event_endDate: new Date('2026-04-01T12:00:00.000Z'),
+        event_location: 'Room 101',
+        event_locationOnline: 'https://zoom.us/j/123',
+        event_type: 'hybrid',
+        event_visibility: 'public',
+        event_status: 'published',
+        event_atprotoUri:
+          'at://did:plc:xyz/community.lexicon.calendar.event/abc',
+        eventGroup_id: null,
+        eventGroup_slug: null,
+        eventGroup_name: null,
+        userGroupRole: null,
+        userRsvpStatus: 'confirmed',
+        image_id: null,
+        image_path: null,
+        event_userId: 42,
+        user_ulid: 'ulid-organizer',
+        ...overrides,
+      };
+    }
+
+    it('should rename startDate to startsAt as ISO string', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([buildRawEventRow()]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0]).toHaveProperty('startsAt');
+      expect(result.events[0]).not.toHaveProperty('startDate');
+      expect(result.events[0].startsAt).toBe('2026-04-01T10:00:00.000Z');
+    });
+
+    it('should rename endDate to endsAt as ISO string', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([buildRawEventRow()]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0]).toHaveProperty('endsAt');
+      expect(result.events[0]).not.toHaveProperty('endDate');
+      expect(result.events[0].endsAt).toBe('2026-04-01T12:00:00.000Z');
+    });
+
+    it('should set endsAt to null when endDate is null', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([
+        buildRawEventRow({ event_endDate: null }),
+      ]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0].endsAt).toBeNull();
+    });
+
+    it('should transform location string to locations array', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([buildRawEventRow()]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0]).not.toHaveProperty('location');
+      expect(result.events[0].locations).toEqual([
+        {
+          $type: 'community.lexicon.location.address',
+          description: 'Room 101',
+        },
+      ]);
+    });
+
+    it('should return empty locations array when location is null', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([
+        buildRawEventRow({ event_location: null }),
+      ]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0].locations).toEqual([]);
+    });
+
+    it('should transform locationOnline to uris array', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([buildRawEventRow()]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0]).not.toHaveProperty('locationOnline');
+      expect(result.events[0].uris).toEqual([
+        { uri: 'https://zoom.us/j/123', name: 'Online' },
+      ]);
+    });
+
+    it('should return empty uris array when locationOnline is null', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([
+        buildRawEventRow({ event_locationOnline: null }),
+      ]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0].uris).toEqual([]);
+    });
+
+    it('should map type to mode with lexicon values', async () => {
+      const cases = [
+        {
+          type: 'online',
+          mode: 'community.lexicon.calendar.event#virtual',
+        },
+        {
+          type: 'in_person',
+          mode: 'community.lexicon.calendar.event#inperson',
+        },
+        {
+          type: 'hybrid',
+          mode: 'community.lexicon.calendar.event#hybrid',
+        },
+      ];
+
+      for (const { type, mode } of cases) {
+        const qb = createQueryBuilderMock();
+        qb.getRawMany.mockResolvedValue([
+          buildRawEventRow({ event_type: type }),
+        ]);
+        mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+        const result = await service.getMyEvents(1, {});
+
+        expect(result.events[0]).not.toHaveProperty('type');
+        expect(result.events[0].mode).toBe(mode);
+      }
+    });
+
+    it('should rename atprotoUri to uri', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([buildRawEventRow()]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0]).not.toHaveProperty('atprotoUri');
+      expect(result.events[0].uri).toBe(
+        'at://did:plc:xyz/community.lexicon.calendar.event/abc',
+      );
+    });
+
+    it('should transform image to media array', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([
+        buildRawEventRow({
+          image_id: 5,
+          image_path: 'events/banner.jpg',
+        }),
+      ]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0]).not.toHaveProperty('image');
+      expect(result.events[0].media).toEqual([
+        {
+          role: 'thumbnail',
+          alt: 'Test Event',
+          url: 'http://localhost:3000/events/banner.jpg',
+        },
+      ]);
+    });
+
+    it('should return empty media array when no image', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([buildRawEventRow()]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0].media).toEqual([]);
+    });
+
+    it('should include did field from batch DID resolution', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([
+        buildRawEventRow({ user_ulid: 'ulid-organizer' }),
+      ]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+      mockUserAtprotoIdentityService.findByUserUlids.mockResolvedValue(
+        new Map([
+          [
+            'ulid-organizer',
+            { did: 'did:plc:org123', handle: 'org.bsky.social' },
+          ],
+        ]),
+      );
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0].did).toBe('did:plc:org123');
+    });
+
+    it('should set did to null when organizer has no AT Protocol identity', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([
+        buildRawEventRow({ user_ulid: 'ulid-no-atproto' }),
+      ]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+      mockUserAtprotoIdentityService.findByUserUlids.mockResolvedValue(
+        new Map(),
+      );
+
+      const result = await service.getMyEvents(1, {});
+
+      expect(result.events[0].did).toBeNull();
+    });
+
+    it('should keep slug, name, description, visibility, status, group, attendeesCount, userRsvpStatus', async () => {
+      const qb = createQueryBuilderMock();
+      qb.getRawMany.mockResolvedValue([
+        buildRawEventRow({
+          eventGroup_id: 10,
+          eventGroup_slug: 'my-group',
+          eventGroup_name: 'My Group',
+          userGroupRole: 'admin',
+          userRsvpStatus: 'confirmed',
+        }),
+      ]);
+      mockEventRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getMyEvents(1, {});
+      const evt = result.events[0];
+
+      expect(evt.slug).toBe('test-event-abc123');
+      expect(evt.name).toBe('Test Event');
+      expect(evt.description).toBe('A test event');
+      expect(evt.visibility).toBe('public');
+      expect(evt.status).toBe('published');
+      expect(evt.group).toEqual({
+        slug: 'my-group',
+        name: 'My Group',
+        role: 'admin',
+      });
+      expect(evt.attendeesCount).toBe(0);
+      expect(evt.userRsvpStatus).toBe('confirmed');
+    });
+  });
 });
