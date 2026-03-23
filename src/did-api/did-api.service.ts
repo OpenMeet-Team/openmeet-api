@@ -9,6 +9,7 @@ import {
 import { REQUEST } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
@@ -27,6 +28,7 @@ export class DIDApiService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly configService: ConfigService,
+    private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
   ) {}
 
   private buildImageUrl(image: any): string | null {
@@ -155,6 +157,8 @@ export class DIDApiService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.group', 'eventGroup')
       .leftJoinAndSelect('event.image', 'image')
+      .leftJoin('event.user', 'user')
+      .addSelect('user.ulid', 'user_ulid')
       .leftJoin(
         'groupMembers',
         'gm',
@@ -269,35 +273,23 @@ export class DIDApiService {
       );
     }
 
-    // Map raw rows to response shape
-    const mappedEvents = rawResults.map((raw) => {
-      const hasGroup = raw.eventGroup_id != null;
-      return {
-        slug: raw.event_slug,
-        name: raw.event_name,
-        description: raw.event_description,
-        startDate: raw.event_startDate,
-        endDate: raw.event_endDate,
-        location: raw.event_location || null,
-        locationOnline: raw.event_locationOnline || null,
-        type: raw.event_type,
-        visibility: raw.event_visibility,
-        status: raw.event_status,
-        atprotoUri: raw.event_atprotoUri || null,
-        group: hasGroup
-          ? {
-              slug: raw.eventGroup_slug,
-              name: raw.eventGroup_name,
-              role: raw.userGroupRole || null,
-            }
-          : null,
-        attendeesCount: attendeeCountMap[raw.event_id] || 0,
-        userRsvpStatus: raw.userRsvpStatus || null,
-        image: this.buildImageUrl(
-          raw.image_id ? { path: raw.image_path } : null,
-        ),
-      };
-    });
+    // Batch-resolve organizer DIDs
+    const tenantId = this.request.tenantId;
+    const organizerUlids = rawResults
+      .map((r) => r.user_ulid)
+      .filter(Boolean) as string[];
+    const didMap =
+      organizerUlids.length > 0
+        ? await this.userAtprotoIdentityService.findByUserUlids(
+            tenantId,
+            organizerUlids,
+          )
+        : new Map();
+
+    // Map raw rows to FlatEventRecord-normalized shape
+    const mappedEvents = rawResults.map((raw) =>
+      this.mapEventListItem(raw, attendeeCountMap, didMap),
+    );
 
     return {
       events: mappedEvents,
@@ -346,7 +338,7 @@ export class DIDApiService {
 
     const event = await eventRepo.findOne({
       where: { slug },
-      relations: ['group', 'image'],
+      relations: ['group', 'image', 'user', 'user.photo', 'categories'],
     });
 
     if (!event) {
@@ -397,6 +389,88 @@ export class DIDApiService {
     return false;
   }
 
+  private static readonly MODE_MAP: Record<string, string> = {
+    online: 'community.lexicon.calendar.event#virtual',
+    'in-person': 'community.lexicon.calendar.event#inperson',
+    hybrid: 'community.lexicon.calendar.event#hybrid',
+  };
+
+  /**
+   * Shared field normalization for both list and detail responses.
+   * Maps OpenMeet internal fields to community.lexicon.calendar.event names.
+   */
+  private formatEventFields(fields: {
+    startDate: Date | string;
+    endDate: Date | string | null;
+    location: string | null;
+    locationOnline: string | null;
+    type: string;
+    atprotoUri: string | null;
+    imageUrl: string | null;
+    name: string;
+  }) {
+    return {
+      startsAt: new Date(fields.startDate).toISOString(),
+      endsAt: fields.endDate ? new Date(fields.endDate).toISOString() : null,
+      locations: fields.location
+        ? [
+            {
+              $type: 'community.lexicon.location.address',
+              description: fields.location,
+            },
+          ]
+        : [],
+      uris: fields.locationOnline
+        ? [{ uri: fields.locationOnline, name: 'Online' }]
+        : [],
+      mode: DIDApiService.MODE_MAP[fields.type] || fields.type,
+      uri: fields.atprotoUri || null,
+      media: fields.imageUrl
+        ? [{ role: 'thumbnail', alt: fields.name, url: fields.imageUrl }]
+        : [],
+    };
+  }
+
+  private mapEventListItem(
+    raw: any,
+    attendeeCountMap: Record<number, number>,
+    didMap: Map<string, any>,
+  ) {
+    const hasGroup = raw.eventGroup_id != null;
+    const imageUrl = this.buildImageUrl(
+      raw.image_id ? { path: raw.image_path } : null,
+    );
+    const identity = raw.user_ulid ? didMap.get(raw.user_ulid) : null;
+
+    return {
+      slug: raw.event_slug,
+      name: raw.event_name,
+      description: raw.event_description,
+      ...this.formatEventFields({
+        startDate: raw.event_startDate,
+        endDate: raw.event_endDate,
+        location: raw.event_location || null,
+        locationOnline: raw.event_locationOnline || null,
+        type: raw.event_type,
+        atprotoUri: raw.event_atprotoUri,
+        imageUrl,
+        name: raw.event_name,
+      }),
+      visibility: raw.event_visibility,
+      status: raw.event_status,
+      did: identity?.did || null,
+      group: hasGroup
+        ? {
+            slug: raw.eventGroup_slug,
+            name: raw.eventGroup_name,
+            role: raw.userGroupRole || null,
+          }
+        : null,
+      attendeesCount: attendeeCountMap[raw.event_id] || 0,
+      userRsvpStatus: raw.userRsvpStatus || null,
+    };
+  }
+
   private async mapEventDetail(event: EventEntity, userId: number) {
     const { groupMemberRepo, eventAttendeeRepo } = await this.getRepositories();
 
@@ -429,18 +503,65 @@ export class DIDApiService {
       },
     });
 
+    // Get all confirmed attendees with user profiles and roles
+    const confirmedAttendees = await eventAttendeeRepo
+      .createQueryBuilder('ea')
+      .leftJoinAndSelect('ea.user', 'user')
+      .leftJoinAndSelect('user.photo', 'photo')
+      .leftJoinAndSelect('ea.role', 'role')
+      .where('ea.eventId = :eventId', { eventId: event.id })
+      .andWhere('ea.status = :status', {
+        status: EventAttendeeStatus.Confirmed,
+      })
+      .getMany();
+
+    // Batch-fetch AT Protocol DIDs for organizer + all attendees
+    const tenantId = this.request.tenantId;
+    const allUlids: string[] = [];
+    if (event.user?.ulid) allUlids.push(event.user.ulid);
+    for (const ea of confirmedAttendees) {
+      if (ea.user?.ulid) allUlids.push(ea.user.ulid);
+    }
+    const didMap =
+      allUlids.length > 0
+        ? await this.userAtprotoIdentityService.findByUserUlids(
+            tenantId,
+            allUlids,
+          )
+        : new Map();
+
     return {
       slug: event.slug,
       name: event.name,
       description: event.description,
-      startDate: event.startDate,
-      endDate: event.endDate,
-      location: event.location || null,
-      locationOnline: event.locationOnline || null,
-      type: event.type,
+      ...this.formatEventFields({
+        startDate: event.startDate,
+        endDate: event.endDate,
+        location: event.location || null,
+        locationOnline: event.locationOnline || null,
+        type: event.type,
+        atprotoUri: event.atprotoUri,
+        imageUrl: this.buildImageUrl(event.image),
+        name: event.name,
+      }),
       visibility: event.visibility,
       status: event.status,
-      atprotoUri: event.atprotoUri || null,
+      lat: event.lat != null ? event.lat : null,
+      lon: event.lon != null ? event.lon : null,
+      timeZone: event.timeZone || null,
+      user: event.user
+        ? (() => {
+            const identity = event.user.ulid
+              ? didMap.get(event.user.ulid)
+              : null;
+            return {
+              did: identity?.did || null,
+              handle: identity?.handle || null,
+              displayName: event.user.name,
+              avatar: this.buildImageUrl(event.user.photo),
+            };
+          })()
+        : null,
       group: event.group
         ? {
             slug: event.group.slug,
@@ -448,9 +569,23 @@ export class DIDApiService {
             role: groupRole,
           }
         : null,
+      categories: (event.categories || []).map((cat) => ({
+        name: cat.name,
+        slug: cat.slug,
+      })),
+      attendees: confirmedAttendees.map((ea) => {
+        const identity = ea.user?.ulid ? didMap.get(ea.user.ulid) : null;
+        return {
+          did: identity?.did || null,
+          handle: identity?.handle || null,
+          name: ea.user?.name || null,
+          avatar: this.buildImageUrl(ea.user?.photo),
+          url: identity?.did ? `/p/${identity.handle || identity.did}` : null,
+          role: ea.role?.name || null,
+        };
+      }),
       attendeesCount,
       userRsvpStatus: attendance?.status || null,
-      image: this.buildImageUrl(event.image),
     };
   }
 }

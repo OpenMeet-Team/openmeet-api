@@ -364,9 +364,9 @@ describe('DID API (e2e)', () => {
       expect(event).toHaveProperty('slug');
       expect(event).toHaveProperty('name');
       expect(event).toHaveProperty('description');
-      expect(event).toHaveProperty('startDate');
-      expect(event).toHaveProperty('endDate');
-      expect(event).toHaveProperty('type');
+      expect(event).toHaveProperty('startsAt');
+      expect(event).toHaveProperty('endsAt');
+      expect(event).toHaveProperty('mode');
       expect(event).toHaveProperty('visibility');
       expect(event).toHaveProperty('status');
       expect(event).toHaveProperty('group');
@@ -384,7 +384,7 @@ describe('DID API (e2e)', () => {
       expect(response.body.events.length).toBeLessThanOrEqual(1);
     });
 
-    it('should sort events by startDate ascending', async () => {
+    it('should sort events by startsAt ascending', async () => {
       const response = await request(TESTING_APP_URL)
         .get('/api/v1/did/events?includePublic=true')
         .set('Authorization', `Bearer ${memberUser.token}`)
@@ -394,8 +394,8 @@ describe('DID API (e2e)', () => {
 
       const events = response.body.events;
       for (let i = 1; i < events.length; i++) {
-        const prev = new Date(events[i - 1].startDate).getTime();
-        const curr = new Date(events[i].startDate).getTime();
+        const prev = new Date(events[i - 1].startsAt).getTime();
+        const curr = new Date(events[i].startsAt).getTime();
         expect(curr).toBeGreaterThanOrEqual(prev);
       }
     });
@@ -422,7 +422,7 @@ describe('DID API (e2e)', () => {
       expect(response.body).toHaveProperty('slug', privateGroupEvent.slug);
       expect(response.body).toHaveProperty('name');
       expect(response.body).toHaveProperty('description');
-      expect(response.body).toHaveProperty('startDate');
+      expect(response.body).toHaveProperty('startsAt');
       expect(response.body).toHaveProperty('visibility');
       expect(response.body).toHaveProperty('group');
     });
