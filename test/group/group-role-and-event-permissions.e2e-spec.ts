@@ -921,7 +921,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
       expect(response.body.groupRole?.name).toBe('admin');
     });
 
-    it('should NOT allow moderator to change admin roles', async () => {
+    it('should NOT allow moderator to change any roles (no ManageMembers permission)', async () => {
       const members = await getGroupMembers(
         app,
         TESTING_TENANT_ID,
@@ -932,18 +932,18 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
 
       expect(adminMember).toBeDefined();
 
-      // Moderator tries to change admin role - this should fail
+      // Moderator tries to change admin role - should fail because
+      // moderators do not have ManageMembers permission
       const response = await request(app)
         .patch(`/api/groups/${group.slug}/members/${adminMember.id}`)
         .set('Authorization', `Bearer ${moderatorUser.token}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({ name: 'member' });
 
-      // Should fail - moderators can't manage admin roles
       expect(response.status).toBe(403);
     });
 
-    it('should allow moderator to manage member and guest roles only', async () => {
+    it('should NOT allow moderator to manage member or guest roles (no ManageMembers permission)', async () => {
       const members = await getGroupMembers(
         app,
         TESTING_TENANT_ID,
@@ -954,15 +954,15 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
 
       expect(guestMember).toBeDefined();
 
-      // Moderator changes guest to member - this should succeed
+      // Moderator tries to change guest to member - should fail because
+      // moderators no longer have ManageMembers permission
       const response = await request(app)
         .patch(`/api/groups/${group.slug}/members/${guestMember.id}`)
         .set('Authorization', `Bearer ${moderatorUser.token}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({ name: 'member' });
 
-      expect(response.status).toBe(200);
-      expect(response.body.groupRole?.name).toBe('member');
+      expect(response.status).toBe(403);
     });
 
     it('should NOT allow member to change to admin role (no self-promotion)', async () => {
