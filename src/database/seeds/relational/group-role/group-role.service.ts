@@ -40,6 +40,7 @@ export class GroupRoleSeedService {
       GroupPermission.CreateEvent,
       GroupPermission.ContactMembers,
       GroupPermission.ContactAdmins,
+      GroupPermission.ReceiveContactMessages,
       GroupPermission.SeeGroup,
       GroupPermission.SeeEvents,
       GroupPermission.SeeDiscussions,
@@ -55,6 +56,7 @@ export class GroupRoleSeedService {
       GroupPermission.MessageDiscussion,
       GroupPermission.ContactMembers,
       GroupPermission.ContactAdmins,
+      GroupPermission.ReceiveContactMessages,
       GroupPermission.SeeGroup,
       GroupPermission.SeeEvents,
       GroupPermission.SeeDiscussions,
@@ -73,7 +75,6 @@ export class GroupRoleSeedService {
       GroupPermission.SeeGroup,
     ]);
     await this.createGroupRoleIfNotExists(GroupRole.Moderator, [
-      GroupPermission.ManageMembers,
       GroupPermission.ManageDiscussions,
       GroupPermission.MessageDiscussion,
       GroupPermission.ContactAdmins,

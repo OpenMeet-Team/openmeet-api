@@ -68,6 +68,12 @@ describe('GroupMailService', () => {
       expect(groupMemberService.getMailServiceGroupMember).toHaveBeenCalledWith(
         mockGroupMember.id,
       );
+      expect(
+        groupMemberService.getMailServiceGroupMembersByPermission,
+      ).toHaveBeenCalledWith(
+        mockGroupMember.group.id,
+        'RECEIVE_CONTACT_MESSAGES', // GroupPermission.ReceiveContactMessages
+      );
       expect(mailService.groupGuestJoined).toHaveBeenCalledWith({
         to: mockUser.email,
         data: {
@@ -463,7 +469,7 @@ describe('GroupMailService', () => {
         groupMemberService.getMailServiceGroupMembersByPermission,
       ).toHaveBeenCalledWith(
         mockGroup.id,
-        'MANAGE_MEMBERS', // GroupPermission.ManageMembers
+        'RECEIVE_CONTACT_MESSAGES', // GroupPermission.ReceiveContactMessages
       );
 
       // Should send notification to both admins
