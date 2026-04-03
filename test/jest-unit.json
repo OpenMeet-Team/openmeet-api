@@ -1,0 +1,22 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "../src",
+  "testRegex": ".*\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      {
+        "isolatedModules": true,
+        "tsconfig": {
+          "allowJs": true
+        }
+      }
+    ]
+  },
+  "coverageDirectory": "../coverage",
+  "testEnvironment": "node",
+  "setupFiles": ["dotenv/config"],
+  "transformIgnorePatterns": ["node_modules/(?!matrix-js-sdk)"],
+  "forceExit": true,
+  "testTimeout": 30000
+}
