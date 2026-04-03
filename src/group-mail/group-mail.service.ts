@@ -32,7 +32,7 @@ export class GroupMailService {
     const admins =
       await this.groupMemberService.getMailServiceGroupMembersByPermission(
         groupMember.group.id,
-        GroupPermission.ManageMembers,
+        GroupPermission.ReceiveContactMessages,
       );
 
     for (const admin of admins) {
@@ -212,7 +212,7 @@ export class GroupMailService {
     const admins =
       await this.groupMemberService.getMailServiceGroupMembersByPermission(
         group.id,
-        GroupPermission.ManageMembers, // Target group admins
+        GroupPermission.ReceiveContactMessages, // Target members who receive contact messages
       );
 
     if (admins.length === 0) {

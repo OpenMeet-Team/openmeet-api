@@ -33,6 +33,7 @@ export enum GroupPermission {
   MessageMember = 'MESSAGE_MEMBER',
   ContactMembers = 'CONTACT_MEMBERS',
   ContactAdmins = 'CONTACT_ADMINS',
+  ReceiveContactMessages = 'RECEIVE_CONTACT_MESSAGES',
   SeeMembers = 'SEE_MEMBERS',
   SeeEvents = 'SEE_EVENTS',
   SeeDiscussions = 'SEE_DISCUSSIONS',
