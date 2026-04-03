@@ -44,6 +44,14 @@ import { trace } from '@opentelemetry/api';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { GroupDIDFollowService } from '../../group-did-follow/group-did-follow.service';
+import { ContrailQueryService } from '../../contrail/contrail-query.service';
+import type {
+  ContrailRecord,
+  ContrailCondition,
+} from '../../contrail/contrail-record.types';
+import type { Main as CalendarEvent } from '../../generated-lexicon-types/types/community/lexicon/calendar/event';
+import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
+import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -60,6 +68,8 @@ export class EventQueryService {
     private readonly groupMemberService: GroupMemberService,
     @Inject(forwardRef(() => GroupDIDFollowService))
     private readonly groupDidFollowService: GroupDIDFollowService,
+    private readonly contrailQueryService: ContrailQueryService,
+    private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
   ) {
     void this.initializeRepository();
   }
@@ -262,6 +272,34 @@ export class EventQueryService {
     });
 
     if (!event) {
+      // Fallback: check if this is an ATProto fallback slug (did~rkey format)
+      const parsed = this.atprotoEnrichmentService.parseAtprotoSlug(slug);
+      if (parsed) {
+        const uri = `at://${parsed.did}/community.lexicon.calendar.event/${parsed.rkey}`;
+        const record = await this.contrailQueryService.findByUri(
+          'community.lexicon.calendar.event',
+          uri,
+        );
+        if (record) {
+          try {
+            const [enriched] =
+              await this.atprotoEnrichmentService.enrichRecords(
+                [record],
+                this.request.tenantId,
+              );
+            // TODO(om-vsq9): AtprotoSourcedEvent is not EventEntity — adopt
+            // ATProto-shaped API response types to remove this cast
+            return enriched as any;
+          } catch (err) {
+            this.logger.error(
+              `Failed to enrich ATProto record ${uri}`,
+              (err as Error).stack,
+            );
+            throw new NotFoundException('Event not found');
+          }
+        }
+      }
+
       throw new NotFoundException('Event not found');
     }
 
@@ -352,196 +390,7 @@ export class EventQueryService {
     user?: any,
   ): Promise<any> {
     await this.initializeRepository();
-
-    const { search, lat, lon, radius, type, fromDate, toDate, categories } =
-      query;
-
-    // We need to make sure to fetch the event images properly
-    // Note: Removed loadRelationCountAndMap to avoid N+1 queries - counts fetched in batch below
-    const eventQuery = this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoinAndSelect('event.user', 'user')
-      .leftJoinAndSelect('user.photo', 'photo')
-      .leftJoinAndSelect('event.image', 'image') // Use consistent naming to match the entity property
-      .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoinAndSelect('event.group', 'group')
-      .where('event.status IN (:...statuses)', {
-        statuses: [EventStatus.Published, EventStatus.Cancelled],
-      })
-      .orderBy('event.startDate', 'ASC')
-      .addOrderBy('event.id', 'ASC');
-
-    // Apply visibility filtering (admins can see all events)
-    if (!user?.roles?.includes('admin')) {
-      await this.applyEventVisibilityFilter(eventQuery, user?.id);
-    }
-
-    if (search) {
-      eventQuery.andWhere('event.name ILIKE :search', {
-        search: `%${search}%`,
-      });
-    }
-
-    if (lat && lon) {
-      if (isNaN(lon) || isNaN(lat)) {
-        throw new Error('Invalid location format. Expected "lon,lat".');
-      }
-
-      const searchRadius = radius ?? DEFAULT_RADIUS;
-
-      eventQuery.andWhere(
-        `ST_DWithin(
-          event.locationPoint,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
-          :radius
-        )`,
-        { lon, lat, radius: searchRadius * 1609.34 }, // Convert Miles to meters
-      );
-    }
-
-    if (type) {
-      eventQuery.andWhere('event.type = :type', { type });
-    }
-
-    if (fromDate && toDate) {
-      eventQuery.andWhere('event.startDate BETWEEN :fromDate AND :toDate', {
-        fromDate,
-        toDate,
-      });
-    } else if (fromDate) {
-      eventQuery.andWhere('event.startDate >= :fromDate', { fromDate });
-    } else if (toDate) {
-      eventQuery.andWhere('event.startDate <= :toDate', { toDate });
-    } else {
-      // Default behavior: show future events and currently active events only
-      // Past events are only shown on user's personal dashboard
-      eventQuery.andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND event.endDate > :now))',
-        {
-          now: new Date(),
-        },
-      );
-    }
-
-    if (categories && categories.length > 0) {
-      const likeConditions = categories
-        .map((_, index) => `categories.name LIKE :category${index}`)
-        .join(' OR ');
-
-      const likeParameters = categories.reduce((acc, category, index) => {
-        acc[`category${index}`] = `%${category}%`;
-        return acc;
-      }, {});
-
-      eventQuery.andWhere(`(${likeConditions})`, likeParameters);
-    }
-
-    // Get the paginated results
-    const paginatedResults = await paginate(eventQuery, {
-      page: pagination.page,
-      limit: pagination.limit,
-    });
-
-    // Batch fetch attendee counts in a single query (avoids N+1)
-    if (paginatedResults.data && paginatedResults.data.length > 0) {
-      const eventIds = paginatedResults.data.map((e) => e.id);
-      const counts = await this.eventAttendeesRepository
-        .createQueryBuilder('att')
-        .select('att.eventId', 'eventId')
-        .addSelect('COUNT(att.id)', 'count')
-        .where('att.eventId IN (:...eventIds)', { eventIds })
-        .andWhere('att.status = :status', {
-          status: EventAttendeeStatus.Confirmed,
-        })
-        .groupBy('att.eventId')
-        .getRawMany();
-
-      const countMap = new Map(
-        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
-      );
-      paginatedResults.data.forEach((event) => {
-        (event as any).attendeesCount = countMap.get(event.id) || 0;
-      });
-    }
-
-    // Add recurrence descriptions to all events in the result without losing fields
-    if (paginatedResults.data && paginatedResults.data.length > 0) {
-      // Check first event to ensure image is present for debugging
-      if (paginatedResults.data[0]) {
-        const firstEvent = paginatedResults.data[0];
-        this.logger.debug(
-          `Event image before: ${firstEvent.image ? 'present' : 'missing'}`,
-        );
-
-        // If the event has an image, let's log some details about it
-        if (firstEvent.image) {
-          this.logger.debug(
-            `Image details: id=${firstEvent.image.id}, path=${firstEvent.image.path}`,
-          );
-        }
-      }
-
-      // Process each event to add the recurrence description
-      // Without losing fields, especially the image
-      paginatedResults.data = paginatedResults.data.map((event) => {
-        // Just modify the event directly, avoiding creating a new object
-        // that would lose the EntityEntity class methods
-        if (
-          (event as any).isRecurring &&
-          (event as any).recurrenceRule &&
-          (event as any).recurrenceRule.freq
-        ) {
-          // Use simple description format instead of RecurrenceService
-          const rule = (event as any).recurrenceRule as any;
-          const freq = rule.freq.toLowerCase();
-          const interval = rule.interval || 1;
-
-          let recurrenceDescription = `Every ${interval > 1 ? interval : ''} ${freq}`;
-          if (interval > 1) {
-            recurrenceDescription += freq.endsWith('s') ? '' : 's';
-          }
-
-          // Debug what description is being generated
-          this.logger.debug(
-            `Generated recurrence description: "${recurrenceDescription}" for event id: ${event.id}`,
-          );
-
-          (event as any).recurrenceDescription = recurrenceDescription;
-        }
-
-        return event;
-      });
-
-      // Check again after processing
-      if (paginatedResults.data[0]) {
-        const firstEvent = paginatedResults.data[0];
-        this.logger.debug(
-          `Event image after: ${firstEvent.image ? 'present' : 'missing'}`,
-        );
-
-        // Log image details again
-        if (firstEvent.image) {
-          this.logger.debug(
-            `Image details after: id=${firstEvent.image.id}, path=${firstEvent.image.path}`,
-          );
-        }
-      }
-
-      // Transform all images to ensure proper URL generation
-      paginatedResults.data = paginatedResults.data.map((event) => {
-        if (
-          event.image &&
-          typeof event.image.path === 'object' &&
-          Object.keys(event.image.path).length === 0
-        ) {
-          // Use instanceToPlain to force the Transform decorator to run
-          event.image = instanceToPlain(event.image) as any;
-        }
-        return event;
-      });
-    }
-
-    return paginatedResults;
+    return this.showAllEventsWithContrail(pagination, query, user);
   }
 
   @Trace('event-query.searchAllEvents')
@@ -551,35 +400,101 @@ export class EventQueryService {
     userId?: number,
   ): Promise<any> {
     await this.initializeRepository();
-    const eventQuery = this.eventRepository
-      .createQueryBuilder('event')
-      .where('event.status IN (:...statuses)', {
-        statuses: [EventStatus.Published, EventStatus.Cancelled],
-      })
-      .select(['event.id', 'event.name', 'event.slug']);
 
-    // Apply visibility filtering
-    await this.applyEventVisibilityFilter(eventQuery, userId);
+    const limit = pagination.limit || 25;
+    const page = pagination.page || 1;
+    const offset = (page - 1) * limit;
+    const now = new Date().toISOString();
+
+    // 1. Public events from Contrail
+    const conditions: ContrailCondition[] = [
+      {
+        sql: `(record->>'startsAt' ~ '^[0-9]') AND record->>'startsAt' >= $1`,
+        params: [now],
+      },
+    ];
 
     if (query.search) {
-      eventQuery.andWhere('event.name ILIKE :search', {
-        search: `%${query.search}%`,
+      conditions.push({
+        sql: `search_vector @@ plainto_tsquery($1)`,
+        params: [query.search],
       });
     }
 
-    const paginatedResults = await paginate(eventQuery, {
-      page: pagination.page,
-      limit: pagination.limit,
-    });
+    const contrailResult = await this.contrailQueryService.find<CalendarEvent>(
+      'community.lexicon.calendar.event',
+      {
+        conditions,
+        orderBy: `record->>'startsAt' ASC, uri ASC`,
+        limit,
+        offset,
+      },
+    );
 
-    // Add recurrence descriptions to all events in the result
-    if (paginatedResults.data && paginatedResults.data.length > 0) {
-      paginatedResults.data = paginatedResults.data.map((event) =>
-        this.addRecurrenceInformation(event),
-      );
+    const tenantId = this.request.tenantId;
+    const enrichedPublic = await this.atprotoEnrichmentService.enrichRecords(
+      contrailResult.records,
+      tenantId,
+    );
+
+    // 2. Private/unlisted events from tenant (authenticated users only)
+    let privateEvents: EventEntity[] = [];
+    if (userId) {
+      const privateQb = this.eventRepository
+        .createQueryBuilder('event')
+        .where('event.status IN (:...statuses)', {
+          statuses: [EventStatus.Published, EventStatus.Cancelled],
+        })
+        .andWhere('event.visibility IN (:...visibilities)', {
+          visibilities: [EventVisibility.Unlisted, EventVisibility.Private],
+        })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('event.userId = :userId', { userId });
+            qb.orWhere(
+              `EXISTS (SELECT 1 FROM "eventAttendees" ea WHERE ea."eventId" = event.id AND ea."userId" = :attendeeUserId)`,
+              { attendeeUserId: userId },
+            );
+          }),
+        )
+        .andWhere('event.startDate >= :now', { now: new Date() });
+
+      if (query.search) {
+        privateQb.andWhere('event.name ILIKE :search', {
+          search: `%${query.search}%`,
+        });
+      }
+
+      privateQb.orderBy('event.startDate', 'ASC');
+      privateEvents = await privateQb.getMany();
     }
 
-    return paginatedResults;
+    // 3. Dedup and merge
+    const publicUriSet = new Set(
+      enrichedPublic.map((e) => e.atprotoUri).filter(Boolean),
+    );
+    const dedupedPrivate =
+      this.atprotoEnrichmentService.deduplicatePrivateEvents(
+        privateEvents,
+        publicUriSet,
+      );
+
+    const allEvents = [...enrichedPublic, ...dedupedPrivate]
+      .sort((a, b) => {
+        const aDate = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const bDate = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return aDate - bDate;
+      })
+      .slice(0, limit);
+
+    const total = contrailResult.total + dedupedPrivate.length;
+
+    return {
+      data: allEvents,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    } as PaginationResult<Partial<EventEntity>>;
   }
 
   @Trace('event-query.getEventsByCreator')
@@ -673,72 +588,75 @@ export class EventQueryService {
       (event as any).origin = 'group';
     });
 
-    // Query 2: External events from followed DIDs
-    // Match events directly by AT Protocol URI prefix — no user ID resolution needed.
-    // Events have DID in sourceId (at://did/collection/rkey, firehose-ingested)
-    // and atprotoUri (at://did/collection/rkey, published via OpenMeet).
-    let externalEvents: EventEntity[] = [];
+    // Query 2: External events from followed DIDs (via Contrail)
+    let externalEvents: AtprotoSourcedEvent[] = [];
     const followedDids =
       await this.groupDidFollowService.getFollowedDidsForGroup(groupId);
 
     if (followedDids.length > 0) {
-      const tenantId = this.request.tenantId;
-      const dataSource =
-        await this.tenantConnectionService.getTenantConnection(tenantId);
-      const eventRepo = dataSource.getRepository(EventEntity);
+      const contrailConditions: ContrailCondition[] = [
+        {
+          sql: followedDids.map((_, i) => `did = $${i + 1}`).join(' OR '),
+          params: followedDids,
+        },
+      ];
 
-      const qb = eventRepo
-        .createQueryBuilder('event')
-        .leftJoinAndSelect('event.group', 'group')
-        .leftJoinAndSelect('event.series', 'series')
-        .leftJoinAndSelect('event.image', 'image')
-        .where('event.status IN (:...statuses)', {
-          statuses: [EventStatus.Published, EventStatus.Cancelled],
-        });
-
-      // Build OR conditions for each followed DID prefix
-      const didConditions = followedDids.map((did, i) => {
-        qb.setParameter(`did${i}`, `at://${did}/%`);
-        return `(event."sourceId" LIKE :did${i} OR event."atprotoUri" LIKE :did${i})`;
-      });
-      qb.andWhere(`(${didConditions.join(' OR ')})`);
-
-      // Apply date filters
+      // Date filters
       if (dateFilter?.startDate && dateFilter?.endDate) {
-        qb.andWhere('event."startDate" BETWEEN :start AND :end', {
-          start: new Date(dateFilter.startDate),
-          end: new Date(dateFilter.endDate),
+        contrailConditions.push({
+          sql: `record->>'startsAt' BETWEEN $1 AND $2`,
+          params: [dateFilter.startDate, dateFilter.endDate],
         });
       } else if (dateFilter?.startDate) {
-        qb.andWhere('event."startDate" >= :start', {
-          start: new Date(dateFilter.startDate),
+        contrailConditions.push({
+          sql: `record->>'startsAt' >= $1`,
+          params: [dateFilter.startDate],
         });
       } else if (dateFilter?.endDate) {
-        qb.andWhere('event."startDate" <= :end', {
-          end: new Date(dateFilter.endDate),
+        contrailConditions.push({
+          sql: `record->>'startsAt' <= $1`,
+          params: [dateFilter.endDate],
         });
       }
 
-      // Limit external results to avoid unbounded fetches (default 200).
-      // Use raw ORDER BY + LIMIT to avoid TypeORM metadata resolution
-      // which fails on tenant-scoped connections (databaseName undefined).
-      qb.addOrderBy('event.startDate', 'DESC');
-      qb.limit(limit || 200);
+      const contrailResult =
+        await this.contrailQueryService.find<CalendarEvent>(
+          'community.lexicon.calendar.event',
+          {
+            conditions: contrailConditions,
+            orderBy: `record->>'startsAt' ASC, uri ASC`,
+            limit: limit || 200,
+            offset: 0,
+          },
+        );
 
-      externalEvents = await qb.getMany();
+      const tenantId = this.request.tenantId;
+      externalEvents = await this.atprotoEnrichmentService.enrichRecords(
+        contrailResult.records,
+        tenantId,
+      );
     }
 
-    // Deduplicate first, then mark origin (avoids overwriting native events
-    // when TypeORM returns the same entity instance from both queries)
+    // Deduplicate: remove external events already in native group events
+    const nativeUris = new Set(
+      nativeEvents.filter((e) => e.atprotoUri).map((e) => e.atprotoUri),
+    );
     const nativeIds = new Set(nativeEvents.map((e) => e.id));
-    const dedupedExternal = externalEvents.filter((e) => !nativeIds.has(e.id));
+    const dedupedExternal = externalEvents.filter((e: any) => {
+      if (e.atprotoUri && nativeUris.has(e.atprotoUri)) return false;
+      if (e.id && nativeIds.has(e.id)) return false;
+      return true;
+    });
 
     // Mark origin after deduplication
     dedupedExternal.forEach((event) => {
       (event as any).origin = 'external';
     });
 
-    const allEvents = [...nativeEvents, ...dedupedExternal];
+    const allEvents: EventEntity[] = [
+      ...nativeEvents,
+      ...(dedupedExternal as unknown as EventEntity[]),
+    ];
 
     // Sort by startDate ascending
     allEvents.sort((a, b) => {
@@ -750,26 +668,31 @@ export class EventQueryService {
     // Apply limit after merge (limit=0 means no limit, matching TypeORM's take:0 behavior)
     const limited = limit > 0 ? allEvents.slice(0, limit) : allEvents;
 
-    // Batch fetch attendee counts in a single query (avoids N+1)
+    // Batch fetch attendee counts (only for events with tenant IDs)
     if (limited.length > 0) {
-      const eventIds = limited.map((e) => e.id);
-      const counts = await this.eventAttendeesRepository
-        .createQueryBuilder('att')
-        .select('att.eventId', 'eventId')
-        .addSelect('COUNT(att.id)', 'count')
-        .where('att.eventId IN (:...eventIds)', { eventIds })
-        .andWhere('att.status = :status', {
-          status: EventAttendeeStatus.Confirmed,
-        })
-        .groupBy('att.eventId')
-        .getRawMany();
+      const eventIds = limited.filter((e: any) => e.id).map((e) => e.id);
+      if (eventIds.length > 0) {
+        const counts = await this.eventAttendeesRepository
+          .createQueryBuilder('att')
+          .select('att.eventId', 'eventId')
+          .addSelect('COUNT(att.id)', 'count')
+          .where('att.eventId IN (:...eventIds)', { eventIds })
+          .andWhere('att.status = :status', {
+            status: EventAttendeeStatus.Confirmed,
+          })
+          .groupBy('att.eventId')
+          .getRawMany();
 
-      const countMap = new Map(
-        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
-      );
-      limited.forEach((event) => {
-        (event as any).attendeesCount = countMap.get(event.id) || 0;
-      });
+        const countMap = new Map(
+          counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+        );
+        limited.forEach((event) => {
+          if ((event as any).id) {
+            (event as any).attendeesCount =
+              countMap.get((event as any).id) || 0;
+          }
+        });
+      }
     }
 
     // Add recurrence descriptions
@@ -824,112 +747,6 @@ export class EventQueryService {
 
     // Add recurrence descriptions
     return events.map((event) => this.addRecurrenceInformation(event));
-  }
-
-  @Trace('event-query.showDashboardEvents')
-  async showDashboardEvents(userId: number): Promise<EventEntity[]> {
-    await this.initializeRepository();
-
-    // Split into two indexed queries instead of OR (which prevents index usage)
-    // Query 1: Events created by user
-    const createdEventsQuery = this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoinAndSelect('event.user', 'user')
-      .leftJoinAndSelect('user.photo', 'userPhoto')
-      .leftJoinAndSelect('event.group', 'group')
-      .leftJoinAndSelect('group.image', 'groupImage')
-      .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoinAndSelect('event.image', 'image')
-      .where('event.userId = :userId', { userId });
-
-    // Query 2: Events user is attending (not cancelled)
-    const attendingEventsQuery = this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoinAndSelect('event.user', 'user')
-      .leftJoinAndSelect('user.photo', 'userPhoto')
-      .leftJoinAndSelect('event.group', 'group')
-      .leftJoinAndSelect('group.image', 'groupImage')
-      .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoinAndSelect('event.image', 'image')
-      .innerJoin(
-        'event.attendees',
-        'attendee',
-        'attendee.userId = :userId AND attendee.status != :cancelledStatus',
-        { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
-      );
-
-    // Execute both queries in parallel
-    const [createdEvents, attendingEvents] = await Promise.all([
-      createdEventsQuery.getMany(),
-      attendingEventsQuery.getMany(),
-    ]);
-
-    // Merge and deduplicate
-    const eventMap = new Map<number, EventEntity>();
-    [...createdEvents, ...attendingEvents].forEach((event) => {
-      if (!eventMap.has(event.id)) {
-        eventMap.set(event.id, event);
-      }
-    });
-    const uniqueEvents = Array.from(eventMap.values());
-
-    // Batch fetch attendee counts and user's attendance info (avoids N+1)
-    if (uniqueEvents.length > 0) {
-      const eventIds = uniqueEvents.map((e) => e.id);
-
-      const [counts, attendeeRecords] = await Promise.all([
-        // Batch fetch attendee counts
-        this.eventAttendeesRepository
-          .createQueryBuilder('att')
-          .select('att.eventId', 'eventId')
-          .addSelect('COUNT(att.id)', 'count')
-          .where('att.eventId IN (:...eventIds)', { eventIds })
-          .andWhere('att.status = :status', {
-            status: EventAttendeeStatus.Confirmed,
-          })
-          .groupBy('att.eventId')
-          .getRawMany(),
-        // Batch fetch user's attendance info
-        this.eventAttendeesRepository
-          .createQueryBuilder('att')
-          .leftJoinAndSelect('att.role', 'role')
-          .leftJoin('att.event', 'event')
-          .addSelect('event.id')
-          .where('att.eventId IN (:...eventIds)', { eventIds })
-          .andWhere('att.userId = :userId', { userId })
-          .getMany(),
-      ]);
-
-      const countMap = new Map(
-        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
-      );
-      const attendeeMap = new Map(attendeeRecords.map((a) => [a.event?.id, a]));
-
-      uniqueEvents.forEach((event) => {
-        (event as any).attendeesCount = countMap.get(event.id) || 0;
-        const attendee = attendeeMap.get(event.id);
-        if (attendee) {
-          event.attendee = attendee;
-        }
-      });
-    }
-
-    // Process events and add recurrence info
-    const processedEvents = uniqueEvents.map((event) =>
-      this.addRecurrenceInformation(event),
-    );
-
-    // Sort events: future events first, then by start date
-    return processedEvents.sort((a, b) => {
-      const aDate = new Date(a.startDate);
-      const bDate = new Date(b.startDate);
-      const now = new Date();
-
-      if (aDate >= now && bDate < now) return -1;
-      if (aDate < now && bDate >= now) return 1;
-
-      return aDate.getTime() - bDate.getTime();
-    });
   }
 
   @Trace('event-query.getDashboardSummary')
@@ -1157,100 +974,41 @@ export class EventQueryService {
   @Trace('event-query.getHomePageFeaturedEvents')
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
     await this.initializeRepository();
-    const events = await this.eventRepository
-      .createQueryBuilder('event')
-      .select(['event'])
-      .leftJoinAndSelect('event.attendees', 'attendees')
-      .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoinAndSelect('event.image', 'image')
-      .where('event.visibility = :visibility', {
-        visibility: EventVisibility.Public,
-      })
-      .andWhere('event.status = :status', { status: EventStatus.Published })
-      .andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
-        {
-          now: new Date(),
-          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000),
-        },
-      )
-      .orderBy('RANDOM()')
-      .limit(4)
-      .getMany();
 
-    this.logger.debug(`Found ${events.length} featured events`);
+    const now = new Date().toISOString();
 
-    // Batch fetch attendee counts in a single query (avoids N+1)
-    if (events.length > 0) {
-      const eventIds = events.map((e) => e.id);
-      const counts = await this.eventAttendeesRepository
-        .createQueryBuilder('att')
-        .select('att.eventId', 'eventId')
-        .addSelect('COUNT(att.id)', 'count')
-        .where('att.eventId IN (:...eventIds)', { eventIds })
-        .andWhere('att.status = :status', {
-          status: EventAttendeeStatus.Confirmed,
-        })
-        .groupBy('att.eventId')
-        .getRawMany();
+    // Fetch upcoming public events from Contrail (larger window for random sampling)
+    const contrailResult = await this.contrailQueryService.find<CalendarEvent>(
+      'community.lexicon.calendar.event',
+      {
+        conditions: [
+          {
+            sql: `(record->>'startsAt' ~ '^[0-9]') AND (record->>'startsAt' >= $1 OR (record->>'startsAt' <= $2 AND (record->>'endsAt') > $3))`,
+            params: [now, now, now],
+          },
+        ],
+        orderBy: `record->>'startsAt' ASC, uri ASC`,
+        limit: 50,
+        offset: 0,
+      },
+    );
 
-      const countMap = new Map(
-        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
-      );
-      events.forEach((event) => {
-        (event as any).attendeesCount = countMap.get(event.id) || 0;
-      });
-    }
+    // Enrich with tenant metadata
+    const tenantId = this.request.tenantId;
+    const enriched = await this.atprotoEnrichmentService.enrichRecords(
+      contrailResult.records,
+      tenantId,
+    );
 
-    // Debug first event image before processing
-    if (events.length > 0 && events[0].image) {
-      this.logger.debug(
-        `First event image before processing: id=${events[0].image.id}, path type=${typeof events[0].image.path}`,
-      );
-    }
+    // Random sample 4 from the enriched set
+    const shuffled = enriched.sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, 4);
 
-    const eventsWithCounts = events;
-
-    // Step 2: Serialize events first using instanceToPlain, then add recurrence info
-    // This is the key to fixing the issue - serialize first, then modify
-    const processedEvents = eventsWithCounts.map((event) => {
-      // First, serialize the entire event (which correctly processes the image path)
+    // Serialize and add recurrence info
+    return selected.map((event) => {
       const plainEvent = instanceToPlain(event);
-
-      // Now, add recurrence information to the already serialized plain object
-      if (!event.seriesSlug) {
-        const eventWithRecurrence = event as any;
-        if (
-          eventWithRecurrence.isRecurring &&
-          eventWithRecurrence.recurrenceRule
-        ) {
-          const rule = eventWithRecurrence.recurrenceRule;
-          const freq = rule.frequency?.toLowerCase() || 'weekly';
-          const interval = rule.interval || 1;
-
-          let recurrenceDescription = `Every ${interval > 1 ? interval : ''} ${freq}`;
-          if (interval > 1) {
-            recurrenceDescription += freq.endsWith('s') ? '' : 's';
-          }
-
-          plainEvent.recurrenceDescription = recurrenceDescription;
-        }
-      }
-
-      return plainEvent as unknown as EventEntity;
-    });
-
-    // Debug final result
-    if (processedEvents.length > 0 && processedEvents[0].image) {
-      this.logger.debug(
-        `First event image after processing: path type=${typeof processedEvents[0].image.path}`,
-      );
-      this.logger.debug(
-        `Image path sample: ${JSON.stringify(processedEvents[0].image.path).substring(0, 50)}...`,
-      );
-    }
-
-    return processedEvents;
+      return this.addRecurrenceInformation(plainEvent as any);
+    }) as unknown as EventEntity[];
   }
 
   @Trace('event-query.getHomePageUserNextHostedEvent')
@@ -1871,7 +1629,91 @@ export class EventQueryService {
 
     query = query.orderBy('event.startDate', 'ASC');
 
-    return query.getMany();
+    const nativeEvents = await query.getMany();
+
+    // Include events from followed DIDs via Contrail
+    // Need group ID — get it from the first native event or look up separately
+    let groupId: number | null = null;
+    if (nativeEvents.length > 0 && nativeEvents[0].group?.id) {
+      groupId = nativeEvents[0].group.id;
+    } else {
+      // Look up group by slug to get ID for DID follows
+      const groupEntity = await this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoinAndSelect('event.group', 'group')
+        .where('group.slug = :groupSlug', { groupSlug })
+        .select('group.id')
+        .getOne();
+      groupId = groupEntity?.group?.id ?? null;
+    }
+
+    if (groupId) {
+      const followedDids =
+        await this.groupDidFollowService.getFollowedDidsForGroup(groupId);
+
+      if (followedDids.length > 0) {
+        const contrailConditions: ContrailCondition[] = [
+          {
+            sql: followedDids.map((_, i) => `did = $${i + 1}`).join(' OR '),
+            params: followedDids,
+          },
+        ];
+
+        if (startDate) {
+          contrailConditions.push({
+            sql: `record->>'startsAt' >= $1`,
+            params: [startDate],
+          });
+        }
+        if (endDate) {
+          contrailConditions.push({
+            sql: `record->>'startsAt' <= $1`,
+            params: [endDate],
+          });
+        }
+
+        const contrailResult =
+          await this.contrailQueryService.find<CalendarEvent>(
+            'community.lexicon.calendar.event',
+            {
+              conditions: contrailConditions,
+              orderBy: `record->>'startsAt' ASC, uri ASC`,
+              limit: 200,
+              offset: 0,
+            },
+          );
+
+        if (contrailResult.records.length > 0) {
+          const tenantId = this.request.tenantId;
+          const externalEvents =
+            await this.atprotoEnrichmentService.enrichRecords(
+              contrailResult.records,
+              tenantId,
+            );
+
+          // Dedup against native events
+          const nativeUris = new Set(
+            nativeEvents.filter((e) => e.atprotoUri).map((e) => e.atprotoUri),
+          );
+          const dedupedExternal = externalEvents.filter(
+            (e) => !e.atprotoUri || !nativeUris.has(e.atprotoUri),
+          );
+
+          const allEvents = [
+            ...nativeEvents,
+            ...(dedupedExternal as unknown as EventEntity[]),
+          ].sort((a, b) => {
+            const aDate = a.startDate ? new Date(a.startDate).getTime() : 0;
+            const bDate = b.startDate ? new Date(b.startDate).getTime() : 0;
+            return aDate - bDate;
+          });
+
+          return allEvents;
+        }
+      }
+    }
+
+    return nativeEvents;
   }
 
   /**
@@ -1995,5 +1837,229 @@ export class EventQueryService {
         attendeeRole: any;
       };
     });
+  }
+
+  private async showAllEventsWithContrail(
+    pagination: PaginationDto,
+    query: QueryEventDto,
+    user?: any,
+  ): Promise<any> {
+    const { search, type, fromDate, toDate, categories, lat, lon, radius } =
+      query;
+    const limit = pagination.limit || 25;
+    const page = pagination.page || 1;
+    const offset = (page - 1) * limit;
+
+    // Build conditions for Contrail query
+    const conditions: ContrailCondition[] = [];
+
+    if (fromDate && toDate) {
+      conditions.push({
+        sql: `record->>'startsAt' BETWEEN $1 AND $2`,
+        params: [fromDate, toDate],
+      });
+    } else if (fromDate) {
+      conditions.push({
+        sql: `record->>'startsAt' >= $1`,
+        params: [fromDate],
+      });
+    } else if (toDate) {
+      conditions.push({
+        sql: `record->>'startsAt' <= $1`,
+        params: [toDate],
+      });
+    } else {
+      const now = new Date().toISOString();
+      conditions.push({
+        sql: `(record->>'startsAt' ~ '^[0-9]') AND (record->>'startsAt' >= $1 OR (record->>'startsAt' <= $2 AND (record->>'endsAt') > $3))`,
+        params: [now, now, now],
+      });
+    }
+
+    if (search) {
+      conditions.push({
+        sql: `search_vector @@ plainto_tsquery($1)`,
+        params: [search],
+      });
+    }
+
+    if (type) {
+      conditions.push({
+        sql: `record->>'mode' = $1`,
+        params: [type],
+      });
+    }
+
+    // 1. Public events from Contrail
+    let contrailResult: {
+      records: ContrailRecord<CalendarEvent>[];
+      total: number;
+    };
+
+    if (lat && lon) {
+      const searchRadius = radius ?? DEFAULT_RADIUS;
+      const radiusMeters = searchRadius * 1609.34; // Miles to meters
+
+      contrailResult =
+        await this.contrailQueryService.findWithGeoFilter<CalendarEvent>(
+          'community.lexicon.calendar.event',
+          { lat, lon, radiusMeters },
+          {
+            conditions,
+            orderBy: `r.record->>'startsAt' ASC, r.uri ASC`,
+            limit,
+            offset,
+          },
+        );
+    } else {
+      contrailResult = await this.contrailQueryService.find<CalendarEvent>(
+        'community.lexicon.calendar.event',
+        {
+          conditions,
+          orderBy: `record->>'startsAt' ASC, uri ASC`,
+          limit,
+          offset,
+        },
+      );
+    }
+
+    // 2. Private/unlisted events from tenant table
+    const privateQb = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('user.photo', 'photo')
+      .leftJoinAndSelect('event.image', 'image')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.group', 'group')
+      .where('event.visibility IN (:...visibilities)', {
+        visibilities: ['unlisted', 'private'],
+      })
+      .andWhere('event.status IN (:...statuses)', {
+        statuses: [EventStatus.Published, EventStatus.Cancelled],
+      });
+
+    if (user?.id) {
+      // Show private/unlisted events where user is creator OR attendee
+      privateQb.andWhere(
+        new Brackets((qb) => {
+          qb.where('event.userId = :userId', { userId: user.id });
+          qb.orWhere(
+            `EXISTS (SELECT 1 FROM "eventAttendees" ea WHERE ea."eventId" = event.id AND ea."userId" = :attendeeUserId)`,
+            { attendeeUserId: user.id },
+          );
+        }),
+      );
+    } else {
+      privateQb.andWhere('1 = 0');
+    }
+
+    if (fromDate) {
+      privateQb.andWhere('event.startDate >= :fromDate', { fromDate });
+    } else {
+      privateQb.andWhere('event.startDate >= :now', { now: new Date() });
+    }
+    if (toDate) {
+      privateQb.andWhere('event.startDate <= :toDate', { toDate });
+    }
+
+    if (categories && categories.length > 0) {
+      const likeConditions = categories
+        .map(
+          (_: string, index: number) =>
+            `categories.name LIKE :category${index}`,
+        )
+        .join(' OR ');
+      const likeParameters = categories.reduce(
+        (acc: Record<string, string>, category: string, index: number) => {
+          acc[`category${index}`] = `%${category}%`;
+          return acc;
+        },
+        {} as Record<string, string>,
+      );
+      privateQb.andWhere(`(${likeConditions})`, likeParameters);
+    }
+
+    if (lat && lon) {
+      const searchRadius = radius ?? DEFAULT_RADIUS;
+      privateQb.andWhere(
+        `ST_DWithin(
+          event.locationPoint,
+          ST_SetSRID(ST_MakePoint(:pLon, :pLat), ${PostgisSrid.SRID}),
+          :pRadius
+        )`,
+        { pLon: lon, pLat: lat, pRadius: searchRadius * 1609.34 },
+      );
+    }
+
+    privateQb.orderBy('event.startDate', 'ASC');
+    const privateEvents = await privateQb.getMany();
+
+    // Phases 3-5: Enrich ATProto records (tenant metadata + handle resolution)
+    const tenantId = this.request.tenantId;
+    let enrichedPublic = await this.atprotoEnrichmentService.enrichRecords(
+      contrailResult.records,
+      tenantId,
+    );
+
+    // Phase 4: Category filter (in-memory via tenant metadata)
+    enrichedPublic = this.atprotoEnrichmentService.filterByCategories(
+      enrichedPublic,
+      categories,
+    );
+
+    // Phase 6: Dedup and merge
+    const publicUriSet = new Set(
+      enrichedPublic.map((e) => e.atprotoUri).filter(Boolean),
+    );
+    const dedupedPrivate =
+      this.atprotoEnrichmentService.deduplicatePrivateEvents(
+        privateEvents,
+        publicUriSet,
+      );
+
+    // Batch-fetch attendee counts for private/unlisted events
+    const privateEventIds = dedupedPrivate.filter((e) => e.id).map((e) => e.id);
+    if (privateEventIds.length > 0) {
+      const counts = await this.eventAttendeesRepository
+        .createQueryBuilder('att')
+        .select('att.eventId', 'eventId')
+        .addSelect('COUNT(att.id)', 'count')
+        .where('att.eventId IN (:...eventIds)', { eventIds: privateEventIds })
+        .andWhere('att.status = :status', {
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .groupBy('att.eventId')
+        .getRawMany();
+
+      const countMap = new Map(
+        counts.map((c: any) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      dedupedPrivate.forEach((event: any) => {
+        if (event.id && countMap.has(event.id)) {
+          event.attendeesCount = countMap.get(event.id);
+        }
+      });
+    }
+
+    const allEvents = [...enrichedPublic, ...dedupedPrivate]
+      .sort((a, b) => {
+        const aDate = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const bDate = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return aDate - bDate;
+      })
+      .slice(0, limit);
+
+    let publicTotal = contrailResult.total;
+    if (categories && categories.length > 0) {
+      publicTotal = enrichedPublic.length;
+    }
+    const total = publicTotal + dedupedPrivate.length;
+
+    return {
+      data: allEvents,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    } as PaginationResult<Partial<EventEntity>>;
   }
 }

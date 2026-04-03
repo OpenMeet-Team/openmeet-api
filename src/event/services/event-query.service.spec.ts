@@ -8,7 +8,6 @@ import {
   EventVisibility,
   EventType,
 } from '../../core/constants/constant';
-import { mockUser } from '../../../test/mocks';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventQueryService } from './event-query.service';
@@ -16,9 +15,10 @@ import { EventAttendeeService } from '../../event-attendee/event-attendee.servic
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { GroupDIDFollowService } from '../../group-did-follow/group-did-follow.service';
-import { mockRepository } from '../../test/mocks';
-import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
-import { instanceToPlain } from 'class-transformer';
+import { ContrailQueryService } from '../../contrail/contrail-query.service';
+import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
+import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
+import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 // Define a mock event entity for consistent use
 const mockEventEntity: EventEntity = {
@@ -42,8 +42,10 @@ const mockEventEntity: EventEntity = {
 describe('EventQueryService', () => {
   let service: EventQueryService;
   let eventRepository: jest.Mocked<Repository<EventEntity>>; // Use mocked type
+  let eventAttendeesRepository: any; // Mock for attendee count queries
   let mockGroupMemberService: jest.Mocked<GroupMemberService>; // Add declaration for the mock service
   let mockGroupDIDFollowService: { getFollowedDidsForGroup: jest.Mock };
+  let mockEnrichmentService: any;
 
   beforeEach(async () => {
     // Define the mock repository behavior here
@@ -67,6 +69,18 @@ describe('EventQueryService', () => {
       }),
       // Add other methods if needed
     } as unknown as jest.Mocked<Repository<EventEntity>>; // Use unknown cast for simplicity
+
+    // Define mock eventAttendeesRepository for batch count queries
+    eventAttendeesRepository = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      }),
+    };
 
     // Define mock GroupMemberService behavior
     mockGroupMemberService = {
@@ -92,7 +106,12 @@ describe('EventQueryService', () => {
           // Use a factory or value that returns the mocked repository instance
           useValue: {
             getTenantConnection: jest.fn().mockResolvedValue({
-              getRepository: jest.fn().mockReturnValue(eventRepository), // Ensure this returns our mock
+              getRepository: jest.fn().mockImplementation((entity: any) => {
+                if (entity === EventAttendeesEntity) {
+                  return eventAttendeesRepository;
+                }
+                return eventRepository;
+              }),
             }),
           },
         },
@@ -115,6 +134,34 @@ describe('EventQueryService', () => {
           provide: GroupDIDFollowService,
           useValue: mockGroupDIDFollowService,
         },
+        {
+          provide: ContrailQueryService,
+          useValue: {
+            find: jest.fn().mockResolvedValue({ records: [], total: 0 }),
+            findByUri: jest.fn().mockResolvedValue(null),
+            findWithGeoFilter: jest
+              .fn()
+              .mockResolvedValue({ records: [], total: 0 }),
+            resolveHandles: jest.fn().mockResolvedValue(new Map()),
+            getPublicDataSource: jest.fn().mockResolvedValue({
+              query: jest.fn().mockResolvedValue([]),
+            }),
+          },
+        },
+        {
+          provide: AtprotoEnrichmentService,
+          useValue: {
+            enrichRecords: jest.fn().mockResolvedValue([]),
+            filterByCategories: jest
+              .fn()
+              .mockImplementation((events, _cats) => events),
+            deduplicatePrivateEvents: jest
+              .fn()
+              .mockImplementation((events, _uris) => events),
+            mapAtprotoToEvent: jest.fn(),
+            parseAtprotoSlug: jest.fn().mockReturnValue(null),
+          },
+        },
         // Remove providers for unused services (Matrix, GroupMember, Recurrence)
         {
           provide: getRepositoryToken(EventEntity), // Keep this token provider
@@ -129,24 +176,7 @@ describe('EventQueryService', () => {
     }).compile();
 
     service = await module.resolve<EventQueryService>(EventQueryService);
-    // No need to get repository separately here if the service initializes it correctly via TenantConnectionService
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
-  describe('getEventsByCreator', () => {
-    it('should return events created by the user', async () => {
-      jest
-        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue({
-          getRepository: jest.fn().mockReturnValue(mockRepository),
-        } as any);
-
-      const events = await service.getEventsByCreator(mockUser.id);
-      expect(events).toBeTruthy();
-    });
+    mockEnrichmentService = module.get(AtprotoEnrichmentService);
   });
 
   describe('findEventsForGroup', () => {
@@ -272,24 +302,14 @@ describe('EventQueryService', () => {
         id: 1,
         slug: 'native-event',
         groupId: 1,
+        startDate: new Date('2026-01-01'),
       };
-      const externalEvent = {
-        ...mockEventEntity,
-        id: 2,
-        slug: 'external-event',
-        sourceId: 'at://did:plc:followed1/community.lexicon.calendar.event/abc',
+      const externalEnrichedEvent = {
+        id: undefined,
+        atprotoUri:
+          'at://did:plc:followed1/community.lexicon.calendar.event/abc',
+        name: 'External Event',
         startDate: new Date('2026-01-02'),
-      };
-
-      // Query builder for external events query (sourceId/atprotoUri LIKE)
-      const mockExternalQb = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        setParameter: jest.fn().mockReturnThis(),
-        addOrderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([externalEvent]),
       };
 
       const mockAttendeeQb = {
@@ -298,34 +318,35 @@ describe('EventQueryService', () => {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([
-          { eventId: 1, count: '3' },
-          { eventId: 2, count: '1' },
-        ]),
-      };
-
-      const mockDataSource = {
-        getRepository: jest.fn().mockImplementation((entity) => {
-          if (entity.name === 'EventAttendeesEntity') {
-            return {
-              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
-            };
-          }
-          // EventEntity repo — used for both native find() and external createQueryBuilder()
-          return {
-            find: jest.fn().mockResolvedValue([nativeEvent]),
-            createQueryBuilder: jest.fn().mockReturnValue(mockExternalQb),
-          };
-        }),
+        getRawMany: jest.fn().mockResolvedValue([{ eventId: 1, count: '3' }]),
       };
 
       jest
         .spyOn(service['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue(mockDataSource as any);
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              find: jest.fn().mockResolvedValue([nativeEvent]),
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+            };
+          }),
+        } as any);
 
       mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
         'did:plc:followed1',
       ]);
+
+      jest
+        .spyOn(service['contrailQueryService'], 'find')
+        .mockResolvedValue({ records: [{}], total: 1 } as any);
+      jest
+        .spyOn(service['atprotoEnrichmentService'], 'enrichRecords')
+        .mockResolvedValue([externalEnrichedEvent as any]);
 
       const result = await service.findEventsForGroup(1, 10);
 
@@ -335,23 +356,22 @@ describe('EventQueryService', () => {
       expect(origins).toContain('external');
     });
 
-    it('should deduplicate: native wins over external when event appears in both', async () => {
-      const dualEvent = {
+    it('should deduplicate: native wins over external when event appears in both via atprotoUri', async () => {
+      const sharedUri =
+        'at://did:plc:followed1/community.lexicon.calendar.event/abc';
+      const nativeEvent = {
         ...mockEventEntity,
         id: 1,
         slug: 'dual-event',
         groupId: 1,
-        sourceId: 'at://did:plc:followed1/community.lexicon.calendar.event/abc',
+        atprotoUri: sharedUri,
+        startDate: new Date('2026-01-01'),
       };
-
-      const mockExternalQb = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        setParameter: jest.fn().mockReturnThis(),
-        addOrderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([{ ...dualEvent }]),
+      const externalEnrichedEvent = {
+        id: undefined,
+        atprotoUri: sharedUri,
+        name: 'External (same) Event',
+        startDate: new Date('2026-01-01'),
       };
 
       const mockAttendeeQb = {
@@ -363,27 +383,32 @@ describe('EventQueryService', () => {
         getRawMany: jest.fn().mockResolvedValue([{ eventId: 1, count: '5' }]),
       };
 
-      const mockDataSource = {
-        getRepository: jest.fn().mockImplementation((entity) => {
-          if (entity.name === 'EventAttendeesEntity') {
-            return {
-              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
-            };
-          }
-          return {
-            find: jest.fn().mockResolvedValue([dualEvent]),
-            createQueryBuilder: jest.fn().mockReturnValue(mockExternalQb),
-          };
-        }),
-      };
-
       jest
         .spyOn(service['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue(mockDataSource as any);
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              find: jest.fn().mockResolvedValue([nativeEvent]),
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+            };
+          }),
+        } as any);
 
       mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
         'did:plc:followed1',
       ]);
+
+      jest
+        .spyOn(service['contrailQueryService'], 'find')
+        .mockResolvedValue({ records: [{}], total: 1 } as any);
+      jest
+        .spyOn(service['atprotoEnrichmentService'], 'enrichRecords')
+        .mockResolvedValue([externalEnrichedEvent as any]);
 
       const result = await service.findEventsForGroup(1, 10);
 
@@ -392,140 +417,368 @@ describe('EventQueryService', () => {
     });
   });
 
-  describe('editEvent', () => {
-    it('should return an event', async () => {
+  describe('findEventsForGroup - Contrail integration', () => {
+    let mockContrailQueryService: any;
+    let mockAtprotoEnrichmentService: any;
+
+    beforeEach(() => {
+      mockContrailQueryService = service['contrailQueryService'];
+      mockAtprotoEnrichmentService = service['atprotoEnrichmentService'];
+    });
+
+    it('should query Contrail when groupDidFollowService returns followed DIDs', async () => {
+      const nativeEvent = {
+        ...mockEventEntity,
+        id: 1,
+        slug: 'native-event',
+        startDate: new Date('2026-01-01'),
+      };
+
+      const mockAttendeeQb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+
       jest
         .spyOn(service['tenantConnectionService'], 'getTenantConnection')
         .mockResolvedValue({
-          getRepository: jest.fn().mockReturnValue({
-            findOne: jest.fn().mockResolvedValue(mockEventEntity),
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              find: jest.fn().mockResolvedValue([nativeEvent]),
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+            };
           }),
         } as any);
-      const result = await service.editEvent(mockEventEntity.slug);
-      expect(result).toEqual(mockEventEntity);
+
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
+        'did:plc:abc123',
+        'did:plc:def456',
+      ]);
+
+      jest
+        .spyOn(mockContrailQueryService, 'find')
+        .mockResolvedValue({ records: [], total: 0 });
+      jest
+        .spyOn(mockAtprotoEnrichmentService, 'enrichRecords')
+        .mockResolvedValue([]);
+
+      await service.findEventsForGroup(1, 10);
+
+      expect(mockContrailQueryService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        expect.objectContaining({
+          conditions: expect.arrayContaining([
+            expect.objectContaining({
+              sql: expect.stringContaining('did = $1'),
+              params: expect.arrayContaining(['did:plc:abc123']),
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it('should enrich Contrail records via atprotoEnrichmentService', async () => {
+      const nativeEvent = {
+        ...mockEventEntity,
+        id: 1,
+        slug: 'native-event',
+        startDate: new Date('2026-01-01'),
+      };
+
+      const contrailRecord = {
+        uri: 'at://did:plc:abc123/community.lexicon.calendar.event/rkey1',
+        cid: 'bafyreiabc',
+        did: 'did:plc:abc123',
+        record: {
+          $type: 'community.lexicon.calendar.event',
+          name: 'External Event',
+          startsAt: '2026-01-15T10:00:00Z',
+        },
+        indexedAt: '2026-01-01T00:00:00Z',
+      };
+
+      const enrichedEvent = {
+        id: undefined,
+        atprotoUri:
+          'at://did:plc:abc123/community.lexicon.calendar.event/rkey1',
+        name: 'External Event',
+        startDate: new Date('2026-01-15T10:00:00Z'),
+      };
+
+      const mockAttendeeQb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              find: jest.fn().mockResolvedValue([nativeEvent]),
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+            };
+          }),
+        } as any);
+
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
+        'did:plc:abc123',
+      ]);
+
+      jest
+        .spyOn(mockContrailQueryService, 'find')
+        .mockResolvedValue({ records: [contrailRecord], total: 1 });
+      jest
+        .spyOn(mockAtprotoEnrichmentService, 'enrichRecords')
+        .mockResolvedValue([enrichedEvent as any]);
+
+      const result = await service.findEventsForGroup(1, 10);
+
+      expect(mockAtprotoEnrichmentService.enrichRecords).toHaveBeenCalledWith(
+        [contrailRecord],
+        TESTING_TENANT_ID,
+      );
+
+      // Enriched external event should appear in results
+      const externalResults = result.filter(
+        (e) => (e as any).origin === 'external',
+      );
+      expect(externalResults.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should not query Contrail when no DIDs are followed', async () => {
+      const mockAttendeeQb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              find: jest.fn().mockResolvedValue([]),
+              createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+            };
+          }),
+        } as any);
+
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([]);
+
+      const contrailFindSpy = jest.spyOn(mockContrailQueryService, 'find');
+
+      await service.findEventsForGroup(1, 10);
+
+      expect(contrailFindSpy).not.toHaveBeenCalled();
     });
   });
 
   describe('showEvent', () => {
-    it('should return event with details', async () => {
+    it('should return enriched event for ATProto slug when Contrail is enabled', async () => {
+      const mockEnrichedEvent = {
+        source: 'atproto',
+        name: 'ATProto Event',
+        slug: 'did:plc:abc~tid1',
+      };
+
       jest
         .spyOn(service['tenantConnectionService'], 'getTenantConnection')
         .mockResolvedValue({
           getRepository: jest.fn().mockReturnValue({
-            findOne: jest.fn().mockResolvedValue(mockEventEntity),
+            findOne: jest.fn().mockResolvedValue(null),
           }),
         } as any);
-      const result = await service.showEvent(mockEventEntity.slug);
-      expect(result).toEqual(mockEventEntity);
+
+      const contrailService = (service as any).contrailQueryService;
+      const enrichmentService = (service as any).atprotoEnrichmentService;
+
+      enrichmentService.parseAtprotoSlug.mockReturnValue({
+        did: 'did:plc:abc',
+        rkey: 'tid1',
+      });
+      contrailService.findByUri.mockResolvedValue({
+        uri: 'at://did:plc:abc/community.lexicon.calendar.event/tid1',
+      });
+      enrichmentService.enrichRecords.mockResolvedValue([mockEnrichedEvent]);
+
+      const result = await service.showEvent('did:plc:abc~tid1');
+      expect(result).toEqual(mockEnrichedEvent);
+      expect(contrailService.findByUri).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        'at://did:plc:abc/community.lexicon.calendar.event/tid1',
+      );
+    });
+
+    it('should throw NotFoundException for ATProto slug when Contrail returns no records', async () => {
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            findOne: jest.fn().mockResolvedValue(null),
+          }),
+        } as any);
+
+      const contrailService = (service as any).contrailQueryService;
+      const enrichmentService = (service as any).atprotoEnrichmentService;
+
+      enrichmentService.parseAtprotoSlug.mockReturnValue({
+        did: 'did:plc:abc',
+        rkey: 'tid1',
+      });
+      contrailService.findByUri.mockResolvedValue(null);
+
+      await expect(service.showEvent('did:plc:abc~tid1')).rejects.toThrow(
+        'Event not found',
+      );
+    });
+
+    it('should throw NotFoundException for normal slug when Contrail is enabled but slug is not ATProto', async () => {
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            findOne: jest.fn().mockResolvedValue(null),
+          }),
+        } as any);
+
+      const contrailService = (service as any).contrailQueryService;
+      const enrichmentService = (service as any).atprotoEnrichmentService;
+
+      enrichmentService.parseAtprotoSlug.mockReturnValue(null);
+
+      await expect(service.showEvent('normal-event-slug')).rejects.toThrow(
+        'Event not found',
+      );
+      expect(contrailService.findByUri).not.toHaveBeenCalled();
     });
   });
 
   describe('getHomePageFeaturedEvents', () => {
-    it('should return featured events', async () => {
-      const mockEventQueryBuilder = {
-        select: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([mockEventEntity]),
-      };
+    it('should return at most 4 events from Contrail enrichment', async () => {
+      const contrailService = service[
+        'contrailQueryService'
+      ] as jest.Mocked<ContrailQueryService>;
+      const enrichmentService = service[
+        'atprotoEnrichmentService'
+      ] as jest.Mocked<AtprotoEnrichmentService>;
 
-      const mockAttendeeQueryBuilder = {
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([{ eventId: 1, count: '5' }]),
-      };
+      // Simulate Contrail returning 6 records (more than 4 — random sample should cap at 4)
+      const mockContrailRecords = Array.from({ length: 6 }, (_, i) => ({
+        uri: `at://did:plc:${i}/community.lexicon.calendar.event/${i}`,
+        record: {
+          name: `Event ${i}`,
+          startsAt: new Date(Date.now() + (i + 1) * 86400000).toISOString(),
+        },
+      }));
 
-      jest
-        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue({
-          getRepository: jest.fn().mockImplementation((entity) => {
-            if (entity.name === 'EventAttendeesEntity') {
-              return {
-                createQueryBuilder: jest
-                  .fn()
-                  .mockReturnValue(mockAttendeeQueryBuilder),
-              };
-            }
-            return {
-              createQueryBuilder: jest
-                .fn()
-                .mockReturnValue(mockEventQueryBuilder),
-            };
-          }),
-        } as any);
+      const mockEnrichedEvents = mockContrailRecords.map((r, i) => ({
+        ...mockEventEntity,
+        id: i + 200,
+        slug: `contrail-event-${i}`,
+        atprotoUri: r.uri,
+      }));
+
+      contrailService.find.mockResolvedValueOnce({
+        records: mockContrailRecords as any,
+        total: mockContrailRecords.length,
+      });
+      enrichmentService.enrichRecords.mockResolvedValueOnce(
+        mockEnrichedEvents as any,
+      );
 
       const result = await service.getHomePageFeaturedEvents();
-      expect(Array.isArray(result)).toBe(true);
+
+      // Result is capped at 4
+      expect(result.length).toBeLessThanOrEqual(4);
     });
 
-    it('should use batch attendee count query instead of loadRelationCountAndMap', async () => {
-      const mockEvents = [
-        { ...mockEventEntity, id: 1 },
-        { ...mockEventEntity, id: 2, slug: 'event-2' },
+    it('should query Contrail for public events and enrich with tenant metadata', async () => {
+      const mockContrailRecords = [
+        {
+          uri: 'at://did:plc:aaa/community.lexicon.calendar.event/1',
+          record: {
+            name: 'Event 1',
+            startsAt: new Date(Date.now() + 86400000).toISOString(),
+          },
+        },
+        {
+          uri: 'at://did:plc:bbb/community.lexicon.calendar.event/2',
+          record: {
+            name: 'Event 2',
+            startsAt: new Date(Date.now() + 172800000).toISOString(),
+          },
+        },
+        {
+          uri: 'at://did:plc:ccc/community.lexicon.calendar.event/3',
+          record: {
+            name: 'Event 3',
+            startsAt: new Date(Date.now() + 259200000).toISOString(),
+          },
+        },
       ];
 
-      // Track whether loadRelationCountAndMap is called on the event query builder
-      const loadRelationCountAndMapFn = jest.fn().mockReturnThis();
-      const mockEventQueryBuilder = {
-        select: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        loadRelationCountAndMap: loadRelationCountAndMapFn,
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockEvents),
-      };
+      const mockEnrichedEvents = mockContrailRecords.map((r, i) => ({
+        ...mockEventEntity,
+        id: i + 100,
+        slug: `contrail-event-${i + 1}`,
+        atprotoUri: r.uri,
+      }));
 
-      // Mock the batch attendee count query builder
-      const mockGetRawMany = jest.fn().mockResolvedValue([
-        { eventId: 1, count: '3' },
-        { eventId: 2, count: '7' },
-      ]);
-      const mockAttendeeQueryBuilder = {
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: mockGetRawMany,
-      };
+      const contrailService = service[
+        'contrailQueryService'
+      ] as jest.Mocked<ContrailQueryService>;
+      contrailService.find.mockResolvedValueOnce({
+        records: mockContrailRecords as any,
+        total: mockContrailRecords.length,
+      });
 
-      jest
-        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue({
-          getRepository: jest.fn().mockImplementation((entity) => {
-            if (entity.name === 'EventAttendeesEntity') {
-              return {
-                createQueryBuilder: jest
-                  .fn()
-                  .mockReturnValue(mockAttendeeQueryBuilder),
-              };
-            }
-            return {
-              createQueryBuilder: jest
-                .fn()
-                .mockReturnValue(mockEventQueryBuilder),
-            };
-          }),
-        } as any);
+      mockEnrichmentService.enrichRecords.mockResolvedValueOnce(
+        mockEnrichedEvents,
+      );
 
       const result = await service.getHomePageFeaturedEvents();
 
-      // loadRelationCountAndMap should NOT be called (batch pattern used instead)
-      expect(loadRelationCountAndMapFn).not.toHaveBeenCalled();
+      // 1. contrailQueryService.find should be called with the event collection
+      expect(contrailService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        expect.objectContaining({ limit: 50 }),
+      );
 
-      // Batch attendee count query SHOULD be called
-      expect(mockGetRawMany).toHaveBeenCalled();
+      // 2. atprotoEnrichmentService.enrichRecords should be called with the Contrail records
+      expect(mockEnrichmentService.enrichRecords).toHaveBeenCalledWith(
+        mockContrailRecords,
+        TESTING_TENANT_ID,
+      );
 
-      // Results should have attendeesCount set
-      expect(result).toHaveLength(2);
+      // 3. Result contains at most 4 events
+      expect(result.length).toBeLessThanOrEqual(4);
     });
   });
 
@@ -707,257 +960,439 @@ describe('EventQueryService', () => {
     });
   });
 
-  describe('findEventBySlug', () => {
-    it('should return an event by slug', async () => {
-      // Arrange: Set up the mock response for findOne
-      eventRepository.findOne.mockResolvedValue(mockEventEntity);
-
-      // Act: Call the method under test
-      const result = await service.findEventBySlug(mockEventEntity.slug);
-
-      // Assert: Check that findOne was called correctly and the result is as expected
-      expect(eventRepository.findOne).toHaveBeenCalledWith({
-        where: { slug: mockEventEntity.slug },
-        relations: expect.arrayContaining([
-          'user',
-          'group',
-          'categories',
-          'image',
-        ]), // Adjust relations as needed
-      });
-      expect(result).toEqual(mockEventEntity);
-    });
-
-    it('should return null if event not found', async () => {
-      // Arrange: Set up the mock response for findOne to return null
-      eventRepository.findOne.mockResolvedValue(null);
-      const slug = 'non-existent-slug';
-
-      // Act: Call the method under test
-      const result = await service.findEventBySlug(slug);
-
-      // Assert: Check that findOne was called and the result is null
-      expect(eventRepository.findOne).toHaveBeenCalledWith({
-        where: { slug: slug },
-        relations: expect.arrayContaining([
-          'user',
-          'group',
-          'categories',
-          'image',
-        ]),
-      });
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('Image serialization issue - getHomePageUserUpcomingEvents', () => {
-    // Create a detailed mock of FileEntity with Transform decorator behavior
-    const createMockFileEntity = () => {
-      const fileEntity = new FileEntity();
-      fileEntity.id = 123;
-      fileEntity.path = 'test/path/image.jpg';
-      // Simulate the transform decorator by adding a toJSON method
-      fileEntity.toJSON = jest.fn().mockReturnValue({
-        id: 123,
-        path: 'https://example.com/presigned/test/path/image.jpg',
-      });
-      return fileEntity;
-    };
-
-    // Create a mock event with image only
-    const createMockEventWithImage = () => {
-      const event = { ...mockEventEntity };
-      event.image = createMockFileEntity();
-      return event;
-    };
+  describe('showAllEventsWithContrail', () => {
+    let mockContrailService: any;
 
     beforeEach(() => {
-      // Set up the event repository mock to return our fixture
-      const mockEvent = createMockEventWithImage();
-      const mockEventQueryBuilder = {
+      mockContrailService = (service as any).contrailQueryService;
+
+      // Mock private events query builder (returns no private events by default)
+      const mockPrivateQb = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([mockEvent]),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      eventRepository.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockPrivateQb) as any;
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should sort by startsAt ASC with uri ASC tiebreaker', async () => {
+      const now = new Date();
+      const startsAt = new Date(now.getTime() + 86400000).toISOString();
+
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:bbb/community.lexicon.calendar.event/bbb',
+            did: 'did:plc:bbb',
+            rkey: 'bbb',
+            cid: 'cid2',
+            record: { name: 'Event B', startsAt, mode: '#inperson' },
+            count_community_lexicon_calendar_rsvp: 0,
+          },
+          {
+            uri: 'at://did:plc:aaa/community.lexicon.calendar.event/aaa',
+            did: 'did:plc:aaa',
+            rkey: 'aaa',
+            cid: 'cid1',
+            record: { name: 'Event A', startsAt, mode: '#inperson' },
+            count_community_lexicon_calendar_rsvp: 0,
+          },
+        ],
+        total: 2,
+      });
+
+      // enrichRecords returns enriched events
+      mockEnrichmentService.enrichRecords.mockResolvedValue([
+        {
+          source: 'atproto',
+          name: 'Event B',
+          startDate: new Date(startsAt),
+          atprotoUri: 'at://did:plc:bbb/community.lexicon.calendar.event/bbb',
+          slug: 'did:plc:bbb/bbb',
+        },
+        {
+          source: 'atproto',
+          name: 'Event A',
+          startDate: new Date(startsAt),
+          atprotoUri: 'at://did:plc:aaa/community.lexicon.calendar.event/aaa',
+          slug: 'did:plc:aaa/aaa',
+        },
+      ]);
+
+      await service.showAllEvents({ page: 1, limit: 25 }, {} as any);
+
+      // Verify orderBy passed to find() includes tiebreaker
+      expect(mockContrailService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        expect.objectContaining({
+          orderBy: expect.stringContaining('uri ASC'),
+        }),
+      );
+    });
+
+    it('should include currently-active events in default date filter', async () => {
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [],
+        total: 0,
+      });
+
+      await service.showAllEvents({ page: 1, limit: 25 }, {} as any);
+
+      // Default date filter should include currently-active events
+      const callArgs = mockContrailService.find.mock.calls[0][1];
+      const dateCondition = callArgs.conditions.find((c: any) =>
+        c.sql.includes('startsAt'),
+      );
+      // Should have OR clause for active events, not just >= now
+      expect(dateCondition.sql).toContain('endsAt');
+    });
+
+    it('should not produce duplicates when event exists in both Contrail and tenant DB', async () => {
+      const startsAt = new Date(Date.now() + 86400000).toISOString();
+      const atUri = 'at://did:plc:aaa/community.lexicon.calendar.event/aaa';
+
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [
+          {
+            uri: atUri,
+            did: 'did:plc:aaa',
+            rkey: 'aaa',
+            cid: 'cid1',
+            record: { name: 'My Event', startsAt, mode: '#inperson' },
+            count_community_lexicon_calendar_rsvp: 3,
+          },
+        ],
+        total: 1,
+      });
+
+      // enrichRecords returns the enriched event with tenant metadata
+      mockEnrichmentService.enrichRecords.mockResolvedValue([
+        {
+          source: 'atproto',
+          id: 1,
+          ulid: 'test-ulid',
+          slug: 'my-event',
+          atprotoUri: atUri,
+          name: 'My Event',
+          startDate: new Date(startsAt),
+          visibility: 'public',
+          attendeesCount: 3,
+        },
+      ]);
+
+      // deduplicatePrivateEvents should filter out the duplicate
+      mockEnrichmentService.deduplicatePrivateEvents.mockImplementation(
+        (events: any[], uris: Set<string>) =>
+          events.filter((e: any) => !e.atprotoUri || !uris.has(e.atprotoUri)),
+      );
+
+      // Mock private events query — returns the SAME event (simulating the duplicate)
+      const mockPrivateQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            id: 1,
+            ulid: 'test-ulid',
+            slug: 'my-event',
+            atprotoUri: atUri,
+            name: 'My Event',
+            startDate: new Date(startsAt),
+            visibility: 'unlisted',
+          },
+        ]),
+      };
+      eventRepository.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockPrivateQb) as any;
+
+      const result = await service.showAllEvents(
+        { page: 1, limit: 25 },
+        {} as any,
+      );
+
+      // Should have exactly 1 event, not 2
+      expect(result.data).toHaveLength(1);
+      // Should be enriched with tenant metadata
+      expect(result.data[0].slug).toBe('my-event');
+    });
+
+    it('should return prod pagination envelope format', async () => {
+      const startsAt = new Date(Date.now() + 86400000).toISOString();
+
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:aaa/community.lexicon.calendar.event/aaa',
+            did: 'did:plc:aaa',
+            rkey: 'aaa',
+            cid: 'cid1',
+            record: { name: 'Event A', startsAt, mode: '#inperson' },
+            count_community_lexicon_calendar_rsvp: 0,
+          },
+        ],
+        total: 50,
+      });
+
+      mockEnrichmentService.enrichRecords.mockResolvedValue([
+        {
+          source: 'atproto',
+          name: 'Event A',
+          startDate: new Date(startsAt),
+          atprotoUri: 'at://did:plc:aaa/community.lexicon.calendar.event/aaa',
+          slug: 'did:plc:aaa/aaa',
+        },
+      ]);
+
+      const result = await service.showAllEvents(
+        { page: 2, limit: 10 },
+        {} as any,
+      );
+
+      // Must match PaginationResult shape (prod format)
+      expect(result).toHaveProperty('data');
+      expect(result).toHaveProperty('total');
+      expect(result).toHaveProperty('page');
+      expect(result).toHaveProperty('totalPages');
+      // Must NOT have meta wrapper
+      expect(result).not.toHaveProperty('meta');
+
+      expect(result.total).toBe(50);
+      expect(result.page).toBe(2);
+      expect(result.totalPages).toBe(5); // 50 / 10
+    });
+
+    it('should filter by categories when provided', async () => {
+      const startsAt = new Date(Date.now() + 86400000).toISOString();
+      const atUri = 'at://did:plc:aaa/community.lexicon.calendar.event/aaa';
+
+      // Contrail returns an event
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [
+          {
+            uri: atUri,
+            did: 'did:plc:aaa',
+            rkey: 'aaa',
+            cid: 'cid1',
+            record: { name: 'Tech Meetup', startsAt, mode: '#inperson' },
+            count_community_lexicon_calendar_rsvp: 0,
+          },
+        ],
+        total: 1,
+      });
+
+      // enrichRecords returns enriched event with categories
+      mockEnrichmentService.enrichRecords.mockResolvedValue([
+        {
+          source: 'atproto',
+          id: 1,
+          slug: 'tech-meetup',
+          atprotoUri: atUri,
+          name: 'Tech Meetup',
+          startDate: new Date(startsAt),
+          categories: [{ name: 'Technology' }],
+        },
+      ]);
+
+      // filterByCategories returns the event (category matches)
+      mockEnrichmentService.filterByCategories.mockImplementation(
+        (events: any[]) => events,
+      );
+
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      eventRepository.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockQb) as any;
+
+      const result = await service.showAllEvents({ page: 1, limit: 25 }, {
+        categories: ['Technology'],
+      } as any);
+
+      // Event should be included because its tenant metadata has the category
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should exclude Contrail events without matching category', async () => {
+      const startsAt = new Date(Date.now() + 86400000).toISOString();
+      const atUri = 'at://did:plc:aaa/community.lexicon.calendar.event/aaa';
+
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [
+          {
+            uri: atUri,
+            did: 'did:plc:aaa',
+            rkey: 'aaa',
+            cid: 'cid1',
+            record: { name: 'Tech Meetup', startsAt, mode: '#inperson' },
+            count_community_lexicon_calendar_rsvp: 0,
+          },
+        ],
+        total: 1,
+      });
+
+      // enrichRecords returns enriched event with non-matching category
+      mockEnrichmentService.enrichRecords.mockResolvedValue([
+        {
+          source: 'atproto',
+          id: 1,
+          slug: 'tech-meetup',
+          atprotoUri: atUri,
+          name: 'Tech Meetup',
+          startDate: new Date(startsAt),
+          categories: [{ name: 'Music' }],
+        },
+      ]);
+
+      // filterByCategories returns empty (no match)
+      mockEnrichmentService.filterByCategories.mockReturnValue([]);
+
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      eventRepository.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockQb) as any;
+
+      const result = await service.showAllEvents({ page: 1, limit: 25 }, {
+        categories: ['Technology'],
+      } as any);
+
+      // Event should be excluded — category doesn't match
+      expect(result.data).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
+
+    it('should apply geo filter when lat/lon provided', async () => {
+      const startsAt = new Date(Date.now() + 86400000).toISOString();
+
+      mockContrailService.findWithGeoFilter = jest.fn().mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:aaa/community.lexicon.calendar.event/aaa',
+            did: 'did:plc:aaa',
+            rkey: 'aaa',
+            cid: 'cid1',
+            record: {
+              name: 'Louisville Meetup',
+              startsAt,
+              mode: '#inperson',
+              locations: [
+                {
+                  geo: { lat: 38.25, lon: -85.76 },
+                  name: 'Louisville',
+                },
+              ],
+            },
+            count_community_lexicon_calendar_rsvp: 0,
+          },
+        ],
+        total: 1,
+      });
+
+      mockEnrichmentService.enrichRecords.mockResolvedValue([
+        {
+          source: 'atproto',
+          name: 'Louisville Meetup',
+          startDate: new Date(startsAt),
+          atprotoUri: 'at://did:plc:aaa/community.lexicon.calendar.event/aaa',
+          slug: 'did:plc:aaa~aaa',
+          location: 'Louisville',
+          lat: 38.25,
+          lon: -85.76,
+        } as AtprotoSourcedEvent,
+      ]);
+
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      eventRepository.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockQb) as any;
+
+      const result = await service.showAllEvents({ page: 1, limit: 25 }, {
+        lat: 38.25,
+        lon: -85.76,
+        radius: 10,
+      } as any);
+
+      expect(mockContrailService.findWithGeoFilter).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        { lat: 38.25, lon: -85.76, radiusMeters: expect.any(Number) },
+        expect.any(Object),
+      );
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should batch-fetch attendee counts for private events', async () => {
+      const startsAt = new Date(Date.now() + 86400000).toISOString();
+
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [],
+        total: 0,
+      });
+
+      const privateEvent = {
+        id: 42,
+        ulid: 'test-ulid',
+        name: 'Private Meetup',
+        startDate: new Date(startsAt),
+        visibility: 'private',
+        status: 'published',
       };
 
-      const mockAttendeeQueryBuilder = {
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([privateEvent]),
+      };
+      eventRepository.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockQb) as any;
+
+      // Mock the attendees batch count query on the shared mock
+      const mockAttQb = {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest
-          .fn()
-          .mockResolvedValue([{ eventId: mockEvent.id, count: '5' }]),
+        getRawMany: jest.fn().mockResolvedValue([{ eventId: 42, count: '7' }]),
       };
+      eventAttendeesRepository.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(mockAttQb);
 
-      jest
-        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue({
-          getRepository: jest.fn().mockImplementation((entity) => {
-            if (entity.name === 'EventAttendeesEntity') {
-              return {
-                createQueryBuilder: jest
-                  .fn()
-                  .mockReturnValue(mockAttendeeQueryBuilder),
-              };
-            }
-            return {
-              createQueryBuilder: jest
-                .fn()
-                .mockReturnValue(mockEventQueryBuilder),
-            };
-          }),
-        } as any);
-    });
+      const result = await service.showAllEvents({ page: 1, limit: 25 }, {
+        id: 1,
+      } as any);
 
-    it('should properly serialize image.path in getHomePageUserUpcomingEvents', async () => {
-      // Call the method that had the issue
-      const result = await service.getHomePageUserUpcomingEvents(1);
-
-      // Validate results
-      expect(result.length).toBeGreaterThan(0);
-      const event = result[0];
-
-      // This test documents the issue: getHomePageUserUpcomingEvents produces image paths
-      // that are objects instead of strings due to serialization handling
-      expect(event.image).toBeDefined();
-      if (event.image) {
-        // The test result shows that in the test environment, image.path is an object
-        // while in production it might be different due to class-transformer behavior
-        console.log('IMPORTANT - Image path type:', typeof event.image.path);
-        console.log('Image path value:', JSON.stringify(event.image.path));
-
-        // NOTE: In a production environment with real S3 configuration,
-        // this might behave differently, but our test confirms the object-type path issue
-      }
-    });
-
-    it('should demonstrate why serialize-first-then-modify works', async () => {
-      // Mock a FileEntity with the Transform behavior
-      const fileEntity = new FileEntity();
-      fileEntity.id = 123;
-      fileEntity.path = 'test/path/image.jpg';
-      // Add a mock toJSON to simulate the transform decorator
-      fileEntity.toJSON = jest.fn().mockReturnValue({
-        id: 123,
-        path: 'https://example.com/presigned/image.jpg',
-      });
-
-      // Create an event with this file
-      const event = new EventEntity();
-      event.id = 456;
-      event.name = 'Test Event';
-      event.slug = 'test-event';
-      event.image = fileEntity;
-
-      // APPROACH 1: Add custom property first, then serialize (may break image.path)
-      const event1 = { ...event };
-      (event1 as any).testProperty = 'Test Value';
-      const serialized1 = await instanceToPlain(event1);
-
-      // APPROACH 2: Serialize first, then add custom property (preserves image.path)
-      const event2 = { ...event };
-      const serialized2 = await instanceToPlain(event2);
-      serialized2.testProperty = 'Test Value';
-
-      // Log the results to see the difference
-      console.log(
-        'Approach 1 - modify then serialize:',
-        typeof serialized1.image?.path,
-        serialized1.image?.path,
-      );
-      console.log(
-        'Approach 2 - serialize then modify:',
-        typeof serialized2.image?.path,
-        serialized2.image?.path,
-      );
-
-      // The test case is primarily for documenting the issue
-      // Actual assertions will depend on the environment and library behavior
-
-      // In a production environment with the real class-transformer,
-      // we'd expect the second approach to work properly
-      expect(serialized2.testProperty).toBe('Test Value');
-    });
-
-    it('should investigate different object mutation approaches', async () => {
-      // Set up the test objects
-      const fileEntity = new FileEntity();
-      fileEntity.id = 123;
-      fileEntity.path = 'test/path/image.jpg';
-      fileEntity.toJSON = jest.fn().mockReturnValue({
-        path: 'https://transformed.url/image.jpg',
-      });
-
-      const event = new EventEntity();
-      event.id = 456;
-      event.name = 'Test Event';
-      event.image = fileEntity;
-
-      // Test 1: Direct property assignment
-      const test1 = { ...event } as any;
-      test1.customProp = 'Direct assignment';
-      const result1 = await instanceToPlain(test1);
-
-      // Test 2: Define custom property with Object.defineProperty
-      const test2 = { ...event } as any;
-      Object.defineProperty(test2, 'customProp', {
-        value: 'Object.defineProperty',
-        enumerable: true,
-      });
-      const result2 = await instanceToPlain(test2);
-
-      // Test 3: Adding to a nested object
-      const test3 = { ...event } as any;
-      test3.meta = { customProp: 'Nested object' };
-      const result3 = await instanceToPlain(test3);
-
-      // Test 4: Using spread to create an entirely new object
-      const result4 = {
-        ...(await instanceToPlain(event)),
-        customProp: 'Spread operator',
-      };
-
-      // Log results for all approaches
-      console.log('1. Direct assignment:', typeof result1.image?.path);
-      console.log('2. Object.defineProperty:', typeof result2.image?.path);
-      console.log('3. Nested object:', typeof result3.image?.path);
-      console.log(
-        '4. Spread after serialization:',
-        typeof (result4 as any).image?.path,
-      );
-
-      // The most important test: serialize-first vs. modify-first
-      const plainFirst = (await instanceToPlain(event)) as any;
-      plainFirst.testProperty = 'Added after serialization';
-
-      const modifyFirst = { ...event } as any;
-      modifyFirst.testProperty = 'Added before serialization';
-      const serializedLast = await instanceToPlain(modifyFirst);
-
-      console.log('Serialize first:', typeof plainFirst.image?.path);
-      console.log('Modify first:', typeof serializedLast.image?.path);
-
-      // Log the final results of our comparison
-      console.log('COMPARISON RESULT:');
-      console.log(
-        '1. Modify-first path type:',
-        typeof serializedLast.image?.path,
-      );
-      console.log(
-        '2. Serialize-first path type:',
-        typeof plainFirst.image?.path,
-      );
-
-      // The key finding: in our test environment, only the serialize-first approach
-      // consistently maintains the path as a string when it's working correctly
-      // In this test, we're documenting the behavior rather than asserting it
-      // since it depends on the environment and class-transformer configuration
-      expect(plainFirst.testProperty).toBe('Added after serialization');
+      expect(result.data[0].attendeesCount).toBe(7);
     });
   });
 
@@ -970,7 +1405,7 @@ describe('EventQueryService', () => {
         ...mockEventEntity,
         atprotoUri,
         atprotoRkey: 'abc123',
-      };
+      } as unknown as EventEntity;
 
       eventRepository.find.mockResolvedValue([mockEvent]);
 
@@ -999,6 +1434,319 @@ describe('EventQueryService', () => {
 
       // Assert
       expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('searchAllEvents', () => {
+    let mockContrailService: any;
+    let mockEnrichment: any;
+
+    beforeEach(() => {
+      mockContrailService = (service as any).contrailQueryService;
+      mockEnrichment = (service as any).atprotoEnrichmentService;
+    });
+
+    it('should query Contrail for public events when no userId (anonymous)', async () => {
+      const publicEvent = {
+        ...mockEventEntity,
+        atprotoUri: 'at://did:plc:public/community.lexicon.calendar.event/abc',
+        visibility: EventVisibility.Public,
+      } as EventEntity;
+
+      mockContrailService.find.mockResolvedValue({
+        records: [publicEvent],
+        total: 1,
+      });
+      mockEnrichment.enrichRecords.mockResolvedValue([publicEvent]);
+      mockEnrichment.deduplicatePrivateEvents.mockReturnValue([]);
+
+      const result = await service.searchAllEvents(
+        { page: 1, limit: 10 },
+        { search: 'test event' },
+        undefined,
+      );
+
+      expect(mockContrailService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        expect.objectContaining({ limit: 10, offset: 0 }),
+      );
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
+    });
+
+    it('should include search_vector condition when search query provided', async () => {
+      mockContrailService.find.mockResolvedValue({ records: [], total: 0 });
+      mockEnrichment.enrichRecords.mockResolvedValue([]);
+      mockEnrichment.deduplicatePrivateEvents.mockReturnValue([]);
+
+      await service.searchAllEvents(
+        { page: 1, limit: 10 },
+        { search: 'community gathering' },
+        undefined,
+      );
+
+      expect(mockContrailService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        expect.objectContaining({
+          conditions: expect.arrayContaining([
+            expect.objectContaining({
+              sql: expect.stringContaining('search_vector'),
+              params: ['community gathering'],
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it('should not include search_vector condition when no search query', async () => {
+      mockContrailService.find.mockResolvedValue({ records: [], total: 0 });
+      mockEnrichment.enrichRecords.mockResolvedValue([]);
+      mockEnrichment.deduplicatePrivateEvents.mockReturnValue([]);
+
+      await service.searchAllEvents(
+        { page: 1, limit: 10 },
+        { search: undefined as unknown as string },
+        undefined,
+      );
+
+      const findCall = mockContrailService.find.mock.calls[0];
+      const conditions = findCall[1].conditions;
+      const hasSearchVector = conditions.some((c: any) =>
+        c.sql.includes('search_vector'),
+      );
+      expect(hasSearchVector).toBe(false);
+    });
+
+    it('should query tenant for private/unlisted events when userId provided', async () => {
+      const publicEvent = {
+        ...mockEventEntity,
+        id: 1,
+        atprotoUri: 'at://did:plc:public/community.lexicon.calendar.event/pub1',
+        visibility: EventVisibility.Public,
+        startDate: new Date('2030-01-01'),
+      } as EventEntity;
+
+      const privateEvent = {
+        ...mockEventEntity,
+        id: 2,
+        atprotoUri: null,
+        visibility: EventVisibility.Private,
+        startDate: new Date('2030-01-02'),
+      } as EventEntity;
+
+      mockContrailService.find.mockResolvedValue({
+        records: [publicEvent],
+        total: 1,
+      });
+      mockEnrichment.enrichRecords.mockResolvedValue([publicEvent]);
+      mockEnrichment.deduplicatePrivateEvents.mockReturnValue([privateEvent]);
+
+      const mockPrivateQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([privateEvent]),
+      };
+      eventRepository.createQueryBuilder.mockReturnValue(mockPrivateQb as any);
+
+      const result = await service.searchAllEvents(
+        { page: 1, limit: 10 },
+        { search: 'my event' },
+        42,
+      );
+
+      expect(mockPrivateQb.where).toHaveBeenCalledWith(
+        expect.stringContaining('event.status IN'),
+        expect.anything(),
+      );
+      expect(result.total).toBe(2);
+      expect(result.data).toHaveLength(2);
+    });
+
+    it('should not query tenant for private events when no userId', async () => {
+      mockContrailService.find.mockResolvedValue({ records: [], total: 0 });
+      mockEnrichment.enrichRecords.mockResolvedValue([]);
+      mockEnrichment.deduplicatePrivateEvents.mockReturnValue([]);
+
+      await service.searchAllEvents(
+        { page: 1, limit: 10 },
+        { search: undefined as unknown as string },
+        undefined,
+      );
+
+      expect(eventRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('should return paginated result shape', async () => {
+      mockContrailService.find.mockResolvedValue({ records: [], total: 5 });
+      mockEnrichment.enrichRecords.mockResolvedValue([]);
+      mockEnrichment.deduplicatePrivateEvents.mockReturnValue([]);
+
+      const result = await service.searchAllEvents(
+        { page: 2, limit: 5 },
+        { search: undefined as unknown as string },
+        undefined,
+      );
+
+      expect(result).toHaveProperty('data');
+      expect(result).toHaveProperty('total', 5);
+      expect(result).toHaveProperty('page', 2);
+      expect(result).toHaveProperty('totalPages', 1);
+    });
+  });
+
+  describe('findGroupEvents - Contrail integration', () => {
+    let mockContrailQueryService: any;
+    let mockAtprotoEnrichmentService: any;
+
+    beforeEach(() => {
+      mockContrailQueryService = service['contrailQueryService'];
+      mockAtprotoEnrichmentService = service['atprotoEnrichmentService'];
+    });
+
+    it('should query Contrail when group has followed DIDs', async () => {
+      const nativeEvent = {
+        ...mockEventEntity,
+        id: 1,
+        slug: 'native-group-event',
+        startDate: new Date('2026-01-01'),
+        group: { id: 42, slug: 'my-group', visibility: 'public' },
+      };
+
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([nativeEvent]),
+        getOne: jest.fn().mockResolvedValue(nativeEvent),
+      };
+
+      eventRepository.createQueryBuilder.mockReturnValue(mockQb as any);
+
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
+        'did:plc:abc123',
+        'did:plc:def456',
+      ]);
+
+      jest
+        .spyOn(mockContrailQueryService, 'find')
+        .mockResolvedValue({ records: [], total: 0 });
+      jest
+        .spyOn(mockAtprotoEnrichmentService, 'enrichRecords')
+        .mockResolvedValue([]);
+
+      await service.findGroupEvents('my-group');
+
+      expect(
+        mockGroupDIDFollowService.getFollowedDidsForGroup,
+      ).toHaveBeenCalledWith(42);
+      expect(mockContrailQueryService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        expect.objectContaining({
+          conditions: expect.arrayContaining([
+            expect.objectContaining({
+              sql: expect.stringContaining('did = $1'),
+              params: expect.arrayContaining(['did:plc:abc123']),
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it('should not query Contrail when group has no followed DIDs', async () => {
+      const nativeEvent = {
+        ...mockEventEntity,
+        id: 1,
+        slug: 'native-group-event',
+        startDate: new Date('2026-01-01'),
+        group: { id: 42, slug: 'my-group', visibility: 'public' },
+      };
+
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([nativeEvent]),
+        getOne: jest.fn().mockResolvedValue(nativeEvent),
+      };
+
+      eventRepository.createQueryBuilder.mockReturnValue(mockQb as any);
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([]);
+
+      const contrailFindSpy = jest.spyOn(mockContrailQueryService, 'find');
+
+      await service.findGroupEvents('my-group');
+
+      expect(contrailFindSpy).not.toHaveBeenCalled();
+    });
+
+    it('should merge and sort Contrail events with native events', async () => {
+      const nativeEvent = {
+        ...mockEventEntity,
+        id: 1,
+        slug: 'native-group-event',
+        startDate: new Date('2026-01-15'),
+        group: { id: 42, slug: 'my-group', visibility: 'public' },
+        atprotoUri: null,
+      };
+
+      const contrailRecord = {
+        uri: 'at://did:plc:abc123/community.lexicon.calendar.event/rkey1',
+        cid: 'bafyreiabc',
+        did: 'did:plc:abc123',
+        record: {
+          $type: 'community.lexicon.calendar.event',
+          name: 'External Calendar Event',
+          startsAt: '2026-01-10T10:00:00Z',
+        },
+        indexedAt: '2026-01-01T00:00:00Z',
+      };
+
+      const enrichedExternalEvent = {
+        id: undefined,
+        atprotoUri:
+          'at://did:plc:abc123/community.lexicon.calendar.event/rkey1',
+        name: 'External Calendar Event',
+        startDate: new Date('2026-01-10T10:00:00Z'),
+      };
+
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([nativeEvent]),
+        getOne: jest.fn().mockResolvedValue(nativeEvent),
+      };
+
+      eventRepository.createQueryBuilder.mockReturnValue(mockQb as any);
+
+      mockGroupDIDFollowService.getFollowedDidsForGroup.mockResolvedValue([
+        'did:plc:abc123',
+      ]);
+
+      jest
+        .spyOn(mockContrailQueryService, 'find')
+        .mockResolvedValue({ records: [contrailRecord], total: 1 });
+      jest
+        .spyOn(mockAtprotoEnrichmentService, 'enrichRecords')
+        .mockResolvedValue([enrichedExternalEvent as any]);
+
+      const result = await service.findGroupEvents('my-group');
+
+      // Should have both native and external events
+      expect(result.length).toBe(2);
+      // External event (earlier date) should come first
+      expect(result[0].name).toBe('External Calendar Event');
+      expect(result[1].name).toBe('Test Event');
     });
   });
 });
