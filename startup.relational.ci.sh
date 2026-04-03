@@ -94,6 +94,13 @@ else
   echo "Nginx is ready!"
 fi
 
+# Wait for Contrail ingestion to be ready (Jetstream must be connected)
+echo "Waiting for Jetstream to be ready..."
+/opt/wait-for-it.sh jetstream:6008 -t 30 || echo "WARNING: Jetstream did not become ready"
+
+# Brief pause to let Contrail connect to Jetstream and init schema
+sleep 3
+
 # Run E2E tests (PDS invite code was set up before API started)
 if [ -n "$TEST_PATH_PATTERN" ]; then
   echo "Running E2E tests matching pattern: $TEST_PATH_PATTERN"
