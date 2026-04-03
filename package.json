@@ -57,11 +57,16 @@
     "perf:test": "k6 run k6-tests/profile-lookup.js && k6 run k6-tests/activity-feed.js",
     "perf:test:profile": "k6 run k6-tests/profile-lookup.js",
     "perf:test:feed": "k6 run k6-tests/activity-feed.js",
+    "contrail:pull": "lex-cli pull",
+    "contrail:generate": "lex-cli generate",
     "perf:baseline": "mkdir -p k6-tests/results && MODE=baseline k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/baseline.json",
     "perf:compare": "mkdir -p k6-tests/results && MODE=comparison k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/latest.json",
     "perf:report": "node k6-tests/compare-results.js"
   },
   "dependencies": {
+    "@atcute/atproto": "^3.1.10",
+    "@atcute/bluesky": "^3.3.0",
+    "@atcute/lexicons": "^1.2.9",
     "@atproto/api": "^0.13.31",
     "@atproto/crypto": "^0.4.5",
     "@atproto/identity": "^0.4.7",
@@ -143,6 +148,7 @@
     "undici": ">=6.21.2"
   },
   "devDependencies": {
+    "@atcute/lex-cli": "^2.5.3",
     "@babel/runtime": ">=7.26.10",
     "@commitlint/cli": "19.5.0",
     "@commitlint/config-conventional": "19.5.0",
@@ -222,6 +228,9 @@
     "setupFilesAfterEnv": [
       "<rootDir>/../test/jest-setup.ts"
     ],
+    "moduleNameMapper": {
+      "^mjml$": "<rootDir>/../test/mocks/mjml.mock.js"
+    },
     "transformIgnorePatterns": [
       "node_modules/(?!matrix-js-sdk)"
     ],

@@ -18,6 +18,13 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "esModuleInterop": true,
-    "resolveJsonModule": true
-  }
+    "resolveJsonModule": true,
+    "paths": {
+      "@atcute/lexicons": ["./node_modules/@atcute/lexicons/dist/index.d.ts"],
+      "@atcute/lexicons/validations": ["./node_modules/@atcute/lexicons/dist/validations/index.d.ts"],
+      "@atcute/lexicons/ambient": ["./node_modules/@atcute/lexicons/dist/ambient.d.ts"],
+      "@atcute/atproto/types/*": ["./node_modules/@atcute/atproto/dist/lexicons/types/com/atproto/*"]
+    }
+  },
+  "exclude": ["contrail"]
 }
