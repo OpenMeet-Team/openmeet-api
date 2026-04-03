@@ -78,30 +78,39 @@ describe('Search Visibility Compliance (e2e)', () => {
     try {
       const publicEvent = testData.events.public as any;
 
-      // Wait for Contrail to ingest the public event from the PDS→Jetstream pipeline.
-      // CI uses FLUSH_INTERVAL_MS=0 for instant flush.
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      // Read the real atprotoUri set by the API after PDS publish
-      const eventResponse = await request(TESTING_APP_URL)
-        .get(`/api/events/${publicEvent.slug}`)
-        .set('x-tenant-id', TESTING_TENANT_ID);
-
-      const realAtprotoUri = eventResponse.body?.atprotoUri;
+      // Poll for atprotoUri — ATProto publishing is async, so the URI
+      // may not be set immediately after event creation.
+      let realAtprotoUri: string | undefined;
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const eventResponse = await request(TESTING_APP_URL)
+          .get(`/api/events/${publicEvent.slug}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+        realAtprotoUri = eventResponse.body?.atprotoUri;
+        if (realAtprotoUri) break;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
 
       if (realAtprotoUri) {
         const publicDs = await getPublicDataSource();
 
-        // Check whether Contrail already ingested this event
-        const existing = await publicDs.query(
-          `SELECT uri FROM records_community_lexicon_calendar_event WHERE uri = $1`,
-          [realAtprotoUri],
-        );
+        // Poll for Contrail ingestion — wait for the record to appear, seed if timeout
+        let ingested = false;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const existing = await publicDs.query(
+            `SELECT uri FROM records_community_lexicon_calendar_event WHERE uri = $1`,
+            [realAtprotoUri],
+          );
+          if (existing.length > 0) {
+            ingested = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
 
-        if (existing.length === 0) {
-          // Contrail hasn't ingested yet — seed directly using the real URI
+        if (!ingested) {
+          // Contrail didn't ingest in time — seed directly using the real URI
           const did = realAtprotoUri.split('/')[2];
-          const rkey = realAtprotoUri.split('/').pop();
+          const rkey = realAtprotoUri.split('/').pop()!;
           await seedAtprotoData(publicDs, {
             events: [
               {
@@ -129,19 +138,25 @@ describe('Search Visibility Compliance (e2e)', () => {
           });
         }
 
-        // Ensure search_vector is populated (whether Contrail ingested or we seeded)
-        await publicDs.query(
-          `UPDATE records_community_lexicon_calendar_event
-           SET search_vector = to_tsvector('english',
-             COALESCE(record->>'name', '') || ' ' ||
-             COALESCE(record->>'description', ''))
-           WHERE uri = $1 AND search_vector IS NULL`,
-          [realAtprotoUri],
-        );
+        // Ensure search_vector is populated (whether Contrail ingested or we seeded).
+        // This may fail if search_vector is a generated column — that's fine,
+        // the live Contrail pipeline populates it automatically.
+        try {
+          await publicDs.query(
+            `UPDATE records_community_lexicon_calendar_event
+             SET search_vector = to_tsvector('english',
+               COALESCE(record->>'name', '') || ' ' ||
+               COALESCE(record->>'description', ''))
+             WHERE uri = $1 AND search_vector IS NULL`,
+            [realAtprotoUri],
+          );
+        } catch {
+          // Generated column — populated by Contrail automatically
+        }
       } else {
         console.warn(
-          'Public event has no atprotoUri — Contrail seeding skipped. ' +
-            'Search test may fail if Contrail pipeline did not run.',
+          'Public event has no atprotoUri after polling — Contrail seeding skipped. ' +
+            'Search test may fail if ATProto publishing is not configured.',
         );
       }
     } catch (err) {
