@@ -5,7 +5,6 @@ import {
   Logger,
   NotFoundException,
   Scope,
-  forwardRef,
 } from '@nestjs/common';
 import { Repository, UpdateResult } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
@@ -22,12 +21,8 @@ import {
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventRoleService } from '../event-role/event-role.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
-import { In } from 'typeorm';
 import { Trace } from '../utils/trace.decorator';
-import { EventSourceType } from '../core/constants/source-type.constant';
-import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
-import { RsvpStatusShort } from '../bluesky/BlueskyTypes';
-import { UserService } from '../user/user.service';
+
 import { EventAttendeeQueryService } from './event-attendee-query.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
@@ -44,10 +39,6 @@ export class EventAttendeeService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventRoleService: EventRoleService,
-    @Inject(forwardRef(() => BlueskyRsvpService))
-    private readonly blueskyRsvpService: BlueskyRsvpService,
-    @Inject(forwardRef(() => UserService))
-    private readonly userService: UserService,
     private readonly eventAttendeeQueryService: EventAttendeeQueryService,
     private readonly eventEmitter: EventEmitter2,
     private readonly atprotoPublisherService: AtprotoPublisherService,
@@ -65,138 +56,24 @@ export class EventAttendeeService {
   }
 
   /**
-   * Sync an RSVP status to Bluesky PDS
-   * @param event The event entity (must have sourceData.rkey for Bluesky events)
-   * @param userSlug The user's slug
-   * @param status The OpenMeet attendance status
-   * @param attendeeId The attendee record ID to update with source info
-   * @returns true if sync was successful or skipped, false if it failed
-   */
-  @Trace('event-attendee.syncRsvpToBluesky')
-  private async syncRsvpToBluesky(
-    event: { sourceType?: EventSourceType | string | null; sourceData?: any },
-    userSlug: string,
-    status: EventAttendeeStatus,
-    attendeeId: number,
-  ): Promise<boolean> {
-    // Only sync for Bluesky events with valid source data
-    if (
-      event.sourceType !== EventSourceType.BLUESKY ||
-      !event.sourceData?.rkey
-    ) {
-      this.logger.debug(
-        `[syncRsvpToBluesky] Skipping - not a Bluesky event or missing rkey`,
-        {
-          sourceType: event.sourceType,
-          hasRkey: Boolean(event.sourceData?.rkey),
-        },
-      );
-      return true;
-    }
-
-    try {
-      const user = await this.userService.findBySlug(
-        userSlug,
-        this.request.tenantId,
-      );
-
-      if (!user || user.provider !== 'bluesky' || !user.socialId) {
-        this.logger.debug(
-          `[syncRsvpToBluesky] Skipping - user is not a Bluesky user`,
-          { userSlug, provider: user?.provider },
-        );
-        return true;
-      }
-
-      const blueskyDid = user.socialId;
-
-      // Map OpenMeet status to Bluesky status
-      const statusMap: Partial<Record<EventAttendeeStatus, RsvpStatusShort>> = {
-        [EventAttendeeStatus.Confirmed]: 'going',
-        [EventAttendeeStatus.Attended]: 'going',
-        [EventAttendeeStatus.Maybe]: 'interested',
-        [EventAttendeeStatus.Pending]: 'interested',
-        [EventAttendeeStatus.Waitlist]: 'interested',
-        [EventAttendeeStatus.Invited]: 'interested',
-        [EventAttendeeStatus.Cancelled]: 'notgoing',
-        [EventAttendeeStatus.Rejected]: 'notgoing',
-      };
-
-      const blueskyStatus: RsvpStatusShort = statusMap[status] || 'interested';
-
-      this.logger.debug('[syncRsvpToBluesky] Syncing RSVP to Bluesky', {
-        userSlug,
-        did: blueskyDid,
-        status,
-        blueskyStatus,
-      });
-
-      const result = await this.blueskyRsvpService.createRsvp(
-        event as any,
-        blueskyStatus,
-        blueskyDid,
-        this.request.tenantId,
-      );
-
-      if (result.success) {
-        this.logger.debug(
-          `[syncRsvpToBluesky] Successfully synced RSVP: ${result.rsvpUri}`,
-        );
-
-        // Update the attendee record with source info
-        const attendee = await this.eventAttendeesRepository.findOne({
-          where: { id: attendeeId },
-        });
-
-        if (attendee) {
-          attendee.sourceId = result.rsvpUri;
-          attendee.sourceType = EventSourceType.BLUESKY;
-          attendee.lastSyncedAt = new Date();
-          await this.eventAttendeesRepository.save(attendee);
-        }
-      }
-
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `[syncRsvpToBluesky] Failed to sync RSVP: ${error.message}`,
-        error.stack,
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Sync an RSVP to the user's AT Protocol PDS
-   * This is for user-created events (NOT Bluesky-sourced events)
-   * @param attendee The attendee entity (must have event with atprotoUri for published events)
-   * @throws Error if AT Protocol publishing fails (errors propagate, not swallowed)
+   * Sync an RSVP to the user's AT Protocol PDS.
+   * Handles both Bluesky-sourced and native events via AtprotoPublisherService,
+   * which transparently resolves OAuth and custodial PDS sessions.
    */
   @Trace('event-attendee.syncRsvpToAtproto')
   private async syncRsvpToAtproto(
     attendee: EventAttendeesEntity,
   ): Promise<void> {
-    // Only sync for non-Bluesky events (Bluesky events are handled by syncRsvpToBluesky)
-    if (attendee.event?.sourceType === EventSourceType.BLUESKY) {
-      this.logger.debug(
-        `[syncRsvpToAtproto] Skipping - this is a Bluesky event`,
-        { eventSlug: attendee.event?.slug },
-      );
-      return;
-    }
-
     const publishResult = await this.atprotoPublisherService.publishRsvp(
       attendee,
       this.request.tenantId,
     );
 
     if (publishResult.action === 'published') {
-      // Update the attendee record with AT Protocol fields using DB clock
       await markAtprotoSynced(this.eventAttendeesRepository, attendee.id, {
         atprotoUri: publishResult.atprotoUri,
         atprotoRkey: publishResult.atprotoRkey,
       });
-
       this.logger.debug(
         `[syncRsvpToAtproto] Published RSVP to AT Protocol: ${publishResult.atprotoUri}`,
       );
@@ -243,15 +120,7 @@ export class EventAttendeeService {
           saved,
         });
 
-        await this.syncRsvpToBluesky(
-          createEventAttendeeDto.event,
-          createEventAttendeeDto.user.slug,
-          saved.status,
-          saved.id,
-        );
-
-        // Sync to AT Protocol (user's PDS) for non-Bluesky events
-        // Need to reload the attendee with event relation for the publisher
+        // Sync to AT Protocol — reload with relations for the publisher
         const attendeeWithEvent = await this.eventAttendeesRepository.findOne({
           where: { id: saved.id },
           relations: ['event', 'user'],
@@ -732,108 +601,7 @@ export class EventAttendeeService {
       `[cancelEventAttendanceBySlug] Updated attendee status: ${updatedAttendee.status}, id: ${updatedAttendee.id}`,
     );
 
-    // Sync cancellation to Bluesky
-    await this.syncRsvpToBluesky(
-      attendee.event,
-      userSlug,
-      updatedAttendee.status,
-      updatedAttendee.id,
-    );
-
-    // Sync cancellation to AT Protocol (user's PDS) for non-Bluesky events
     await this.syncRsvpToAtproto(updatedAttendee);
-
-    return updatedAttendee;
-  }
-
-  /**
-   * @deprecated Use cancelEventAttendanceBySlug with event and user slugs instead of IDs
-   */
-  @Trace('event-attendee.cancelEventAttendance')
-  async cancelEventAttendance(
-    eventId: number,
-    userId: number,
-  ): Promise<EventAttendeesEntity> {
-    await this.getTenantSpecificEventRepository();
-
-    this.logger.debug(
-      `[cancelEventAttendance] Finding active attendance for event ${eventId} and user ${userId}`,
-    );
-
-    // First try to find an active attendance record (Confirmed or Pending)
-    let attendee = await this.eventAttendeesRepository.findOne({
-      where: {
-        event: { id: eventId },
-        user: { id: userId },
-        status: In([
-          EventAttendeeStatus.Confirmed,
-          EventAttendeeStatus.Pending,
-          EventAttendeeStatus.Waitlist,
-        ]),
-      },
-      relations: ['user', 'role', 'role.permissions', 'event'],
-      order: { createdAt: 'DESC' },
-    });
-
-    // If no active record, look for any record including cancelled ones
-    if (!attendee) {
-      this.logger.debug(
-        `[cancelEventAttendance] No active attendance found, looking for any record including cancelled ones`,
-      );
-
-      attendee = await this.eventAttendeesRepository.findOne({
-        where: {
-          event: { id: eventId },
-          user: { id: userId },
-        },
-        relations: ['user', 'role', 'role.permissions', 'event'],
-        order: { createdAt: 'DESC' },
-      });
-    }
-
-    // If still no record, throw error
-    if (!attendee) {
-      throw new NotFoundException('No attendance record found for this user');
-    }
-
-    // If record is already cancelled, log but continue (idempotent cancel)
-    if (attendee.status === EventAttendeeStatus.Cancelled) {
-      this.logger.debug(
-        `[cancelEventAttendance] Attendance already cancelled, returning existing record with id: ${attendee.id}`,
-      );
-      return attendee;
-    }
-
-    // Log the current status before cancellation for debugging
-    this.logger.debug(
-      `[cancelEventAttendance] Found attendee with status: ${attendee.status}, id: ${attendee.id}`,
-    );
-
-    // Update the status to cancelled
-    attendee.status = EventAttendeeStatus.Cancelled;
-
-    // Log the change we're about to make
-    this.logger.debug(
-      `[cancelEventAttendance] Changing attendee status to ${attendee.status}`,
-    );
-
-    // Save the updated record
-    const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
-
-    // Log the updated status after saving
-    this.logger.debug(
-      `[cancelEventAttendance] Updated attendee status: ${updatedAttendee.status}, id: ${updatedAttendee.id}`,
-    );
-
-    // Sync cancellation to Bluesky (user slug is loaded via relation)
-    if (attendee.user?.slug) {
-      await this.syncRsvpToBluesky(
-        attendee.event,
-        attendee.user.slug,
-        updatedAttendee.status,
-        updatedAttendee.id,
-      );
-    }
 
     return updatedAttendee;
   }
@@ -1128,15 +896,6 @@ export class EventAttendeeService {
     // Save the updated record
     const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
 
-    // Sync reactivated status to Bluesky
-    await this.syncRsvpToBluesky(
-      attendee.event,
-      userSlug,
-      updatedAttendee.status,
-      updatedAttendee.id,
-    );
-
-    // Sync reactivated status to AT Protocol (user's PDS) for non-Bluesky events
     await this.syncRsvpToAtproto(updatedAttendee);
 
     return updatedAttendee;
@@ -1181,16 +940,6 @@ export class EventAttendeeService {
 
     // Save the updated record
     const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
-
-    // Sync reactivated status to Bluesky (user slug is loaded via relation)
-    if (attendee.user?.slug) {
-      await this.syncRsvpToBluesky(
-        attendee.event,
-        attendee.user.slug,
-        updatedAttendee.status,
-        updatedAttendee.id,
-      );
-    }
 
     return updatedAttendee;
   }

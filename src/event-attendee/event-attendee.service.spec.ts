@@ -243,25 +243,9 @@ describe('EventAttendeeService', () => {
       };
       mockRepository.save.mockResolvedValueOnce(cancelledAttendee);
 
-      // Create mock for checking Bluesky event source condition to be true
-      // This ensures the Bluesky integration code runs
-      mockEvent.sourceType = EventSourceType.BLUESKY;
-      mockEvent.sourceData = { rkey: 'test-rkey' };
-
-      // Mock UserService.findBySlug to return the user
-      mockUserService.findBySlug.mockResolvedValueOnce(mockUser as UserEntity);
-
-      // Mock BlueskyRsvpService.createRsvp to return success
-      mockBlueskyRsvpService.createRsvp.mockResolvedValueOnce({
-        success: true,
-        rsvpUri: 'at://did:plc:test123/app.bsky.feed.post/test-rsvp',
-      });
-
-      // Mock repository.findOne for getting the attendee after Bluesky sync
-      mockRepository.findOne.mockResolvedValueOnce(cancelledAttendee);
-
-      // Mock the second save after Bluesky update
-      mockRepository.save.mockResolvedValueOnce(cancelledAttendee);
+      const mockAtprotoPublisherService = module.get(
+        AtprotoPublisherService,
+      ) as jest.Mocked<AtprotoPublisherService>;
 
       // Call the function
       const result = await service.cancelEventAttendanceBySlug(
@@ -297,17 +281,9 @@ describe('EventAttendeeService', () => {
         }),
       );
 
-      // Verify Bluesky integration was called
-      expect(mockUserService.findBySlug).toHaveBeenCalledWith(
-        'test-user',
-        'test-tenant',
-      );
-      expect(mockBlueskyRsvpService.createRsvp).toHaveBeenCalledWith(
-        expect.anything(),
-        'notgoing',
-        'did:plc:test123',
-        'test-tenant',
-      );
+      // Verify BlueskyRsvpService is NOT called directly — routing goes through atprotoPublisherService
+      expect(mockBlueskyRsvpService.createRsvp).not.toHaveBeenCalled();
+      expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
 
       // Verify the result
       expect(result).toBeDefined();
@@ -376,6 +352,12 @@ describe('EventAttendeeService', () => {
       await expect(
         service.cancelEventAttendanceBySlug('test-event', 'nonexistent-user'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deprecated method removal', () => {
+    it('should not have deprecated cancelEventAttendance method', () => {
+      expect((service as any).cancelEventAttendance).toBeUndefined();
     });
   });
 
@@ -525,29 +507,23 @@ describe('EventAttendeeService', () => {
         role: roleEntity,
       };
 
-      // Mock repository.create and repository.save
-      mockRepository.create.mockReturnValueOnce({ ...createDto });
-      mockRepository.save.mockResolvedValueOnce({
+      const savedAttendee = {
         id: 1,
         ...createDto,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
 
-      // Mock UserService.findBySlug for Bluesky integration
-      mockUserService.findBySlug.mockResolvedValueOnce(mockUser as UserEntity);
+      // Mock repository.create and repository.save
+      mockRepository.create.mockReturnValueOnce({ ...createDto });
+      mockRepository.save.mockResolvedValueOnce(savedAttendee);
 
-      // Mock BlueskyRsvpService.createRsvp
-      mockBlueskyRsvpService.createRsvp.mockResolvedValueOnce({
-        success: true,
-        rsvpUri: 'at://did:plc:test123/app.bsky.feed.post/test-rsvp',
-      });
+      // Mock repository.findOne for reloading with relations
+      mockRepository.findOne.mockResolvedValueOnce(savedAttendee);
 
-      // Mock repository.findOne for Bluesky update
-      mockRepository.findOne.mockResolvedValueOnce({
-        id: 1,
-        ...createDto,
-      });
+      const mockAtprotoPublisherService = module.get(
+        AtprotoPublisherService,
+      ) as jest.Mocked<AtprotoPublisherService>;
 
       // Call the function
       const result = await service.create(createDto);
@@ -556,14 +532,11 @@ describe('EventAttendeeService', () => {
       expect(mockRepository.create).toHaveBeenCalledWith(createDto);
       expect(mockRepository.save).toHaveBeenCalled();
 
-      // Verify Bluesky integration
-      expect(mockUserService.findBySlug).toHaveBeenCalled();
-      expect(mockBlueskyRsvpService.createRsvp).toHaveBeenCalled();
-      expect(mockRepository.findOne).toHaveBeenCalled(); // ID might vary in tests
-      expect(mockRepository.save).toHaveBeenCalledTimes(2); // Initial save + Bluesky update
+      // Verify routing goes through atprotoPublisherService, NOT blueskyRsvpService directly
+      expect(mockBlueskyRsvpService.createRsvp).not.toHaveBeenCalled();
+      expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
 
       // Verify result
-      // console.log('result', result);
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
       expect(result.status).toBe(EventAttendeeStatus.Confirmed);
@@ -894,7 +867,7 @@ describe('EventAttendeeService', () => {
       expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
     });
 
-    it('should skip AT Protocol publishing for Bluesky-sourced events', async () => {
+    it('should call publishRsvp for Bluesky-sourced events (unified path)', async () => {
       const roleEntity = new EventRoleEntity();
       roleEntity.id = 1;
       roleEntity.name = EventAttendeeRole.Participant;
@@ -922,17 +895,12 @@ describe('EventAttendeeService', () => {
       mockRepository.save.mockResolvedValue(savedAttendee);
       mockRepository.findOne.mockResolvedValue(savedAttendee);
 
-      // Mock UserService for Bluesky integration
-      mockUserService.findBySlug.mockResolvedValue(mockUser as UserEntity);
-      mockBlueskyRsvpService.createRsvp.mockResolvedValue({
-        success: true,
-        rsvpUri: 'at://did:plc:test/app.bsky.feed.post/test',
-      });
-
       await service.create(createDto);
 
-      // AtprotoPublisherService.publishRsvp should NOT be called for Bluesky-sourced events
-      expect(mockAtprotoPublisherService.publishRsvp).not.toHaveBeenCalled();
+      // AtprotoPublisherService.publishRsvp SHOULD be called for all events including Bluesky-sourced
+      expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
+      // BlueskyRsvpService.createRsvp should NEVER be called directly from EventAttendeeService
+      expect(mockBlueskyRsvpService.createRsvp).not.toHaveBeenCalled();
     });
   });
 
