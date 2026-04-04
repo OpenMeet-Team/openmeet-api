@@ -53,7 +53,7 @@ services:
   # ── Contrail: ATProto record ingestion from Jetstream ──────────
   contrail:
     build:
-      context: ../contrail-postgres-adapter
+      context: contrail-postgres-adapter
     environment:
       CONTRAIL_ADAPTER: postgres
       DATABASE_URL: postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
