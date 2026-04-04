@@ -143,23 +143,18 @@ describe('ContrailGeoSyncService', () => {
     });
 
     it('should log debug when sync is skipped due to mutex', async () => {
-      // Make the datasource query never resolve to keep syncing=true
-      const neverResolve = new Promise(() => {});
-      mockDataSource.query.mockReturnValue(neverResolve);
+      // Simulate syncing flag already set
+      (service as any).syncing = true;
 
       const loggerSpy = jest.spyOn(service['logger'], 'debug');
 
-      // Start first sync (will hang) - intentionally not awaited
-      void service.sync();
-
-      // Second sync should be skipped
       await service.sync();
 
       expect(loggerSpy).toHaveBeenCalledWith(
         'Geo sync skipped: previous cycle still running',
       );
 
-      // Clean up: reset syncing flag manually so test doesn't hang
+      // Clean up
       (service as any).syncing = false;
     });
 

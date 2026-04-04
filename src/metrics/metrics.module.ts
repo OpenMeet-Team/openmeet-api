@@ -1,6 +1,5 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
-import { ScheduleModule } from '@nestjs/schedule';
 import {
   PrometheusModule,
   makeGaugeProvider,
@@ -149,7 +148,6 @@ const atprotoHandleMetrics = [
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
     PrometheusModule.register({
       defaultMetrics: {
         enabled: true,

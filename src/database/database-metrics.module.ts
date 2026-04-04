@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseMetricsService } from './database-metrics.service';
 import {
   makeGaugeProvider,
@@ -57,7 +56,7 @@ const databaseMetricsProviders = [
 ];
 
 @Module({
-  imports: [ScheduleModule],
+  imports: [],
   providers: [DatabaseMetricsService, ...databaseMetricsProviders],
   exports: [DatabaseMetricsService, ...databaseMetricsProviders],
 })
