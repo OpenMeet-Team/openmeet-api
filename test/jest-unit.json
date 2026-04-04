@@ -18,5 +18,8 @@
   "setupFiles": ["dotenv/config"],
   "transformIgnorePatterns": ["node_modules/(?!matrix-js-sdk)"],
   "forceExit": true,
-  "testTimeout": 30000
+  "testTimeout": 30000,
+  "moduleNameMapper": {
+    "^mjml$": "<rootDir>/../test/mocks/mjml.mock.js"
+  }
 }
