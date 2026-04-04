@@ -1,3 +1,4 @@
+import { DataSource } from 'typeorm';
 import {
   getPublicDataSource,
   destroyPublicDataSource,
@@ -13,8 +14,11 @@ let dbAvailable = false;
 // silently skip — unit tests that don't need a DB can still run.
 beforeAll(async () => {
   try {
-    const dataSource = await getPublicDataSource();
-    await setupAtprotoSchema(dataSource);
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('DB connect timeout')), 3000),
+    );
+    const dataSource = await Promise.race([getPublicDataSource(), timeout]);
+    await setupAtprotoSchema(dataSource as DataSource);
     dbAvailable = true;
   } catch {
     // Database not available — unit tests that don't need DB can still run
