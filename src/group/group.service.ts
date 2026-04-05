@@ -36,6 +36,7 @@ import { QueryGroupDto } from './dto/group-query.dto';
 import { DashboardGroupsSummaryDto } from './dto/dashboard-groups-summary.dto';
 import slugify from 'slugify';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { EventVisibility } from '../core/constants/constant';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
@@ -1104,12 +1105,32 @@ export class GroupService {
   async showGroupEvents(
     slug: string,
     query?: { startDate?: string; endDate?: string },
+    userId?: number,
   ): Promise<EventEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
     const group = await this.getGroupBySlug(slug);
 
-    return await this.eventQueryService.findEventsForGroup(group.id, 0, query);
+    const events = await this.eventQueryService.findEventsForGroup(
+      group.id,
+      0,
+      query,
+    );
+
+    // Filter unlisted events to group members only
+    if (!userId) {
+      return events.filter((e) => e.visibility !== EventVisibility.Unlisted);
+    }
+
+    const member = await this.groupMemberService
+      .findGroupMemberByUserId(group.id, userId)
+      .catch(() => null);
+
+    if (member) {
+      return events;
+    }
+
+    return events.filter((e) => e.visibility !== EventVisibility.Unlisted);
   }
 
   // DEPRECATED: Group discussions method removed
