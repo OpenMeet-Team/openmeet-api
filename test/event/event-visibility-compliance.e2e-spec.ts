@@ -236,92 +236,74 @@ describe('Event Visibility Compliance (e2e)', () => {
     });
   });
 
-  describe('Visibility Model Compliance Summary', () => {
-    it('should document expected behavior per visibility level', () => {
-      // This test serves as documentation for the expected behavior
-      const currentBehavior = {
-        public: {
-          unauthenticated: {
-            viewEvent: 200,
-            viewAttendees: 401, // Currently requires auth (design doc says should be 200)
-          },
-          authenticated: {
-            viewEvent: 200,
-            viewAttendees: 200,
-          },
-        },
-        authenticated: {
-          // Currently named 'authenticated', will be 'unlisted' in v2
-          unauthenticated: {
-            viewEvent: 200,
-            viewAttendees: 401, // Currently requires auth (design doc says should be 200)
-          },
-          authenticated: {
-            viewEvent: 200,
-            viewAttendees: 200,
-          },
-        },
-        private: {
-          unauthenticated: {
-            viewEvent: 200, // Currently open (design doc says should be 403)
-            viewAttendees: 401, // Currently requires auth
-          },
-          authenticated_not_invited: {
-            viewEvent: 200, // Currently shows full details (design doc says teaser only)
-            viewAttendees: 200, // Currently allowed (design doc says should be 403)
-          },
-          authenticated_invited: {
-            viewEvent: 200, // Full details
-            viewAttendees: 200,
-          },
-        },
-      };
+  describe('ATProto-Only Public Events', () => {
+    const atprotoDid = 'did:plc:visibilitytest1';
+    const atprotoRkey = 'vistest1';
+    const atprotoSlug = `${atprotoDid}~${atprotoRkey}`;
+    const atprotoUri = `at://${atprotoDid}/community.lexicon.calendar.event/${atprotoRkey}`;
 
-      const expectedBehavior = {
-        public: {
-          unauthenticated: {
-            viewEvent: 200,
-            viewAttendees: 200,
-          },
-          authenticated: {
-            viewEvent: 200,
-            viewAttendees: 200,
-          },
-        },
-        unlisted: {
-          unauthenticated: {
-            viewEvent: 200,
-            viewAttendees: 200,
-          },
-          authenticated: {
-            viewEvent: 200,
-            viewAttendees: 200,
-          },
-        },
-        private: {
-          unauthenticated: {
-            viewEvent: 403,
-            viewAttendees: 403,
-          },
-          authenticated_not_invited: {
-            viewEvent: 403,
-            viewAttendees: 403,
-          },
-          authenticated_invited: {
-            viewEvent: 200,
-            viewAttendees: 200,
-          },
-        },
-      };
+    beforeAll(async () => {
+      const { getPublicDataSource } = await import(
+        '../utils/atproto-test-helper'
+      );
+      const { seedAtprotoData } = await import('../utils/atproto-test-helper');
 
-      // This test always passes - it's just documentation
-      expect(currentBehavior).toBeDefined();
-      expect(expectedBehavior).toBeDefined();
+      const ds = await getPublicDataSource();
+      const futureDate = new Date(Date.now() + 7 * 86400000).toISOString();
+      const futureEndDate = new Date(
+        new Date(futureDate).getTime() + 3600000,
+      ).toISOString();
 
-      console.log('\n📋 Current Visibility Behavior:');
-      console.log(JSON.stringify(currentBehavior, null, 2));
-      console.log('\n📋 Expected Visibility Behavior:');
-      console.log(JSON.stringify(expectedBehavior, null, 2));
+      await seedAtprotoData(ds, {
+        events: [
+          {
+            uri: atprotoUri,
+            did: atprotoDid,
+            rkey: atprotoRkey,
+            cid: 'bafyvistest1',
+            record: {
+              $type: 'community.lexicon.calendar.event',
+              name: 'ATProto Visibility Test Event',
+              description: 'Pure ATProto event for visibility testing',
+              startsAt: futureDate,
+              endsAt: futureEndDate,
+              mode: 'community.lexicon.calendar.event#inperson',
+              locations: [],
+            },
+          },
+        ],
+        rsvps: [],
+        identities: [
+          {
+            did: atprotoDid,
+            handle: 'visibility-tester.test',
+            pds: 'https://pds.test',
+          },
+        ],
+        geoEntries: [],
+      });
+    });
+
+    afterAll(async () => {
+      const { getPublicDataSource } = await import(
+        '../utils/atproto-test-helper'
+      );
+      const ds = await getPublicDataSource();
+      await ds.query(
+        `DELETE FROM records_community_lexicon_calendar_event WHERE uri = $1`,
+        [atprotoUri],
+      );
+      await ds.query(`DELETE FROM identities WHERE did = $1`, [atprotoDid]);
+    });
+
+    it('should allow unauthenticated access to ATProto-only public event via did~rkey slug', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${atprotoSlug}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('ATProto Visibility Test Event');
+      expect(response.body.atprotoUri).toBe(atprotoUri);
     });
   });
 });

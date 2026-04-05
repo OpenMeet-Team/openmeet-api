@@ -292,6 +292,7 @@ export class BlueskyRsvpService {
     rsvpUri: string,
     did: string,
     tenantId: string,
+    providedAgent?: any,
   ): Promise<{ success: boolean }> {
     // Start measuring duration
     const timer = this.processingDuration.startTimer({
@@ -310,8 +311,10 @@ export class BlueskyRsvpService {
         );
       }
 
-      // Get Bluesky agent for the user
-      const agent = await this.blueskyService.resumeSession(tenantId, did);
+      // Get Bluesky agent for the user (use providedAgent if given, otherwise resume OAuth session)
+      const agent =
+        providedAgent ??
+        (await this.blueskyService.resumeSession(tenantId, did));
 
       // Use standard collection name for RSVPs
       const standardRsvpCollection = BLUESKY_COLLECTIONS.RSVP;

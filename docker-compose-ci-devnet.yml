@@ -42,9 +42,34 @@ services:
     networks:
       - default
 
-  # ── Suppress services not needed for CI e2e tests ────────────────
+  # ── Jetstream: needed for Contrail ingestion in CI ───────────────
   jetstream:
-    profiles: [devnet-full]
+    depends_on:
+      pds:
+        condition: service_healthy
+    networks:
+      - default
+
+  # ── Contrail: ATProto record ingestion from Jetstream ──────────
+  contrail:
+    build:
+      context: contrail-postgres-adapter
+    environment:
+      CONTRAIL_ADAPTER: postgres
+      DATABASE_URL: postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+      JETSTREAM_URL: ws://jetstream:6008/subscribe
+      FLUSH_INTERVAL_MS: 0
+    volumes:
+      - ./contrail/config.ts:/app/config/contrail.config.ts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jetstream:
+        condition: service_started
+    networks:
+      - default
+
+  # ── Suppress services not needed for CI e2e tests ────────────────
   tap:
     profiles: [devnet-full]
   init:

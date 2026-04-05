@@ -31,25 +31,30 @@ interface EncryptedCredential {
 @Injectable()
 export class PdsCredentialService {
   private readonly logger = new Logger(PdsCredentialService.name);
-  private readonly key1: Buffer | null;
-  private readonly key2: Buffer | null;
+  private _key1: Buffer | null | undefined = undefined;
+  private _key2: Buffer | null | undefined = undefined;
 
-  constructor(private readonly configService: ConfigService<AllConfigType>) {
-    const key1Base64 = this.configService.get('pds.credentialKey1', {
-      infer: true,
-    });
-    const key2Base64 = this.configService.get('pds.credentialKey2', {
-      infer: true,
-    });
+  constructor(private readonly configService: ConfigService<AllConfigType>) {}
 
-    this.key1 = key1Base64 ? Buffer.from(key1Base64, 'base64') : null;
-    this.key2 = key2Base64 ? Buffer.from(key2Base64, 'base64') : null;
-
-    if (!this.key1) {
-      this.logger.warn(
-        'PDS_CREDENTIAL_KEY_1 is not configured - credential encryption/decryption will fail',
-      );
+  /** Lazy-load encryption keys (avoids constructor race with ConfigModule loading order) */
+  private get key1(): Buffer | null {
+    if (this._key1 === undefined) {
+      const key1Base64 = this.configService.get('pds.credentialKey1', {
+        infer: true,
+      });
+      this._key1 = key1Base64 ? Buffer.from(key1Base64, 'base64') : null;
     }
+    return this._key1;
+  }
+
+  private get key2(): Buffer | null {
+    if (this._key2 === undefined) {
+      const key2Base64 = this.configService.get('pds.credentialKey2', {
+        infer: true,
+      });
+      this._key2 = key2Base64 ? Buffer.from(key2Base64, 'base64') : null;
+    }
+    return this._key2;
   }
 
   /**

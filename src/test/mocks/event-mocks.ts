@@ -106,7 +106,6 @@ export const mockEventService = {
     .mockResolvedValue({ id: 'msg_123456' }),
   showRandomEvents: jest.fn().mockResolvedValue(mockEvents),
   searchAllEvents: jest.fn().mockResolvedValue(mockEvents),
-  showDashboardEvents: jest.fn().mockResolvedValue(mockEvents),
   getEventAttendeesCount: jest.fn().mockResolvedValue(1),
 };
 

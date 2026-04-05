@@ -2933,49 +2933,37 @@ describe('EventManagementService', () => {
   });
 
   describe('Bluesky event deletion guard', () => {
-    it('should attempt Bluesky deletion without checking preferences.bluesky.connected', async () => {
-      // This test verifies that the deletion guard no longer requires
-      // preferences.bluesky.connected to be true. The remaining structural
-      // guards (sourceType, socialId, sourceId, rkey) are sufficient.
-      const blueskyEvent = {
+    it('should route Bluesky-sourced event deletion through AtprotoPublisherService when atprotoUri is set', async () => {
+      // After unification, all AT Protocol deletions go through AtprotoPublisherService.
+      // BlueskyService.deleteEventRecord should NOT be called directly from remove().
+      const blueskyEventWithUri = {
         ...findOneMockEventEntity,
         id: 950,
-        slug: 'bluesky-delete-no-connected-check',
+        slug: 'bluesky-delete-unified-path',
         sourceType: 'bluesky' as any,
         sourceId: 'did:plc:event-creator',
         sourceData: { rkey: 'test-rkey-123' },
         matrixRoomId: null,
         seriesSlug: null,
         series: null,
-        atprotoUri: null,
-        atprotoRkey: null,
+        atprotoUri:
+          'at://did:plc:event-creator/community.openmeet.event/test-rkey-123',
+        atprotoRkey: 'test-rkey-123',
       } as EventEntity;
-
-      // User has socialId but NO preferences.bluesky.connected
-      const userWithoutConnected = {
-        id: TESTING_USER_ID,
-        name: 'Test User',
-        role: { id: 1, name: RoleEnum.User } as any,
-        socialId: 'did:plc:event-creator',
-        preferences: {
-          // bluesky.connected is NOT set (or is false)
-          bluesky: { connected: false },
-        },
-      };
 
       await service['initializeRepository']();
       mockRepository.findOne.mockReset();
-      mockRepository.findOne.mockResolvedValue(blueskyEvent);
+      mockRepository.findOne.mockResolvedValue(blueskyEventWithUri);
 
-      // Mock UserService.findByIdWithPreferences to return user without connected flag
-      const mockUserServiceRef = service[
-        'userService'
-      ] as jest.Mocked<UserService>;
-      mockUserServiceRef.findByIdWithPreferences = jest
+      // Mock AtprotoPublisherService.deleteEvent to succeed
+      const mockAtprotoPublisherServiceRef = service[
+        'atprotoPublisherService'
+      ] as jest.Mocked<AtprotoPublisherService>;
+      mockAtprotoPublisherServiceRef.deleteEvent = jest
         .fn()
-        .mockResolvedValue(userWithoutConnected);
+        .mockResolvedValue({ action: 'deleted' });
 
-      // Mock BlueskyService.deleteEventRecord to succeed
+      // Mock BlueskyService.deleteEventRecord to track whether it's called directly
       const mockBlueskyServiceRef = service[
         'blueskyService'
       ] as jest.Mocked<BlueskyService>;
@@ -2986,10 +2974,10 @@ describe('EventManagementService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 0 }),
       };
       const mockEventRepo = {
-        softRemove: jest.fn().mockResolvedValue(blueskyEvent),
+        softRemove: jest.fn().mockResolvedValue(blueskyEventWithUri),
       };
       const mockTransactionalManager = {
-        save: jest.fn().mockResolvedValue(blueskyEvent),
+        save: jest.fn().mockResolvedValue(blueskyEventWithUri),
         getRepository: jest.fn().mockImplementation((entity) => {
           if (entity.name === 'EventAttendeesEntity') {
             return mockEventAttendeeRepo;
@@ -2997,8 +2985,8 @@ describe('EventManagementService', () => {
           return mockEventRepo;
         }),
         findOne: jest.fn().mockResolvedValue(null),
-        softRemove: jest.fn().mockResolvedValue(blueskyEvent),
-        remove: jest.fn().mockResolvedValue(blueskyEvent),
+        softRemove: jest.fn().mockResolvedValue(blueskyEventWithUri),
+        remove: jest.fn().mockResolvedValue(blueskyEventWithUri),
       };
       mockTenantConnectionService.getTenantConnection.mockResolvedValue({
         getRepository: jest.fn().mockReturnValue(mockRepository),
@@ -3007,18 +2995,85 @@ describe('EventManagementService', () => {
         }),
       } as any);
 
-      // Act: deletion should proceed and attempt Bluesky deletion
       await expect(
-        service.remove('bluesky-delete-no-connected-check'),
+        service.remove('bluesky-delete-unified-path'),
       ).resolves.not.toThrow();
 
-      // Assert: Bluesky deleteEventRecord should have been called
-      // (this proves the connected check was removed)
-      expect(mockBlueskyServiceRef.deleteEventRecord).toHaveBeenCalledWith(
-        blueskyEvent,
-        'did:plc:event-creator',
+      // The unified path: AtprotoPublisherService.deleteEvent should be called
+      expect(mockAtprotoPublisherServiceRef.deleteEvent).toHaveBeenCalledWith(
+        blueskyEventWithUri,
         'test-tenant',
       );
+
+      // BlueskyService.deleteEventRecord should NOT be called directly from remove()
+      expect(mockBlueskyServiceRef.deleteEventRecord).not.toHaveBeenCalled();
+    });
+
+    it('should skip AT Protocol deletion for Bluesky-sourced events without atprotoUri', async () => {
+      // Bluesky-sourced events imported before atprotoUri was populated
+      // should not attempt any AT Protocol deletion
+      const blueskyEventWithoutUri = {
+        ...findOneMockEventEntity,
+        id: 951,
+        slug: 'bluesky-delete-no-atproto-uri',
+        sourceType: 'bluesky' as any,
+        sourceId: 'did:plc:event-creator',
+        sourceData: { rkey: 'test-rkey-123' },
+        matrixRoomId: null,
+        seriesSlug: null,
+        series: null,
+        atprotoUri: null,
+        atprotoRkey: null,
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+      mockRepository.findOne.mockResolvedValue(blueskyEventWithoutUri);
+
+      const mockAtprotoPublisherServiceRef = service[
+        'atprotoPublisherService'
+      ] as jest.Mocked<AtprotoPublisherService>;
+      mockAtprotoPublisherServiceRef.deleteEvent = jest
+        .fn()
+        .mockResolvedValue({ action: 'deleted' });
+
+      const mockBlueskyServiceRef = service[
+        'blueskyService'
+      ] as jest.Mocked<BlueskyService>;
+      mockBlueskyServiceRef.deleteEventRecord = jest.fn().mockResolvedValue({});
+
+      const mockEventAttendeeRepo = {
+        delete: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      const mockEventRepo = {
+        softRemove: jest.fn().mockResolvedValue(blueskyEventWithoutUri),
+      };
+      const mockTransactionalManager = {
+        save: jest.fn().mockResolvedValue(blueskyEventWithoutUri),
+        getRepository: jest.fn().mockImplementation((entity) => {
+          if (entity.name === 'EventAttendeesEntity') {
+            return mockEventAttendeeRepo;
+          }
+          return mockEventRepo;
+        }),
+        findOne: jest.fn().mockResolvedValue(null),
+        softRemove: jest.fn().mockResolvedValue(blueskyEventWithoutUri),
+        remove: jest.fn().mockResolvedValue(blueskyEventWithoutUri),
+      };
+      mockTenantConnectionService.getTenantConnection.mockResolvedValue({
+        getRepository: jest.fn().mockReturnValue(mockRepository),
+        transaction: jest.fn().mockImplementation((cb) => {
+          return cb(mockTransactionalManager);
+        }),
+      } as any);
+
+      await expect(
+        service.remove('bluesky-delete-no-atproto-uri'),
+      ).resolves.not.toThrow();
+
+      // Neither service should be called since there's no atprotoUri
+      expect(mockAtprotoPublisherServiceRef.deleteEvent).not.toHaveBeenCalled();
+      expect(mockBlueskyServiceRef.deleteEventRecord).not.toHaveBeenCalled();
     });
   });
 

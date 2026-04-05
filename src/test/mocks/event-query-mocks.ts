@@ -10,7 +10,6 @@ export const mockEventQueryService = {
   getEventsByAttendee: jest.fn().mockResolvedValue(mockEvents),
   findEventsForGroup: jest.fn().mockResolvedValue(mockEvents),
   findUpcomingEventsForGroup: jest.fn().mockResolvedValue(mockEvents),
-  showDashboardEvents: jest.fn().mockResolvedValue(mockEvents),
   getHomePageFeaturedEvents: jest.fn().mockResolvedValue(mockEvents),
   getHomePageUserNextHostedEvent: jest.fn().mockResolvedValue(mockEvent),
   getHomePageUserRecentEventDrafts: jest.fn().mockResolvedValue(mockEvents),

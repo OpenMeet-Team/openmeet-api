@@ -12,6 +12,12 @@ import {
   joinGroup,
 } from '../utils/functions';
 import {
+  getPublicDataSource,
+  seedAtprotoData,
+  clearAtprotoData,
+  buildEventRecord,
+} from '../utils/atproto-test-helper';
+import {
   EventVisibility,
   EventStatus,
   EventType,
@@ -101,8 +107,51 @@ describe('Guards (e2e)', () => {
       .set('x-tenant-id', TESTING_TENANT_ID)
       .send({ userId: TESTING_USER_ID });
 
-    jest.setTimeout(5000);
-  });
+    // Seed the public event into Contrail tables directly.
+    // PDS publishing may not work for seeded admin users (no custodial PDS account),
+    // so we ensure the event is visible in the Contrail-powered listing.
+    const ds = await getPublicDataSource();
+    const futureDate = new Date(
+      new Date().getTime() + 1000 * 60 * 60 * 24,
+    ).toISOString();
+    const futureEndDate = new Date(
+      new Date(futureDate).getTime() + 3600000,
+    ).toISOString();
+    const atprotoUri = `at://did:plc:guardstest/community.lexicon.calendar.event/${publicEvent.slug}`;
+
+    await seedAtprotoData(ds, {
+      events: [
+        {
+          uri: atprotoUri,
+          did: 'did:plc:guardstest',
+          rkey: publicEvent.slug,
+          cid: 'bafyguardstest',
+          record: buildEventRecord({
+            name: publicEvent.name,
+            description: publicEvent.description,
+            startsAt: futureDate,
+            endsAt: futureEndDate,
+          }),
+        },
+      ],
+      rsvps: [],
+      identities: [
+        {
+          did: 'did:plc:guardstest',
+          handle: 'guards-test.test',
+          pds: 'https://pds.test',
+        },
+      ],
+      geoEntries: [],
+    });
+
+    // Set atprotoUri on tenant event so enrichment can match it
+    const tenantSchema = `tenant_${TESTING_TENANT_ID}`;
+    await ds.query(
+      `UPDATE "${tenantSchema}".events SET "atprotoUri" = $1 WHERE slug = $2`,
+      [atprotoUri, publicEvent.slug],
+    );
+  }, 60000);
 
   describe('AuthGuard', () => {
     it('should allow access without token when x-tenant-id is provided', async () => {
@@ -123,40 +172,26 @@ describe('Guards (e2e)', () => {
   describe('VisibilityGuard', () => {
     describe('GET /events', () => {
       it('should only show public events to unauthenticated users', async () => {
-        let allEvents: any[] = [];
-        let currentPage = 1;
-        let hasMorePages = true;
-        const maxPages = 50; // Prevent infinite loops - increased to handle more test data
+        // Fetch events without auth — Contrail returns public, tenant returns private/unlisted for owner only
+        const response = await request(app)
+          .get(`/api/events`)
+          .query({ limit: 200 })
+          .set('x-tenant-id', TESTING_TENANT_ID);
 
-        // Fetch all pages
-        while (hasMorePages && currentPage <= maxPages) {
-          const response = await request(app)
-            .get(`/api/events`)
-            .query({
-              page: currentPage,
-              limit: 50,
-              visibility: EventVisibility.Public,
-            })
-            .set('x-tenant-id', TESTING_TENANT_ID);
+        expect(response.status).toBe(200);
+        const allEvents = response.body.data;
 
-          expect(response.status).toBe(200);
-          expect(response.body.data).toBeDefined();
-
-          allEvents = [...allEvents, ...response.body.data];
-
-          // Check if there are more pages
-          hasMorePages = response.body.page < response.body.totalPages;
-          currentPage++;
-        }
-
-        expect(allEvents.some((event) => event.slug === publicEvent.slug)).toBe(
-          true,
-        );
         expect(
-          allEvents.some((event) => event.slug === authenticatedEvent.slug),
+          allEvents.some((event: any) => event.slug === publicEvent.slug),
+        ).toBe(true);
+        // Unlisted and private events should not appear for unauthenticated users
+        expect(
+          allEvents.some(
+            (event: any) => event.slug === authenticatedEvent.slug,
+          ),
         ).toBe(false);
         expect(
-          allEvents.some((event) => event.slug === privateEvent.slug),
+          allEvents.some((event: any) => event.slug === privateEvent.slug),
         ).toBe(false);
       }, 60000);
 
@@ -474,6 +509,14 @@ describe('Guards (e2e)', () => {
   });
 
   afterAll(async () => {
+    // Clean up ATProto seeded data
+    try {
+      const ds = await getPublicDataSource();
+      await clearAtprotoData(ds);
+    } catch {
+      // DataSource may already be destroyed by global teardown
+    }
+
     // Clean up created events
     const events = [publicEvent, authenticatedEvent, privateEvent];
     for (const event of events) {

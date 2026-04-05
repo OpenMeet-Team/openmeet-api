@@ -366,16 +366,19 @@ export class BlueskyService {
 
       const locations: BlueskyLocation[] = [];
 
-      // Add physical location if exists
-      // ATProto schema: $type discriminator, latitude/longitude as strings, name field
-      if (event.location && event.lat != null && event.lon != null) {
-        locations.push({
+      // Add physical location if coordinates exist
+      // ATProto schema: $type discriminator, latitude/longitude as strings, name is optional
+      if (event.lat != null && event.lon != null) {
+        const geoLocation: BlueskyLocation = {
           $type: 'community.lexicon.location.geo',
           latitude: String(event.lat),
           longitude: String(event.lon),
-          name: event.location,
           source: sourceId,
-        });
+        };
+        if (event.location) {
+          geoLocation.name = event.location;
+        }
+        locations.push(geoLocation);
       }
 
       // Add online location if exists

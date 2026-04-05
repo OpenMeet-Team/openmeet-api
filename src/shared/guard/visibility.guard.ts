@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  Optional,
   ForbiddenException,
   NotFoundException,
   Logger,
@@ -15,6 +16,7 @@ import { EventAttendeeService } from '../../event-attendee/event-attendee.servic
 import { GroupService } from '../../group/group.service';
 import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { EventQueryService } from '../../event/services/event-query.service';
+import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 
 @Injectable()
 export class VisibilityGuard implements CanActivate {
@@ -24,6 +26,8 @@ export class VisibilityGuard implements CanActivate {
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupService: GroupService,
     private readonly groupMemberQueryService: GroupMemberQueryService,
+    @Optional()
+    private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -48,6 +52,10 @@ export class VisibilityGuard implements CanActivate {
     if (eventSlug) {
       const event = await this.eventQueryService.findEventBySlug(eventSlug);
       if (!event) {
+        // ATProto-only events aren't in tenant DB but are inherently public
+        if (this.atprotoEnrichmentService?.parseAtprotoSlug(eventSlug)) {
+          return true;
+        }
         throw new NotFoundException('VisibilityGuard: Event not found');
       }
 

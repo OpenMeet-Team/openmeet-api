@@ -83,6 +83,7 @@ export class EventManagementService {
     private readonly eventQueryService: EventQueryService,
     @Inject(forwardRef(() => GroupMemberQueryService))
     private readonly groupMemberQueryService: GroupMemberQueryService,
+    @Inject(forwardRef(() => AtprotoPublisherService))
     private readonly atprotoPublisherService: AtprotoPublisherService,
   ) {
     void this.initializeRepository();
@@ -494,6 +495,10 @@ export class EventManagementService {
         this.request.tenantId,
       );
 
+      this.logger.log(
+        `ATProto publish result for ${eventToPublish.slug}: ${publishResult.action}`,
+      );
+
       if (
         publishResult.action === 'published' ||
         publishResult.action === 'updated'
@@ -506,7 +511,7 @@ export class EventManagementService {
           atprotoRecord: publishResult.atprotoRecord,
         });
 
-        this.logger.debug(
+        this.logger.log(
           `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
         );
       }
@@ -1098,77 +1103,8 @@ export class EventManagementService {
       sourceId: event.sourceId,
     });
 
-    // Get latest user data with preferences to check Bluesky connection state
-    const currentUser = await this.userService.findByIdWithPreferences(
-      this.request.user.id,
-      this.request.tenantId,
-    );
-
-    if (!currentUser) {
-      throw new UnprocessableEntityException(
-        'Failed to retrieve current user data',
-      );
-    }
-
-    this.logger.debug('Current user data:', {
-      id: currentUser?.id,
-      socialId: currentUser?.socialId,
-      blueskyPreferences: currentUser?.preferences?.bluesky,
-    });
-
-    // If the event is a Bluesky event, attempt to delete it there
-    // The remaining structural guards (sourceType, socialId, sourceId, rkey) are sufficient
-    if (
-      event.sourceType === EventSourceType.BLUESKY && // check if event came from Bluesky
-      currentUser?.socialId && // ensure we have user's DID
-      event.sourceId && // ensure we have event creator's DID
-      event.sourceData?.rkey // ensure we have the Bluesky record key
-    ) {
-      this.logger.debug('Attempting Bluesky deletion with:', {
-        eventName: event.name,
-        eventSlug: event.slug,
-        eventSourceId: event.sourceId, // creator's DID
-        eventRkey: event.sourceData.rkey,
-        userDid: currentUser.socialId,
-        tenantId: this.request.tenantId,
-      });
-
-      try {
-        // Verify we have all required data for Bluesky deletion
-        if (!event.sourceData?.rkey) {
-          throw new Error('Missing Bluesky record key (rkey)');
-        }
-
-        // Use the current user's DID for deletion
-        await this.blueskyService.deleteEventRecord(
-          event,
-          currentUser.socialId, // Use current user's DID
-          this.request.tenantId,
-        );
-
-        this.logger.debug('Successfully deleted Bluesky event record:', {
-          eventName: event.name,
-          eventRkey: event.sourceData.rkey,
-          userDid: currentUser.socialId,
-        });
-      } catch (error) {
-        // Handle any other errors in the outer try block
-        this.logger.error('Unexpected error during Bluesky event deletion:', {
-          error: error.message,
-          stack: error.stack,
-          eventId: event.id,
-          eventSlug: event.slug,
-        });
-        // Continue with local deletion
-        this.logger.warn(
-          'Proceeding with local event deletion despite unexpected error',
-        );
-      }
-    }
-
-    // Delete from AT Protocol (user's PDS) if the event was published there
-    // This is for user-created events (not Bluesky-sourced events which are handled above)
-    if (!event.sourceType && event.atprotoUri) {
+    // Delete from AT Protocol if the event was published there
+    if (event.atprotoUri) {
       try {
         const deleteResult = await this.atprotoPublisherService.deleteEvent(
           event,

@@ -201,8 +201,9 @@ export class GroupController {
   async showGroupEvents(
     @Param('slug') slug: string,
     @Query() query: GroupEventsQueryDto,
+    @Optional() @AuthUser() user?: User,
   ): Promise<EventEntity[]> {
-    return await this.groupService.showGroupEvents(slug, query);
+    return await this.groupService.showGroupEvents(slug, query, user?.id);
   }
 
   @Public()

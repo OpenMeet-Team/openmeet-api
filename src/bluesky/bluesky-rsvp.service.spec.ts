@@ -553,6 +553,44 @@ describe('BlueskyRsvpService', () => {
         service.deleteRsvp(rsvpUri, userDid, tenantId),
       ).rejects.toThrow(/RSVP URI DID .* does not match provided DID/);
     });
+
+    it('should use providedAgent and NOT call resumeSession when providedAgent is given', async () => {
+      const rsvpUri =
+        'at://did:plc:xyz789/community.lexicon.calendar.rsvp/event123-rsvp-123456789';
+      const userDid = 'did:plc:xyz789';
+      const tenantId = 'tenant123';
+
+      blueskyIdService.parseUri.mockReturnValue({
+        did: userDid,
+        collection: 'community.lexicon.calendar.rsvp',
+        rkey: 'event123-rsvp-123456789',
+      });
+
+      const providedAgent = {
+        com: {
+          atproto: {
+            repo: {
+              deleteRecord: jest.fn().mockResolvedValue({}),
+            },
+          },
+        },
+      };
+
+      const result = await service.deleteRsvp(
+        rsvpUri,
+        userDid,
+        tenantId,
+        providedAgent as unknown as Agent,
+      );
+
+      expect(blueskyService.resumeSession).not.toHaveBeenCalled();
+      expect(providedAgent.com.atproto.repo.deleteRecord).toHaveBeenCalledWith({
+        repo: userDid,
+        collection: 'community.lexicon.calendar.rsvp',
+        rkey: 'event123-rsvp-123456789',
+      });
+      expect(result).toEqual({ success: true });
+    });
   });
 
   describe('listRsvps', () => {
