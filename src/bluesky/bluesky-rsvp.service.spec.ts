@@ -799,4 +799,334 @@ describe('BlueskyRsvpService', () => {
       });
     });
   });
+
+  describe('createRsvpByUri', () => {
+    const eventUri =
+      'at://did:plc:organizer/community.lexicon.calendar.event/tid999';
+    const userDid = 'did:plc:attendee';
+    const tenantId = 'tenant123';
+
+    it('should create an RSVP using a raw event URI (no EventEntity)', async () => {
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: mockRsvpUri, cid: 'rsvpcid001' },
+              }),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      const result = await service.createRsvpByUri(
+        eventUri,
+        'going',
+        userDid,
+        tenantId,
+      );
+
+      // Should build record with uri-only subject (no CID)
+      expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith({
+        repo: userDid,
+        collection: 'community.lexicon.calendar.rsvp',
+        rkey: expect.any(String),
+        record: {
+          $type: 'community.lexicon.calendar.rsvp',
+          subject: { uri: eventUri },
+          status: 'community.lexicon.calendar.rsvp#going',
+          createdAt: expect.any(String),
+        },
+      });
+
+      expect(result).toEqual({
+        success: true,
+        rsvpUri: mockRsvpUri,
+        rsvpCid: 'rsvpcid001',
+      });
+    });
+
+    it('should use providedAgent instead of resumeSession when given', async () => {
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+
+      const providedAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: mockRsvpUri, cid: 'rsvpcid002' },
+              }),
+            },
+          },
+        },
+      };
+
+      await service.createRsvpByUri(
+        eventUri,
+        'interested',
+        userDid,
+        tenantId,
+        providedAgent as unknown as Agent,
+      );
+
+      expect(blueskyService.resumeSession).not.toHaveBeenCalled();
+      expect(providedAgent.com.atproto.repo.putRecord).toHaveBeenCalled();
+    });
+
+    it('should throw when session cannot be created', async () => {
+      blueskyService.resumeSession.mockResolvedValue(null as unknown as Agent);
+
+      await expect(
+        service.createRsvpByUri(eventUri, 'going', userDid, tenantId),
+      ).rejects.toThrow(/Failed to create Bluesky session/);
+    });
+
+    it('should throw when lexicon validation fails', async () => {
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn(),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      atprotoLexiconService.validate.mockReturnValueOnce({
+        success: false,
+        error: { message: 'Invalid record' },
+      } as any);
+
+      await expect(
+        service.createRsvpByUri(eventUri, 'going', userDid, tenantId),
+      ).rejects.toThrow('AT Protocol record validation failed');
+
+      expect(mockAgent.com.atproto.repo.putRecord).not.toHaveBeenCalled();
+    });
+
+    it('should increment metrics on success', async () => {
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: mockRsvpUri, cid: 'cid' },
+              }),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      await service.createRsvpByUri(eventUri, 'going', userDid, tenantId);
+
+      expect(rsvpOperationsCounter.inc).toHaveBeenCalledWith({
+        tenant: tenantId,
+        operation: 'create',
+        status: 'going',
+      });
+    });
+
+    it('should use deterministic rkey from eventUri', async () => {
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: mockRsvpUri, cid: 'cid' },
+              }),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      // Call twice with same eventUri - rkey should be identical
+      await service.createRsvpByUri(eventUri, 'going', userDid, tenantId);
+
+      const firstCallRkey =
+        mockAgent.com.atproto.repo.putRecord.mock.calls[0][0].rkey;
+
+      // Reset mocks for second call
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+      mockAgent.com.atproto.repo.putRecord.mockResolvedValue({
+        data: { uri: mockRsvpUri, cid: 'cid' },
+      });
+
+      await service.createRsvpByUri(eventUri, 'interested', userDid, tenantId);
+
+      const secondCallRkey =
+        mockAgent.com.atproto.repo.putRecord.mock.calls[1][0].rkey;
+
+      expect(firstCallRkey).toBe(secondCallRkey);
+      expect(firstCallRkey).toHaveLength(13); // SHA-256 hash substring
+    });
+  });
+
+  describe('deleteRsvpByUri', () => {
+    const eventUri =
+      'at://did:plc:organizer/community.lexicon.calendar.event/tid999';
+    const userDid = 'did:plc:attendee';
+    const tenantId = 'tenant123';
+
+    it('should delete an RSVP by deriving rkey from eventUri', async () => {
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              deleteRecord: jest.fn().mockResolvedValue({}),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      const result = await service.deleteRsvpByUri(eventUri, userDid, tenantId);
+
+      expect(mockAgent.com.atproto.repo.deleteRecord).toHaveBeenCalledWith({
+        repo: userDid,
+        collection: 'community.lexicon.calendar.rsvp',
+        rkey: expect.any(String),
+      });
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should use providedAgent instead of resumeSession when given', async () => {
+      const providedAgent = {
+        com: {
+          atproto: {
+            repo: {
+              deleteRecord: jest.fn().mockResolvedValue({}),
+            },
+          },
+        },
+      };
+
+      await service.deleteRsvpByUri(
+        eventUri,
+        userDid,
+        tenantId,
+        providedAgent as unknown as Agent,
+      );
+
+      expect(blueskyService.resumeSession).not.toHaveBeenCalled();
+      expect(providedAgent.com.atproto.repo.deleteRecord).toHaveBeenCalled();
+    });
+
+    it('should increment metrics on success', async () => {
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              deleteRecord: jest.fn().mockResolvedValue({}),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      await service.deleteRsvpByUri(eventUri, userDid, tenantId);
+
+      expect(rsvpOperationsCounter.inc).toHaveBeenCalledWith({
+        tenant: tenantId,
+        operation: 'delete',
+      });
+    });
+
+    it('should use the same deterministic rkey as createRsvpByUri', async () => {
+      // Create RSVP first
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+
+      const mockCreateAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: mockRsvpUri, cid: 'cid' },
+              }),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValueOnce(
+        mockCreateAgent as unknown as Agent,
+      );
+
+      await service.createRsvpByUri(eventUri, 'going', userDid, tenantId);
+      const createRkey =
+        mockCreateAgent.com.atproto.repo.putRecord.mock.calls[0][0].rkey;
+
+      // Delete RSVP
+      const mockDeleteAgent = {
+        com: {
+          atproto: {
+            repo: {
+              deleteRecord: jest.fn().mockResolvedValue({}),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValueOnce(
+        mockDeleteAgent as unknown as Agent,
+      );
+
+      await service.deleteRsvpByUri(eventUri, userDid, tenantId);
+      const deleteRkey =
+        mockDeleteAgent.com.atproto.repo.deleteRecord.mock.calls[0][0].rkey;
+
+      // The rkeys should match - both derived from the same eventUri
+      expect(createRkey).toBe(deleteRkey);
+    });
+
+    it('should throw when PDS delete fails', async () => {
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              deleteRecord: jest
+                .fn()
+                .mockRejectedValue(new Error('Record not found')),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      await expect(
+        service.deleteRsvpByUri(eventUri, userDid, tenantId),
+      ).rejects.toThrow(/Failed to delete Bluesky RSVP/);
+    });
+  });
 });
