@@ -2103,6 +2103,53 @@ export class EventManagementService {
     };
   }
 
+  /**
+   * Cancel RSVP for a Contrail-only ATProto event.
+   * Deletes the RSVP record from the user's PDS.
+   */
+  private async cancelContrailEvent(
+    parsed: { did: string; rkey: string },
+    userId: number,
+  ) {
+    const eventUri = `at://${parsed.did}/community.lexicon.calendar.event/${parsed.rkey}`;
+
+    this.logger.debug(
+      `[cancelAttendingEvent] Contrail-only event detected: ${eventUri}`,
+    );
+
+    const user = await this.userService.getUserById(
+      userId,
+      this.request.tenantId,
+    );
+    const userDid = user.socialId;
+    if (!userDid || !userDid.startsWith('did:')) {
+      throw new BadRequestException(
+        'A linked AT Protocol account is required to cancel RSVP on this event',
+      );
+    }
+
+    await this.blueskyRsvpService.deleteRsvpByUri(
+      eventUri,
+      userDid,
+      this.request.tenantId,
+    );
+
+    this.logger.debug(
+      `[cancelAttendingEvent] Contrail RSVP deleted for event ${eventUri}`,
+    );
+
+    return {
+      id: null,
+      status: EventAttendeeStatus.Cancelled,
+      user: { id: userId, slug: user.slug },
+      event: {
+        slug: `${parsed.did}~${parsed.rkey}`,
+        atprotoUri: eventUri,
+      },
+      source: 'atproto',
+    };
+  }
+
   @Trace('event-management.cancelAttendingEvent')
   async cancelAttendingEvent(slug: string, userId: number) {
     await this.initializeRepository();
@@ -2113,6 +2160,11 @@ export class EventManagementService {
 
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
+      // Check if this is a Contrail-only ATProto event
+      const parsed = this.atprotoEnrichmentService.parseAtprotoSlug(slug);
+      if (parsed) {
+        return this.cancelContrailEvent(parsed, userId);
+      }
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 

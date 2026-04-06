@@ -1532,6 +1532,86 @@ describe('EventManagementService', () => {
       );
       expect(result).toEqual(currentMockEventAttendee);
     });
+
+    describe('Contrail-only ATProto events', () => {
+      it('should branch to cancelContrailEvent for ATProto slug when event not in DB', async () => {
+        // Event not found in local DB
+        mockRepository.findOne.mockResolvedValueOnce(null);
+
+        // Slug parses as ATProto slug
+        mockAtprotoEnrichmentService.parseAtprotoSlug.mockReturnValueOnce({
+          did: 'did:plc:abc123',
+          rkey: 'rkey456',
+        });
+
+        // User has ATProto identity
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce({
+          ...mockUser,
+          socialId: 'did:plc:userxyz',
+          slug: 'test-user',
+        } as any);
+
+        // RSVP delete succeeds
+        mockBlueskyRsvpService.deleteRsvpByUri.mockResolvedValueOnce(undefined);
+
+        const result = await service.cancelAttendingEvent(
+          'did:plc:abc123~rkey456',
+          mockUser.id,
+        );
+
+        expect(result).toBeDefined();
+        expect(result.source).toBe('atproto');
+        expect(result.status).toBe(EventAttendeeStatus.Cancelled);
+        expect(result.event.slug).toBe('did:plc:abc123~rkey456');
+        expect(result.event.atprotoUri).toBe(
+          'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+        );
+        expect(mockBlueskyRsvpService.deleteRsvpByUri).toHaveBeenCalledWith(
+          'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+          'did:plc:userxyz',
+          'test-tenant',
+        );
+      });
+
+      it('should throw BadRequestException when user has no ATProto identity', async () => {
+        mockRepository.findOne.mockResolvedValueOnce(null);
+
+        mockAtprotoEnrichmentService.parseAtprotoSlug.mockReturnValueOnce({
+          did: 'did:plc:abc123',
+          rkey: 'rkey456',
+        });
+
+        // User has NO ATProto identity
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce({
+          ...mockUser,
+          socialId: null,
+          slug: 'test-user',
+        } as any);
+
+        await expect(
+          service.cancelAttendingEvent('did:plc:abc123~rkey456', mockUser.id),
+        ).rejects.toThrow(
+          'A linked AT Protocol account is required to cancel RSVP on this event',
+        );
+      });
+
+      it('should still throw NotFoundException for non-ATProto slug when event not in DB', async () => {
+        mockRepository.findOne.mockResolvedValueOnce(null);
+
+        // Not an ATProto slug
+        mockAtprotoEnrichmentService.parseAtprotoSlug.mockReturnValueOnce(null);
+
+        await expect(
+          service.cancelAttendingEvent('regular-missing-slug', mockUser.id),
+        ).rejects.toThrow('Event with slug regular-missing-slug not found');
+      });
+    });
   });
 
   describe('Event Series Integration', () => {
