@@ -36,6 +36,9 @@ import { UpdateEventDto } from '../dto/update-event.dto';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence-frequency.enum';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
+import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
+import { ContrailQueryService } from '../../contrail/contrail-query.service';
+import { BlueskyRsvpService } from '../../bluesky/bluesky-rsvp.service';
 
 describe('EventManagementService', () => {
   let service: EventManagementService;
@@ -48,6 +51,9 @@ describe('EventManagementService', () => {
   let mockDiscussionService: any;
   let mockEventQueryService: jest.Mocked<EventQueryService>;
   let mockGroupMemberQueryService: jest.Mocked<GroupMemberQueryService>;
+  let mockAtprotoEnrichmentService: any;
+  let mockContrailQueryService: any;
+  let mockBlueskyRsvpService: any;
 
   const mockSeriesId = 1;
   const mockSeriesSlug = 'test-series';
@@ -181,6 +187,22 @@ describe('EventManagementService', () => {
       findGroupMemberByUserId: jest.fn(),
     } as unknown as jest.Mocked<GroupMemberQueryService>;
 
+    mockAtprotoEnrichmentService = {
+      parseAtprotoSlug: jest.fn().mockReturnValue(null),
+      enrichWithAtprotoData: jest.fn(),
+    };
+
+    mockContrailQueryService = {
+      findByUri: jest.fn().mockResolvedValue(null),
+    };
+
+    mockBlueskyRsvpService = {
+      createRsvpByUri: jest.fn().mockResolvedValue({
+        rsvpUri: 'at://did:plc:test/community.lexicon.calendar.rsvp/abc',
+      }),
+      deleteRsvpByUri: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventManagementService,
@@ -284,6 +306,18 @@ describe('EventManagementService', () => {
               .fn()
               .mockResolvedValue({ did: 'did:plc:test', required: true }),
           },
+        },
+        {
+          provide: AtprotoEnrichmentService,
+          useValue: mockAtprotoEnrichmentService,
+        },
+        {
+          provide: ContrailQueryService,
+          useValue: mockContrailQueryService,
+        },
+        {
+          provide: BlueskyRsvpService,
+          useValue: mockBlueskyRsvpService,
         },
       ],
     })
@@ -1353,6 +1387,130 @@ describe('EventManagementService', () => {
         expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
           EventAttendeeRole.Participant,
         );
+      });
+    });
+
+    describe('Contrail-only ATProto events', () => {
+      it('should branch to attendContrailEvent for ATProto slug when event not in DB', async () => {
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        // Event not found in local DB
+        mockRepository.findOne.mockResolvedValueOnce(null);
+
+        // Slug parses as ATProto slug
+        mockAtprotoEnrichmentService.parseAtprotoSlug.mockReturnValueOnce({
+          did: 'did:plc:abc123',
+          rkey: 'rkey456',
+        });
+
+        // Contrail has the event
+        mockContrailQueryService.findByUri.mockResolvedValueOnce({
+          uri: 'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+          record: { name: 'ATProto Test Event' },
+        });
+
+        // User has ATProto identity
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce({
+          ...mockUser,
+          socialId: 'did:plc:userxyz',
+          slug: 'test-user',
+          firstName: 'Test',
+        } as any);
+
+        // RSVP publish succeeds
+        mockBlueskyRsvpService.createRsvpByUri.mockResolvedValueOnce({
+          rsvpUri: 'at://did:plc:userxyz/community.lexicon.calendar.rsvp/abc',
+        });
+
+        const result = await service.attendEvent(
+          'did:plc:abc123~rkey456',
+          mockUser.id,
+          {},
+        );
+
+        expect(result).toBeDefined();
+        expect(result.source).toBe('atproto');
+        expect(result.rsvpUri).toBe(
+          'at://did:plc:userxyz/community.lexicon.calendar.rsvp/abc',
+        );
+        expect(result.event.slug).toBe('did:plc:abc123~rkey456');
+        expect(result.event.atprotoUri).toBe(
+          'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+        );
+        expect(result.status).toBe(EventAttendeeStatus.Confirmed);
+        expect(mockBlueskyRsvpService.createRsvpByUri).toHaveBeenCalledWith(
+          'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+          'going',
+          'did:plc:userxyz',
+          'test-tenant',
+        );
+      });
+
+      it('should throw NotFoundException for ATProto slug when event not in Contrail', async () => {
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        mockRepository.findOne.mockResolvedValueOnce(null);
+
+        mockAtprotoEnrichmentService.parseAtprotoSlug.mockReturnValueOnce({
+          did: 'did:plc:abc123',
+          rkey: 'nonexistent',
+        });
+
+        // Contrail does NOT have the event
+        mockContrailQueryService.findByUri.mockResolvedValueOnce(null);
+
+        await expect(
+          service.attendEvent('did:plc:abc123~nonexistent', mockUser.id, {}),
+        ).rejects.toThrow('Event not found');
+      });
+
+      it('should throw BadRequestException when user has no ATProto identity', async () => {
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        mockRepository.findOne.mockResolvedValueOnce(null);
+
+        mockAtprotoEnrichmentService.parseAtprotoSlug.mockReturnValueOnce({
+          did: 'did:plc:abc123',
+          rkey: 'rkey456',
+        });
+
+        mockContrailQueryService.findByUri.mockResolvedValueOnce({
+          uri: 'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+          record: { name: 'ATProto Test Event' },
+        });
+
+        // User has NO ATProto identity
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce({
+          ...mockUser,
+          socialId: null,
+          slug: 'test-user',
+          firstName: 'Test',
+        } as any);
+
+        await expect(
+          service.attendEvent('did:plc:abc123~rkey456', mockUser.id, {}),
+        ).rejects.toThrow(
+          'A linked AT Protocol account is required to RSVP to this event',
+        );
+      });
+
+      it('should still throw NotFoundException for non-ATProto slug when event not in DB', async () => {
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        mockRepository.findOne.mockResolvedValueOnce(null);
+
+        // Not an ATProto slug
+        mockAtprotoEnrichmentService.parseAtprotoSlug.mockReturnValueOnce(null);
+
+        await expect(
+          service.attendEvent('regular-missing-slug', mockUser.id, {}),
+        ).rejects.toThrow('Event with slug regular-missing-slug not found');
       });
     });
   });

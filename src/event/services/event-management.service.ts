@@ -52,6 +52,9 @@ import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publish
 import { markAtprotoSynced } from '../../atproto-publisher/atproto-sync.utils';
 import { SyncAtprotoResponseDto } from '../dto/sync-atproto-response.dto';
 import { TID } from '@atproto/common-web';
+import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
+import { ContrailQueryService } from '../../contrail/contrail-query.service';
+import { BlueskyRsvpService } from '../../bluesky/bluesky-rsvp.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -85,6 +88,10 @@ export class EventManagementService {
     private readonly groupMemberQueryService: GroupMemberQueryService,
     @Inject(forwardRef(() => AtprotoPublisherService))
     private readonly atprotoPublisherService: AtprotoPublisherService,
+    private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
+    private readonly contrailQueryService: ContrailQueryService,
+    @Inject(forwardRef(() => BlueskyRsvpService))
+    private readonly blueskyRsvpService: BlueskyRsvpService,
   ) {
     void this.initializeRepository();
   }
@@ -1550,6 +1557,11 @@ export class EventManagementService {
       relations: ['group', 'user'],
     });
     if (!event) {
+      // Check if this is a Contrail-only ATProto event (did~rkey slug format)
+      const parsed = this.atprotoEnrichmentService.parseAtprotoSlug(slug);
+      if (parsed) {
+        return this.attendContrailEvent(parsed, userId, createEventAttendeeDto);
+      }
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
@@ -2015,6 +2027,80 @@ export class EventManagementService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Handle RSVP for a Contrail-only ATProto event (no tenant DB row).
+   * Publishes RSVP directly to the user's PDS.
+   */
+  private async attendContrailEvent(
+    parsed: { did: string; rkey: string },
+    userId: number,
+    createEventAttendeeDto: CreateEventAttendeeDto,
+  ) {
+    const eventUri = `at://${parsed.did}/community.lexicon.calendar.event/${parsed.rkey}`;
+
+    this.logger.debug(
+      `[attendEvent] Contrail-only event detected: ${eventUri}`,
+    );
+
+    // Validate event exists in Contrail
+    const contrailRecord = await this.contrailQueryService.findByUri(
+      'community.lexicon.calendar.event',
+      eventUri,
+    );
+    if (!contrailRecord) {
+      throw new NotFoundException(`Event not found`);
+    }
+
+    // Get user and verify they have an ATProto identity
+    const user = await this.userService.getUserById(
+      userId,
+      this.request.tenantId,
+    );
+    const userDid = user.socialId;
+    if (!userDid || !userDid.startsWith('did:')) {
+      throw new BadRequestException(
+        'A linked AT Protocol account is required to RSVP to this event',
+      );
+    }
+
+    // Map DTO status to RSVP status (default: going)
+    const status =
+      createEventAttendeeDto.status === EventAttendeeStatus.Cancelled
+        ? ('notgoing' as const)
+        : ('going' as const);
+
+    // Publish RSVP to user's PDS
+    const result = await this.blueskyRsvpService.createRsvpByUri(
+      eventUri,
+      status,
+      userDid,
+      this.request.tenantId,
+    );
+
+    this.logger.debug(
+      `[attendEvent] Contrail RSVP published: ${result.rsvpUri}`,
+    );
+
+    // Return a response shaped like a normal attendee for API compatibility
+    const rec = contrailRecord.record as Record<string, any>;
+    return {
+      id: null,
+      status:
+        status === 'notgoing'
+          ? EventAttendeeStatus.Cancelled
+          : EventAttendeeStatus.Confirmed,
+      role: { name: EventAttendeeRole.Participant },
+      user: { id: userId, slug: user.slug, name: user.firstName },
+      event: {
+        slug: `${parsed.did}~${parsed.rkey}`,
+        name: rec?.name ?? 'ATProto Event',
+        atprotoUri: eventUri,
+      },
+      rsvpUri: result.rsvpUri,
+      source: 'atproto',
+    };
   }
 
   @Trace('event-management.cancelAttendingEvent')
