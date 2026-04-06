@@ -282,6 +282,198 @@ export class BlueskyRsvpService {
   }
 
   /**
+   * Creates or updates an RSVP for a Contrail-only event using a raw AT URI.
+   * Unlike createRsvp(), this does not require an EventEntity — it works with
+   * events that exist only in Contrail tables (no tenant DB row).
+   * No CID lookup is performed; the subject uses uri-only reference.
+   *
+   * @param eventUri The AT Protocol URI of the event
+   * @param status The RSVP status (going, interested, or notgoing)
+   * @param did The user's Bluesky DID
+   * @param tenantId The tenant ID
+   * @param providedAgent Optional pre-authenticated agent
+   */
+  @Trace('bluesky-rsvp.createRsvpByUri')
+  async createRsvpByUri(
+    eventUri: string,
+    status: RsvpStatusShort,
+    did: string,
+    tenantId: string,
+    providedAgent?: Agent,
+  ): Promise<{ success: boolean; rsvpUri: string; rsvpCid?: string }> {
+    const timer = this.processingDuration.startTimer({
+      tenant: tenantId,
+      operation: 'create',
+      status,
+    });
+
+    try {
+      this.logger.debug(
+        `Starting Bluesky RSVP creation by URI for user ${did}`,
+        { eventUri, userDid: did, tenantId, status },
+      );
+
+      // Get agent for the user
+      let agent: Agent;
+      if (providedAgent) {
+        agent = providedAgent;
+        this.logger.debug(`Using provided agent for user ${did}`);
+      } else {
+        const resumedAgent = await this.blueskyService.resumeSession(
+          tenantId,
+          did,
+        );
+        if (!resumedAgent) {
+          throw new Error(`Failed to create Bluesky session for user ${did}`);
+        }
+        agent = resumedAgent;
+      }
+
+      // Build RSVP record with uri-only subject (no CID for Contrail-only events)
+      const recordData: Record<string, unknown> = {
+        $type: BLUESKY_COLLECTIONS.RSVP,
+        subject: { uri: eventUri },
+        status: RSVP_STATUS[status],
+        createdAt: new Date().toISOString(),
+      };
+
+      // Generate deterministic rkey from event URI
+      const rkey = this.generateRsvpRkey(eventUri);
+
+      // Validate record against AT Protocol lexicon schema
+      const validation = this.atprotoLexiconService.validate(
+        BLUESKY_COLLECTIONS.RSVP,
+        recordData,
+      );
+      if (!validation.success) {
+        this.logger.error('RSVP record failed lexicon validation', {
+          eventUri,
+          errors: validation.error.message,
+        });
+        throw new Error(
+          `AT Protocol record validation failed: ${validation.error.message}`,
+        );
+      }
+
+      const standardRsvpCollection = BLUESKY_COLLECTIONS.RSVP;
+
+      // Create the RSVP record in the user's PDS
+      const result = await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: standardRsvpCollection,
+        rkey,
+        record: recordData,
+      });
+
+      const rsvpUri = this.blueskyIdService.createUri(
+        did,
+        standardRsvpCollection,
+        rkey,
+      );
+
+      this.rsvpOperationsCounter.inc({
+        tenant: tenantId,
+        operation: 'create',
+        status,
+      });
+
+      this.logger.debug(
+        `Successfully created RSVP by URI with status ${status}`,
+        { eventUri, did, rkey, rsvpCid: result.data.cid, rsvpUri },
+      );
+
+      timer();
+
+      return {
+        success: true,
+        rsvpUri,
+        rsvpCid: result.data.cid,
+      };
+    } catch (error) {
+      timer();
+      this.logger.error(
+        `Failed to create Bluesky RSVP by URI: ${error.message}`,
+        { error: error.stack, eventUri, userDid: did, tenantId, status },
+      );
+      throw new Error(`Failed to create Bluesky RSVP by URI: ${error.message}`);
+    }
+  }
+
+  /**
+   * Deletes an RSVP for a Contrail-only event by deriving the rkey from the event URI.
+   * Unlike deleteRsvp(), this accepts an eventUri instead of an rsvpUri,
+   * and uses generateRsvpRkey() to deterministically find the record to delete.
+   *
+   * @param eventUri The AT Protocol URI of the event
+   * @param did The user's Bluesky DID
+   * @param tenantId The tenant ID
+   * @param providedAgent Optional pre-authenticated agent
+   */
+  @Trace('bluesky-rsvp.deleteRsvpByUri')
+  async deleteRsvpByUri(
+    eventUri: string,
+    did: string,
+    tenantId: string,
+    providedAgent?: Agent,
+  ): Promise<{ success: boolean }> {
+    const timer = this.processingDuration.startTimer({
+      tenant: tenantId,
+      operation: 'delete',
+    });
+
+    try {
+      // Derive rkey deterministically from event URI
+      const rkey = this.generateRsvpRkey(eventUri);
+
+      // Get agent for the user
+      let agent: Agent;
+      if (providedAgent) {
+        agent = providedAgent;
+      } else {
+        const resumedAgent = await this.blueskyService.resumeSession(
+          tenantId,
+          did,
+        );
+        if (!resumedAgent) {
+          throw new Error(`Failed to create Bluesky session for user ${did}`);
+        }
+        agent = resumedAgent;
+      }
+
+      const standardRsvpCollection = BLUESKY_COLLECTIONS.RSVP;
+
+      // Delete the RSVP record
+      await agent.com.atproto.repo.deleteRecord({
+        repo: did,
+        collection: standardRsvpCollection,
+        rkey,
+      });
+
+      this.rsvpOperationsCounter.inc({
+        tenant: tenantId,
+        operation: 'delete',
+      });
+
+      this.logger.debug(`Deleted RSVP by event URI`, {
+        eventUri,
+        did,
+        rkey,
+      });
+
+      timer();
+
+      return { success: true };
+    } catch (error) {
+      timer();
+      this.logger.error(
+        `Failed to delete Bluesky RSVP by URI: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to delete Bluesky RSVP by URI: ${error.message}`);
+    }
+  }
+
+  /**
    * Deletes an RSVP from the user's Bluesky PDS
    * @param rsvpUri The URI of the RSVP to delete
    * @param did The user's Bluesky DID
