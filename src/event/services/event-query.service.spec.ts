@@ -19,6 +19,8 @@ import { ContrailQueryService } from '../../contrail/contrail-query.service';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { UserService } from '../../user/user.service';
+import { DashboardEventsTab } from '../dto/dashboard-events-query.dto';
 
 // Define a mock event entity for consistent use
 const mockEventEntity: EventEntity = {
@@ -160,6 +162,12 @@ describe('EventQueryService', () => {
               .mockImplementation((events, _uris) => events),
             mapAtprotoToEvent: jest.fn(),
             parseAtprotoSlug: jest.fn().mockReturnValue(null),
+          },
+        },
+        {
+          provide: UserService,
+          useValue: {
+            getUserById: jest.fn().mockResolvedValue({ socialId: null }),
           },
         },
         // Remove providers for unused services (Matrix, GroupMember, Recurrence)
@@ -1747,6 +1755,261 @@ describe('EventQueryService', () => {
       // External event (earlier date) should come first
       expect(result[0].name).toBe('External Calendar Event');
       expect(result[1].name).toBe('Test Event');
+    });
+  });
+
+  describe('showDashboardEventsPaginated - Contrail RSVP merge', () => {
+    // Helper to set up paginate mock (paginate calls skip/take/getManyAndCount on the query builder)
+    function setupPaginateMock(
+      qb: Record<string, jest.Mock>,
+      data: any[],
+      total: number,
+    ) {
+      qb.skip = jest.fn().mockReturnValue(qb);
+      qb.take = jest.fn().mockReturnValue(qb);
+      qb.getManyAndCount = jest.fn().mockResolvedValue([data, total]);
+      qb.getQuery = jest.fn().mockReturnValue('SELECT ...');
+      qb.getParameters = jest.fn().mockReturnValue({});
+      // Needed by paginate's expressionMap access
+      (qb as any).expressionMap = {
+        mainAlias: { metadata: { name: 'EventEntity' } },
+      };
+    }
+
+    it('should merge Contrail RSVPs into Attending tab when user has a DID', async () => {
+      // Build a mock query builder that supports chaining for the Attending tab
+      const mockQb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+      };
+      setupPaginateMock(mockQb, [], 0); // tenant DB returns no events
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      // User has a DID
+      const mockUserService = service['userService'] as any;
+      mockUserService.getUserById = jest
+        .fn()
+        .mockResolvedValue({ socialId: 'did:plc:testuser123' });
+
+      // Contrail returns an RSVP record
+      const mockContrailService = service['contrailQueryService'] as any;
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:testuser123/community.lexicon.calendar.rsvp/rkey1',
+            did: 'did:plc:testuser123',
+            record: {
+              status: 'community.lexicon.calendar.rsvp#going',
+              subject: {
+                uri: 'at://did:plc:host1/community.lexicon.calendar.event/evt1',
+              },
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      // Contrail returns the event record
+      mockContrailService.findByUri = jest.fn().mockResolvedValue({
+        uri: 'at://did:plc:host1/community.lexicon.calendar.event/evt1',
+        did: 'did:plc:host1',
+        record: {
+          name: 'Contrail-Only Event',
+          startsAt: '2026-05-01T10:00:00Z',
+        },
+      });
+
+      // Enrichment maps it
+      const mockEnrichment = service['atprotoEnrichmentService'] as any;
+      const enrichedEvent: AtprotoSourcedEvent = {
+        source: 'atproto',
+        name: 'Contrail-Only Event',
+        atprotoUri: 'at://did:plc:host1/community.lexicon.calendar.event/evt1',
+        startDate: new Date('2026-05-01T10:00:00Z'),
+      } as any;
+      mockEnrichment.mapAtprotoToEvent = jest
+        .fn()
+        .mockReturnValue(enrichedEvent);
+
+      const result = await service.showDashboardEventsPaginated(1, {
+        tab: DashboardEventsTab.Attending,
+        page: 1,
+        limit: 10,
+      });
+
+      // The Contrail event should be merged in
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toEqual(enrichedEvent);
+      expect(result.total).toBe(1);
+
+      // Verify Contrail RSVP query was made with the user's DID
+      expect(mockContrailService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.rsvp',
+        expect.objectContaining({
+          conditions: expect.arrayContaining([
+            expect.objectContaining({
+              sql: 'did = $1',
+              params: ['did:plc:testuser123'],
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it('should not query Contrail when user has no DID', async () => {
+      const mockQb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+      };
+      setupPaginateMock(mockQb, [], 0);
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      // User has no DID
+      const mockUserService = service['userService'] as any;
+      mockUserService.getUserById = jest
+        .fn()
+        .mockResolvedValue({ socialId: null });
+
+      const mockContrailService = service['contrailQueryService'] as any;
+      const contrailFindSpy = jest.spyOn(mockContrailService, 'find');
+
+      const result = await service.showDashboardEventsPaginated(1, {
+        tab: DashboardEventsTab.Attending,
+        page: 1,
+        limit: 10,
+      });
+
+      expect(result.data).toHaveLength(0);
+      // Contrail should NOT be queried
+      expect(contrailFindSpy).not.toHaveBeenCalled();
+    });
+
+    it('should deduplicate events already present in tenant results', async () => {
+      const sharedUri =
+        'at://did:plc:host1/community.lexicon.calendar.event/evt1';
+
+      // Tenant DB returns an event that also exists in Contrail
+      const tenantEvent = {
+        ...mockEventEntity,
+        id: 42,
+        atprotoUri: sharedUri,
+      };
+
+      const mockQb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+      };
+      setupPaginateMock(mockQb, [tenantEvent], 1);
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      // User has a DID
+      const mockUserService = service['userService'] as any;
+      mockUserService.getUserById = jest
+        .fn()
+        .mockResolvedValue({ socialId: 'did:plc:testuser123' });
+
+      // Contrail returns an RSVP for the same event
+      const mockContrailService = service['contrailQueryService'] as any;
+      mockContrailService.find = jest.fn().mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:testuser123/community.lexicon.calendar.rsvp/rkey1',
+            did: 'did:plc:testuser123',
+            record: {
+              status: 'community.lexicon.calendar.rsvp#going',
+              subject: { uri: sharedUri },
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      const result = await service.showDashboardEventsPaginated(1, {
+        tab: DashboardEventsTab.Attending,
+        page: 1,
+        limit: 10,
+      });
+
+      // Should only have the tenant event, no duplicate
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toEqual(tenantEvent);
+      // findByUri should NOT be called since the URI was filtered out
+      expect(mockContrailService.findByUri).not.toHaveBeenCalled();
+    });
+
+    it('should gracefully handle Contrail errors', async () => {
+      const mockQb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+      };
+      setupPaginateMock(mockQb, [], 0);
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      // User has a DID
+      const mockUserService = service['userService'] as any;
+      mockUserService.getUserById = jest
+        .fn()
+        .mockResolvedValue({ socialId: 'did:plc:testuser123' });
+
+      // Contrail throws an error
+      const mockContrailService = service['contrailQueryService'] as any;
+      mockContrailService.find = jest
+        .fn()
+        .mockRejectedValue(new Error('Contrail unavailable'));
+
+      const loggerSpy = jest.spyOn(service['logger'], 'warn');
+
+      const result = await service.showDashboardEventsPaginated(1, {
+        tab: DashboardEventsTab.Attending,
+        page: 1,
+        limit: 10,
+      });
+
+      // Should return tenant results gracefully despite Contrail error
+      expect(result.data).toHaveLength(0);
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch Contrail RSVPs'),
+      );
     });
   });
 });

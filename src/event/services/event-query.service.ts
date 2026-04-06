@@ -52,6 +52,7 @@ import type {
 import type { Main as CalendarEvent } from '../../generated-lexicon-types/types/community/lexicon/calendar/event';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
+import { UserService } from '../../user/user.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -70,6 +71,8 @@ export class EventQueryService {
     private readonly groupDidFollowService: GroupDIDFollowService,
     private readonly contrailQueryService: ContrailQueryService,
     private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
+    @Inject(forwardRef(() => UserService))
+    private readonly userService: UserService,
   ) {
     void this.initializeRepository();
   }
@@ -947,6 +950,29 @@ export class EventQueryService {
         .where('event.userId != :userId', { userId })
         .andWhere('event.startDate >= :now', { now })
         .orderBy('event.startDate', 'ASC');
+
+      // Get tenant DB results first
+      const tenantResult = await paginate(eventQuery, { page, limit });
+
+      // Also query Contrail for ATProto-native RSVPs by this user's DID
+      const user = await this.userService.getUserById(userId);
+      if (user.socialId?.startsWith('did:')) {
+        try {
+          const contrailEvents = await this.getContrailAttendingEvents(
+            user.socialId,
+            tenantResult,
+          );
+          if (contrailEvents.length > 0) {
+            tenantResult.data.push(...(contrailEvents as any[]));
+            tenantResult.total += contrailEvents.length;
+          }
+        } catch (err) {
+          this.logger.warn(
+            `Failed to fetch Contrail RSVPs for dashboard: ${(err as Error).message}`,
+          );
+        }
+      }
+      return tenantResult;
     } else if (tab === DashboardEventsTab.Past) {
       // Past events (both hosting and attending)
       eventQuery = eventQuery
@@ -969,6 +995,69 @@ export class EventQueryService {
     }
 
     return await paginate(eventQuery, { page, limit });
+  }
+
+  /**
+   * Query Contrail for events the user has RSVPed to via ATProto (not cancelled).
+   * Filters out events already present in tenant results to avoid duplicates.
+   */
+  private async getContrailAttendingEvents(
+    userDid: string,
+    tenantResult: { data: any[] },
+  ): Promise<AtprotoSourcedEvent[]> {
+    // Query Contrail RSVP table for this user's active RSVPs
+    const rsvpResult = await this.contrailQueryService.find(
+      'community.lexicon.calendar.rsvp',
+      {
+        conditions: [
+          { sql: 'did = $1', params: [userDid] },
+          {
+            sql: "record->>'status' != $1",
+            params: ['community.lexicon.calendar.rsvp#notgoing'],
+          },
+        ],
+      },
+    );
+
+    if (rsvpResult.records.length === 0) return [];
+
+    // Extract event URIs from RSVP subject.uri
+    const eventUris = rsvpResult.records
+      .map((r) => {
+        const rec = r.record as Record<string, any>;
+        return rec?.subject?.uri as string;
+      })
+      .filter(Boolean);
+
+    if (eventUris.length === 0) return [];
+
+    // Collect atprotoUris from tenant results to deduplicate
+    const tenantAtprotoUris = new Set(
+      tenantResult.data.map((e: any) => e.atprotoUri).filter(Boolean),
+    );
+
+    // Filter out events already in tenant results
+    const contrailOnlyUris = eventUris.filter(
+      (uri) => !tenantAtprotoUris.has(uri),
+    );
+
+    if (contrailOnlyUris.length === 0) return [];
+
+    // Fetch event records from Contrail and enrich them
+    const events: AtprotoSourcedEvent[] = [];
+    for (const uri of contrailOnlyUris) {
+      const record = await this.contrailQueryService.findByUri(
+        'community.lexicon.calendar.event',
+        uri,
+      );
+      if (record) {
+        const enriched =
+          this.atprotoEnrichmentService.mapAtprotoToEvent(record);
+        events.push(enriched);
+      }
+    }
+
+    return events;
   }
 
   @Trace('event-query.getHomePageFeaturedEvents')
