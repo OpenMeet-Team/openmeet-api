@@ -1420,6 +1420,7 @@ describe('EventManagementService', () => {
         // Contrail has the event
         mockContrailQueryService.findByUri.mockResolvedValueOnce({
           uri: 'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+          cid: 'bafytest',
           record: { name: 'ATProto Test Event' },
         });
 
@@ -1467,6 +1468,7 @@ describe('EventManagementService', () => {
           'did:plc:userxyz',
           'test-tenant',
           expect.any(Object),
+          'bafytest',
         );
       });
 
@@ -1567,6 +1569,13 @@ describe('EventManagementService', () => {
           rkey: 'rkey456',
         });
 
+        // Contrail has the event
+        mockContrailQueryService.findByUri.mockResolvedValueOnce({
+          uri: 'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+          cid: 'bafytest',
+          record: { name: 'ATProto Test Event' },
+        });
+
         // User exists and has PDS session
         const mockUserService = service[
           'userService'
@@ -1583,8 +1592,10 @@ describe('EventManagementService', () => {
           isCustodial: true,
         });
 
-        // RSVP delete succeeds
-        mockBlueskyRsvpService.deleteRsvpByUri.mockResolvedValueOnce(undefined);
+        // RSVP update to notgoing succeeds
+        mockBlueskyRsvpService.createRsvpByUri.mockResolvedValueOnce({
+          rsvpUri: 'at://did:plc:userxyz/community.lexicon.calendar.rsvp/abc',
+        });
 
         const result = await service.cancelAttendingEvent(
           'did:plc:abc123~rkey456',
@@ -1598,11 +1609,13 @@ describe('EventManagementService', () => {
         expect(result.event.atprotoUri).toBe(
           'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
         );
-        expect(mockBlueskyRsvpService.deleteRsvpByUri).toHaveBeenCalledWith(
+        expect(mockBlueskyRsvpService.createRsvpByUri).toHaveBeenCalledWith(
           'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+          'notgoing',
           'did:plc:userxyz',
           'test-tenant',
           expect.any(Object),
+          'bafytest',
         );
       });
 
@@ -1612,6 +1625,13 @@ describe('EventManagementService', () => {
         mockAtprotoEnrichmentService.parseAtprotoSlug.mockReturnValueOnce({
           did: 'did:plc:abc123',
           rkey: 'rkey456',
+        });
+
+        // Contrail has the event
+        mockContrailQueryService.findByUri.mockResolvedValueOnce({
+          uri: 'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
+          cid: 'bafytest',
+          record: { name: 'ATProto Test Event' },
         });
 
         // User exists but has NO PDS session

@@ -300,6 +300,7 @@ export class BlueskyRsvpService {
     did: string,
     tenantId: string,
     providedAgent?: Agent,
+    eventCid?: string,
   ): Promise<{ success: boolean; rsvpUri: string; rsvpCid?: string }> {
     const timer = this.processingDuration.startTimer({
       tenant: tenantId,
@@ -329,10 +330,13 @@ export class BlueskyRsvpService {
         agent = resumedAgent;
       }
 
-      // Build RSVP record with uri-only subject (no CID for Contrail-only events)
+      // Build RSVP record — include CID in subject if available
       const recordData: Record<string, unknown> = {
         $type: BLUESKY_COLLECTIONS.RSVP,
-        subject: { uri: eventUri },
+        subject: {
+          uri: eventUri,
+          ...(eventCid && { cid: eventCid }),
+        },
         status: RSVP_STATUS[status],
         createdAt: new Date().toISOString(),
       };

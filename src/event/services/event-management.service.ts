@@ -2085,6 +2085,7 @@ export class EventManagementService {
       session.did,
       this.request.tenantId,
       session.agent,
+      contrailRecord.cid ?? undefined,
     );
 
     this.logger.debug(
@@ -2125,6 +2126,15 @@ export class EventManagementService {
       `[cancelAttendingEvent] Contrail-only event detected: ${eventUri}`,
     );
 
+    // Validate event exists in Contrail (also need CID for strongRef)
+    const contrailRecord = await this.contrailQueryService.findByUri(
+      'community.lexicon.calendar.event',
+      eventUri,
+    );
+    if (!contrailRecord) {
+      throw new NotFoundException(`Event not found`);
+    }
+
     const user = await this.userService.getUserById(
       userId,
       this.request.tenantId,
@@ -2140,15 +2150,18 @@ export class EventManagementService {
       );
     }
 
-    await this.blueskyRsvpService.deleteRsvpByUri(
+    // Update RSVP status to notgoing (not delete — the record stays on PDS)
+    await this.blueskyRsvpService.createRsvpByUri(
       eventUri,
+      'notgoing',
       session.did,
       this.request.tenantId,
       session.agent,
+      contrailRecord.cid ?? undefined,
     );
 
     this.logger.debug(
-      `[cancelAttendingEvent] Contrail RSVP deleted for event ${eventUri}`,
+      `[cancelAttendingEvent] Contrail RSVP set to notgoing for event ${eventUri}`,
     );
 
     return {
