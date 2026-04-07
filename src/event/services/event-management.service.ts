@@ -53,6 +53,7 @@ import { markAtprotoSynced } from '../../atproto-publisher/atproto-sync.utils';
 import { SyncAtprotoResponseDto } from '../dto/sync-atproto-response.dto';
 import { TID } from '@atproto/common-web';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
+import { PdsSessionService } from '../../pds/pds-session.service';
 import { ContrailQueryService } from '../../contrail/contrail-query.service';
 import { BlueskyRsvpService } from '../../bluesky/bluesky-rsvp.service';
 
@@ -92,6 +93,8 @@ export class EventManagementService {
     private readonly contrailQueryService: ContrailQueryService,
     @Inject(forwardRef(() => BlueskyRsvpService))
     private readonly blueskyRsvpService: BlueskyRsvpService,
+    @Inject(forwardRef(() => PdsSessionService))
+    private readonly pdsSessionService: PdsSessionService,
   ) {
     void this.initializeRepository();
   }
@@ -2053,13 +2056,17 @@ export class EventManagementService {
       throw new NotFoundException(`Event not found`);
     }
 
-    // Get user and verify they have an ATProto identity
+    // Get user and their PDS session
     const user = await this.userService.getUserById(
       userId,
       this.request.tenantId,
     );
-    const userDid = user.socialId;
-    if (!userDid || !userDid.startsWith('did:')) {
+
+    const session = await this.pdsSessionService.getSessionForUser(
+      this.request.tenantId,
+      user.ulid,
+    );
+    if (!session) {
       throw new BadRequestException(
         'A linked AT Protocol account is required to RSVP to this event',
       );
@@ -2071,12 +2078,13 @@ export class EventManagementService {
         ? ('notgoing' as const)
         : ('going' as const);
 
-    // Publish RSVP to user's PDS
+    // Publish RSVP to user's PDS using their authenticated session
     const result = await this.blueskyRsvpService.createRsvpByUri(
       eventUri,
       status,
-      userDid,
+      session.did,
       this.request.tenantId,
+      session.agent,
     );
 
     this.logger.debug(
@@ -2121,8 +2129,12 @@ export class EventManagementService {
       userId,
       this.request.tenantId,
     );
-    const userDid = user.socialId;
-    if (!userDid || !userDid.startsWith('did:')) {
+
+    const session = await this.pdsSessionService.getSessionForUser(
+      this.request.tenantId,
+      user.ulid,
+    );
+    if (!session) {
       throw new BadRequestException(
         'A linked AT Protocol account is required to cancel RSVP on this event',
       );
@@ -2130,8 +2142,9 @@ export class EventManagementService {
 
     await this.blueskyRsvpService.deleteRsvpByUri(
       eventUri,
-      userDid,
+      session.did,
       this.request.tenantId,
+      session.agent,
     );
 
     this.logger.debug(

@@ -34,6 +34,7 @@ import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.
 import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
 import { ContrailQueryService } from '../contrail/contrail-query.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 
 describe('EventManagementService Integration with EventSeriesService', () => {
   let managementService: EventManagementService;
@@ -319,6 +320,12 @@ describe('EventManagementService Integration with EventSeriesService', () => {
           useValue: {
             createRsvpByUri: jest.fn().mockResolvedValue({ success: true }),
             deleteRsvpByUri: jest.fn().mockResolvedValue({ success: true }),
+          },
+        },
+        {
+          provide: PdsSessionService,
+          useValue: {
+            getSessionForUser: jest.fn().mockResolvedValue(null),
           },
         },
       ],

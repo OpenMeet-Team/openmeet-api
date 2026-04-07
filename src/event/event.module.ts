@@ -32,6 +32,7 @@ import { AtprotoPublisherModule } from '../atproto-publisher/atproto-publisher.m
 import { GroupDIDFollowModule } from '../group-did-follow/group-did-follow.module';
 import { ContrailModule } from '../contrail/contrail.module';
 import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichment.module';
+import { PdsModule } from '../pds/pds.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichmen
     forwardRef(() => GroupDIDFollowModule),
     ContrailModule,
     AtprotoEnrichmentModule,
+    forwardRef(() => PdsModule),
   ],
   controllers: [
     EventController,

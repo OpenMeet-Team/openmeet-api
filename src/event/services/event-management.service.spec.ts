@@ -39,6 +39,7 @@ import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publish
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import { ContrailQueryService } from '../../contrail/contrail-query.service';
 import { BlueskyRsvpService } from '../../bluesky/bluesky-rsvp.service';
+import { PdsSessionService } from '../../pds/pds-session.service';
 
 describe('EventManagementService', () => {
   let service: EventManagementService;
@@ -54,6 +55,7 @@ describe('EventManagementService', () => {
   let mockAtprotoEnrichmentService: any;
   let mockContrailQueryService: any;
   let mockBlueskyRsvpService: any;
+  let mockPdsSessionService: any;
 
   const mockSeriesId = 1;
   const mockSeriesSlug = 'test-series';
@@ -203,6 +205,14 @@ describe('EventManagementService', () => {
       deleteRsvpByUri: jest.fn().mockResolvedValue(undefined),
     };
 
+    mockPdsSessionService = {
+      getSessionForUser: jest.fn().mockResolvedValue({
+        agent: {},
+        did: 'did:plc:testuser123',
+        isCustodial: true,
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventManagementService,
@@ -318,6 +328,10 @@ describe('EventManagementService', () => {
         {
           provide: BlueskyRsvpService,
           useValue: mockBlueskyRsvpService,
+        },
+        {
+          provide: PdsSessionService,
+          useValue: mockPdsSessionService,
         },
       ],
     })
@@ -1409,16 +1423,22 @@ describe('EventManagementService', () => {
           record: { name: 'ATProto Test Event' },
         });
 
-        // User has ATProto identity
+        // User exists and has PDS session
         const mockUserService = service[
           'userService'
         ] as jest.Mocked<UserService>;
         mockUserService.getUserById.mockResolvedValueOnce({
           ...mockUser,
-          socialId: 'did:plc:userxyz',
+          ulid: 'test-ulid',
           slug: 'test-user',
           firstName: 'Test',
         } as any);
+
+        mockPdsSessionService.getSessionForUser.mockResolvedValueOnce({
+          agent: {},
+          did: 'did:plc:userxyz',
+          isCustodial: true,
+        });
 
         // RSVP publish succeeds
         mockBlueskyRsvpService.createRsvpByUri.mockResolvedValueOnce({
@@ -1446,6 +1466,7 @@ describe('EventManagementService', () => {
           'going',
           'did:plc:userxyz',
           'test-tenant',
+          expect.any(Object),
         );
       });
 
@@ -1482,16 +1503,18 @@ describe('EventManagementService', () => {
           record: { name: 'ATProto Test Event' },
         });
 
-        // User has NO ATProto identity
+        // User exists but has NO PDS session
         const mockUserService = service[
           'userService'
         ] as jest.Mocked<UserService>;
         mockUserService.getUserById.mockResolvedValueOnce({
           ...mockUser,
-          socialId: null,
+          ulid: 'test-ulid',
           slug: 'test-user',
           firstName: 'Test',
         } as any);
+
+        mockPdsSessionService.getSessionForUser.mockResolvedValueOnce(null);
 
         await expect(
           service.attendEvent('did:plc:abc123~rkey456', mockUser.id, {}),
@@ -1544,15 +1567,21 @@ describe('EventManagementService', () => {
           rkey: 'rkey456',
         });
 
-        // User has ATProto identity
+        // User exists and has PDS session
         const mockUserService = service[
           'userService'
         ] as jest.Mocked<UserService>;
         mockUserService.getUserById.mockResolvedValueOnce({
           ...mockUser,
-          socialId: 'did:plc:userxyz',
+          ulid: 'test-ulid',
           slug: 'test-user',
         } as any);
+
+        mockPdsSessionService.getSessionForUser.mockResolvedValueOnce({
+          agent: {},
+          did: 'did:plc:userxyz',
+          isCustodial: true,
+        });
 
         // RSVP delete succeeds
         mockBlueskyRsvpService.deleteRsvpByUri.mockResolvedValueOnce(undefined);
@@ -1573,6 +1602,7 @@ describe('EventManagementService', () => {
           'at://did:plc:abc123/community.lexicon.calendar.event/rkey456',
           'did:plc:userxyz',
           'test-tenant',
+          expect.any(Object),
         );
       });
 
@@ -1584,15 +1614,17 @@ describe('EventManagementService', () => {
           rkey: 'rkey456',
         });
 
-        // User has NO ATProto identity
+        // User exists but has NO PDS session
         const mockUserService = service[
           'userService'
         ] as jest.Mocked<UserService>;
         mockUserService.getUserById.mockResolvedValueOnce({
           ...mockUser,
-          socialId: null,
+          ulid: 'test-ulid',
           slug: 'test-user',
         } as any);
+
+        mockPdsSessionService.getSessionForUser.mockResolvedValueOnce(null);
 
         await expect(
           service.cancelAttendingEvent('did:plc:abc123~rkey456', mockUser.id),
