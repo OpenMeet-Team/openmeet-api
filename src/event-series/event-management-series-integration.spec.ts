@@ -31,7 +31,9 @@ import { RecurrenceFrequency } from '../event-series/interfaces/recurrence.inter
 import { GroupMemberService } from '../group-member/group-member.service';
 import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
-// import { DiscussionService } from '../chat/services/discussion.service'; // Removed unused import
+import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
+import { ContrailQueryService } from '../contrail/contrail-query.service';
+import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
 
 describe('EventManagementService Integration with EventSeriesService', () => {
   let managementService: EventManagementService;
@@ -298,6 +300,25 @@ describe('EventManagementService Integration with EventSeriesService', () => {
           useValue: {
             isUserMemberOfGroup: jest.fn().mockResolvedValue(false),
             findMemberByUserAndGroup: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: AtprotoEnrichmentService,
+          useValue: {
+            parseAtprotoSlug: jest.fn().mockReturnValue(null),
+          },
+        },
+        {
+          provide: ContrailQueryService,
+          useValue: {
+            findByUri: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: BlueskyRsvpService,
+          useValue: {
+            createRsvpByUri: jest.fn().mockResolvedValue({ success: true }),
+            deleteRsvpByUri: jest.fn().mockResolvedValue({ success: true }),
           },
         },
       ],
