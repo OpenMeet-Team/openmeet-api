@@ -53,6 +53,7 @@ import type { Main as CalendarEvent } from '../../generated-lexicon-types/types/
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
 import { UserService } from '../../user/user.service';
+import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -73,6 +74,7 @@ export class EventQueryService {
     private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
+    private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
   ) {
     void this.initializeRepository();
   }
@@ -954,12 +956,23 @@ export class EventQueryService {
       // Get tenant DB results first
       const tenantResult = await paginate(eventQuery, { page, limit });
 
-      // Also query Contrail for ATProto-native RSVPs by this user's DID
-      const user = await this.userService.getUserById(userId);
-      if (user.socialId?.startsWith('did:')) {
+      // Look up user's DID from ATProto identity table (canonical source)
+      // Fall back to socialId for users who haven't been migrated
+      const user = await this.userService.getUserById(
+        userId,
+        this.request.tenantId,
+      );
+      const identity = await this.userAtprotoIdentityService.findByUserUlid(
+        this.request.tenantId,
+        user.ulid,
+      );
+      const userDid =
+        identity?.did ??
+        (user.socialId?.startsWith('did:') ? user.socialId : null);
+      if (userDid) {
         try {
           const contrailEvents = await this.getContrailAttendingEvents(
-            user.socialId,
+            userDid,
             tenantResult,
           );
           if (contrailEvents.length > 0) {

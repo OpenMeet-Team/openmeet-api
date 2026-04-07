@@ -330,7 +330,7 @@ export class BlueskyRsvpService {
         agent = resumedAgent;
       }
 
-      // Build RSVP record — include CID in subject if available
+      // Build RSVP record — subject is a StrongRef requiring both uri and cid
       const recordData: Record<string, unknown> = {
         $type: BLUESKY_COLLECTIONS.RSVP,
         subject: {

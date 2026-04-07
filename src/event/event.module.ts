@@ -33,6 +33,7 @@ import { GroupDIDFollowModule } from '../group-did-follow/group-did-follow.modul
 import { ContrailModule } from '../contrail/contrail.module';
 import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichment.module';
 import { PdsModule } from '../pds/pds.module';
+import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { PdsModule } from '../pds/pds.module';
     ContrailModule,
     AtprotoEnrichmentModule,
     forwardRef(() => PdsModule),
+    UserAtprotoIdentityModule,
   ],
   controllers: [
     EventController,

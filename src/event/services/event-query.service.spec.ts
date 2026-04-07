@@ -20,6 +20,7 @@ import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enric
 import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { UserService } from '../../user/user.service';
+import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 import { DashboardEventsTab } from '../dto/dashboard-events-query.dto';
 
 // Define a mock event entity for consistent use
@@ -167,7 +168,15 @@ describe('EventQueryService', () => {
         {
           provide: UserService,
           useValue: {
-            getUserById: jest.fn().mockResolvedValue({ socialId: null }),
+            getUserById: jest
+              .fn()
+              .mockResolvedValue({ ulid: 'test-ulid', socialId: null }),
+          },
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: {
+            findByUserUlid: jest.fn().mockResolvedValue(null),
           },
         },
         // Remove providers for unused services (Matrix, GroupMember, Recurrence)
@@ -1795,11 +1804,16 @@ describe('EventQueryService', () => {
           }),
         } as any);
 
-      // User has a DID
+      // User has a DID via atproto identity table (canonical source)
       const mockUserService = service['userService'] as any;
       mockUserService.getUserById = jest
         .fn()
-        .mockResolvedValue({ socialId: 'did:plc:testuser123' });
+        .mockResolvedValue({ ulid: 'test-ulid', socialId: null });
+
+      const mockIdentityService = service['userAtprotoIdentityService'] as any;
+      mockIdentityService.findByUserUlid = jest
+        .fn()
+        .mockResolvedValue({ did: 'did:plc:testuser123' });
 
       // Contrail returns an RSVP record
       const mockContrailService = service['contrailQueryService'] as any;
@@ -1884,11 +1898,14 @@ describe('EventQueryService', () => {
           }),
         } as any);
 
-      // User has no DID
+      // User has no DID - neither in identity table nor socialId
       const mockUserService = service['userService'] as any;
       mockUserService.getUserById = jest
         .fn()
-        .mockResolvedValue({ socialId: null });
+        .mockResolvedValue({ ulid: 'test-ulid', socialId: null });
+
+      const mockIdentityService = service['userAtprotoIdentityService'] as any;
+      mockIdentityService.findByUserUlid = jest.fn().mockResolvedValue(null);
 
       const mockContrailService = service['contrailQueryService'] as any;
       const contrailFindSpy = jest.spyOn(mockContrailService, 'find');
@@ -1932,11 +1949,16 @@ describe('EventQueryService', () => {
           }),
         } as any);
 
-      // User has a DID
+      // User has a DID via atproto identity table
       const mockUserService = service['userService'] as any;
       mockUserService.getUserById = jest
         .fn()
-        .mockResolvedValue({ socialId: 'did:plc:testuser123' });
+        .mockResolvedValue({ ulid: 'test-ulid', socialId: null });
+
+      const mockIdentityService = service['userAtprotoIdentityService'] as any;
+      mockIdentityService.findByUserUlid = jest
+        .fn()
+        .mockResolvedValue({ did: 'did:plc:testuser123' });
 
       // Contrail returns an RSVP for the same event
       const mockContrailService = service['contrailQueryService'] as any;
@@ -1985,11 +2007,16 @@ describe('EventQueryService', () => {
           }),
         } as any);
 
-      // User has a DID
+      // User has a DID via atproto identity table
       const mockUserService = service['userService'] as any;
       mockUserService.getUserById = jest
         .fn()
-        .mockResolvedValue({ socialId: 'did:plc:testuser123' });
+        .mockResolvedValue({ ulid: 'test-ulid', socialId: null });
+
+      const mockIdentityService = service['userAtprotoIdentityService'] as any;
+      mockIdentityService.findByUserUlid = jest
+        .fn()
+        .mockResolvedValue({ did: 'did:plc:testuser123' });
 
       // Contrail throws an error
       const mockContrailService = service['contrailQueryService'] as any;
