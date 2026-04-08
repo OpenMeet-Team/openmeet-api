@@ -113,7 +113,6 @@ export class DatabaseMetricsService implements OnModuleInit {
 
   /**
    * Record query duration for performance tracking
-   * Following pattern from rsvp-integration.service.ts:55-59
    *
    * Note: Query count is tracked via Counter, not manual calculation.
    * Use rate(db_queries_total[1m]) in Prometheus for QPS metrics.

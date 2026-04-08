@@ -807,10 +807,9 @@ describe('ActivityFeedListener', () => {
       expect(eventNames).toContain('event.ingested');
     });
 
-    it('should handle event.rsvp.ingested events for activity feed', () => {
+    it('should handle event.rsvp.added events for activity feed', () => {
       const eventNames = getEventNames('handleEventRsvpAdded');
       expect(eventNames).toContain('event.rsvp.added');
-      expect(eventNames).toContain('event.rsvp.ingested');
     });
 
     it('should handle event.ingested.updated events for activity feed', () => {

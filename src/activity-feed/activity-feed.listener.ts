@@ -348,7 +348,6 @@ export class ActivityFeedListener {
     }
   }
 
-  @OnEvent('event.rsvp.ingested')
   @OnEvent('event.rsvp.added')
   async handleEventRsvpAdded(params: {
     eventId: number;
@@ -366,7 +365,7 @@ export class ActivityFeedListener {
         eventQueryService,
       } = await this.resolveServices(params.tenantId);
 
-      this.logger.log('event rsvp added/ingested received', {
+      this.logger.log('event rsvp added received', {
         eventId: params.eventId,
         eventSlug: params.eventSlug,
         userId: params.userId,
