@@ -36,6 +36,8 @@ import { UpdateEventDto } from '../dto/update-event.dto';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence-frequency.enum';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
+import { AttendanceService } from '../../attendance/attendance.service';
+import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 
 describe('EventManagementService', () => {
   let service: EventManagementService;
@@ -283,6 +285,29 @@ describe('EventManagementService', () => {
             ensurePublishingCapability: jest
               .fn()
               .mockResolvedValue({ did: 'did:plc:test', required: true }),
+          },
+        },
+        {
+          provide: AttendanceService,
+          useValue: {
+            recordAttendance: jest.fn().mockResolvedValue({
+              status: 'going',
+              rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid123',
+              attendeeId: null,
+              eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+            }),
+            cancelAttendance: jest.fn().mockResolvedValue({
+              status: 'notgoing',
+              rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid789',
+              attendeeId: null,
+              eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+            }),
+          },
+        },
+        {
+          provide: AtprotoEnrichmentService,
+          useValue: {
+            parseAtprotoSlug: jest.fn().mockReturnValue(null),
           },
         },
       ],
@@ -3074,6 +3099,144 @@ describe('EventManagementService', () => {
       // Neither service should be called since there's no atprotoUri
       expect(mockAtprotoPublisherServiceRef.deleteEvent).not.toHaveBeenCalled();
       expect(mockBlueskyServiceRef.deleteEventRecord).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('attendEvent - ATProto slug delegation', () => {
+    it('should delegate to AttendanceService for ATProto slugs', async () => {
+      const atprotoSlug = 'did:plc:abc123~tid456';
+      const mockAtprotoEnrichmentService = service[
+        'atprotoEnrichmentService'
+      ] as jest.Mocked<AtprotoEnrichmentService>;
+      mockAtprotoEnrichmentService.parseAtprotoSlug = jest
+        .fn()
+        .mockReturnValue({ did: 'did:plc:abc123', rkey: 'tid456' });
+
+      const mockAttendanceService = service[
+        'attendanceService'
+      ] as jest.Mocked<AttendanceService>;
+      mockAttendanceService.recordAttendance = jest.fn().mockResolvedValue({
+        status: 'going',
+        rsvpUri: 'at://did:plc:abc123/community.lexicon.rsvp/tid789',
+        attendeeId: null,
+        eventUri: 'at://did:plc:abc123/community.lexicon.event/tid456',
+      });
+
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById = jest.fn().mockResolvedValue({
+        ...mockUser,
+        ulid: '01TESTULID',
+      });
+
+      const result = await service.attendEvent(atprotoSlug, TESTING_USER_ID, {
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+
+      expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
+        atprotoSlug,
+        '01TESTULID',
+        'going',
+      );
+      expect(result).toEqual({
+        id: null,
+        status: EventAttendeeStatus.Confirmed,
+        rsvpUri: 'at://did:plc:abc123/community.lexicon.rsvp/tid789',
+        eventUri: 'at://did:plc:abc123/community.lexicon.event/tid456',
+      });
+    });
+
+    it('should NOT delegate for regular slugs', async () => {
+      const regularSlug = 'my-cool-event-abc123';
+      const mockAtprotoEnrichmentService = service[
+        'atprotoEnrichmentService'
+      ] as jest.Mocked<AtprotoEnrichmentService>;
+      mockAtprotoEnrichmentService.parseAtprotoSlug = jest
+        .fn()
+        .mockReturnValue(null);
+
+      // Regular slug will proceed to find event in repository
+      mockRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.attendEvent(regularSlug, TESTING_USER_ID, {
+          status: EventAttendeeStatus.Confirmed,
+        } as any),
+      ).rejects.toThrow();
+
+      const mockAttendanceService = service[
+        'attendanceService'
+      ] as jest.Mocked<AttendanceService>;
+      expect(mockAttendanceService.recordAttendance).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cancelAttendingEvent - ATProto slug delegation', () => {
+    it('should delegate to AttendanceService for ATProto slugs', async () => {
+      const atprotoSlug = 'did:plc:abc123~tid456';
+      const mockAtprotoEnrichmentService = service[
+        'atprotoEnrichmentService'
+      ] as jest.Mocked<AtprotoEnrichmentService>;
+      mockAtprotoEnrichmentService.parseAtprotoSlug = jest
+        .fn()
+        .mockReturnValue({ did: 'did:plc:abc123', rkey: 'tid456' });
+
+      const mockAttendanceService = service[
+        'attendanceService'
+      ] as jest.Mocked<AttendanceService>;
+      mockAttendanceService.cancelAttendance = jest.fn().mockResolvedValue({
+        status: 'notgoing',
+        rsvpUri: 'at://did:plc:abc123/community.lexicon.rsvp/tid789',
+        attendeeId: null,
+        eventUri: 'at://did:plc:abc123/community.lexicon.event/tid456',
+      });
+
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById = jest.fn().mockResolvedValue({
+        ...mockUser,
+        ulid: '01TESTULID',
+      });
+
+      const result = await service.cancelAttendingEvent(
+        atprotoSlug,
+        TESTING_USER_ID,
+      );
+
+      expect(mockAttendanceService.cancelAttendance).toHaveBeenCalledWith(
+        atprotoSlug,
+        '01TESTULID',
+      );
+      expect(result).toEqual({
+        status: 'notgoing',
+        rsvpUri: 'at://did:plc:abc123/community.lexicon.rsvp/tid789',
+        attendeeId: null,
+        eventUri: 'at://did:plc:abc123/community.lexicon.event/tid456',
+      });
+    });
+
+    it('should NOT delegate for regular slugs', async () => {
+      const regularSlug = 'my-cool-event-abc123';
+      const mockAtprotoEnrichmentService = service[
+        'atprotoEnrichmentService'
+      ] as jest.Mocked<AtprotoEnrichmentService>;
+      mockAtprotoEnrichmentService.parseAtprotoSlug = jest
+        .fn()
+        .mockReturnValue(null);
+
+      // Regular slug will proceed to find event in repository
+      mockRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.cancelAttendingEvent(regularSlug, TESTING_USER_ID),
+      ).rejects.toThrow();
+
+      const mockAttendanceService = service[
+        'attendanceService'
+      ] as jest.Mocked<AttendanceService>;
+      expect(mockAttendanceService.cancelAttendance).not.toHaveBeenCalled();
     });
   });
 

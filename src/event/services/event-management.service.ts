@@ -52,6 +52,9 @@ import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publish
 import { markAtprotoSynced } from '../../atproto-publisher/atproto-sync.utils';
 import { SyncAtprotoResponseDto } from '../dto/sync-atproto-response.dto';
 import { TID } from '@atproto/common-web';
+import { AttendanceService } from '../../attendance/attendance.service';
+import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
+import { RsvpStatusShort } from '../../bluesky/BlueskyTypes';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -85,6 +88,8 @@ export class EventManagementService {
     private readonly groupMemberQueryService: GroupMemberQueryService,
     @Inject(forwardRef(() => AtprotoPublisherService))
     private readonly atprotoPublisherService: AtprotoPublisherService,
+    private readonly attendanceService: AttendanceService,
+    private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
   ) {
     void this.initializeRepository();
   }
@@ -1545,6 +1550,34 @@ export class EventManagementService {
       `[attendEvent] Processing attendance for event ${slug} and user ${userId}`,
     );
 
+    // Handle ATProto slugs (did~rkey) — foreign events, delegate directly
+    const atprotoSlug = this.atprotoEnrichmentService?.parseAtprotoSlug(slug);
+    if (atprotoSlug) {
+      const user = await this.userService.getUserById(userId);
+      const status: RsvpStatusShort =
+        createEventAttendeeDto.status === EventAttendeeStatus.Cancelled
+          ? 'notgoing'
+          : createEventAttendeeDto.status === EventAttendeeStatus.Maybe
+            ? 'interested'
+            : 'going';
+
+      const result = await this.attendanceService.recordAttendance(
+        slug,
+        user.ulid,
+        status,
+      );
+
+      return {
+        id: result.attendeeId,
+        status:
+          result.status === 'going'
+            ? EventAttendeeStatus.Confirmed
+            : result.status,
+        rsvpUri: result.rsvpUri,
+        eventUri: result.eventUri,
+      };
+    }
+
     const event = await this.eventRepository.findOne({
       where: { slug },
       relations: ['group', 'user'],
@@ -2024,6 +2057,23 @@ export class EventManagementService {
     this.logger.debug(
       `[cancelAttendingEvent] Processing cancellation for event ${slug} and user ${userId}`,
     );
+
+    // Handle ATProto slugs (did~rkey) — foreign events, delegate directly
+    const atprotoSlug = this.atprotoEnrichmentService?.parseAtprotoSlug(slug);
+    if (atprotoSlug) {
+      const user = await this.userService.getUserById(
+        userId,
+        this.request.tenantId,
+      );
+      if (!user) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+      const result = await this.attendanceService.cancelAttendance(
+        slug,
+        user.ulid,
+      );
+      return result;
+    }
 
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
