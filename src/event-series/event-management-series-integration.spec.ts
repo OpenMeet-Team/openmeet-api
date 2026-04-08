@@ -31,7 +31,8 @@ import { RecurrenceFrequency } from '../event-series/interfaces/recurrence.inter
 import { GroupMemberService } from '../group-member/group-member.service';
 import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
-// import { DiscussionService } from '../chat/services/discussion.service'; // Removed unused import
+import { AttendanceService } from '../attendance/attendance.service';
+import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
 
 describe('EventManagementService Integration with EventSeriesService', () => {
   let managementService: EventManagementService;
@@ -298,6 +299,19 @@ describe('EventManagementService Integration with EventSeriesService', () => {
           useValue: {
             isUserMemberOfGroup: jest.fn().mockResolvedValue(false),
             findMemberByUserAndGroup: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: AttendanceService,
+          useValue: {
+            recordAttendance: jest.fn(),
+            cancelAttendance: jest.fn(),
+          },
+        },
+        {
+          provide: AtprotoEnrichmentService,
+          useValue: {
+            parseAtprotoSlug: jest.fn().mockReturnValue(null),
           },
         },
       ],
