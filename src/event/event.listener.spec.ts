@@ -8,6 +8,7 @@ import { EventAttendeesEntity } from '../event-attendee/infrastructure/persisten
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { UserService } from '../user/user.service';
+import { AttendanceChangedEvent } from '../attendance/types';
 
 describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
   let listener: EventListener;
@@ -605,6 +606,73 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
       });
 
       expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleAttendanceChanged', () => {
+    const baseEvent: AttendanceChangedEvent = {
+      status: 'going',
+      previousStatus: null,
+      eventUri: null,
+      eventId: 1,
+      eventSlug: 'test-event-slug',
+      userUlid: 'user-ulid-123',
+      userDid: 'did:plc:abc',
+      tenantId: 'test-tenant',
+    };
+
+    beforeEach(() => {
+      mockUserService.findById = jest.fn();
+      (mockUserService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser);
+    });
+
+    it('should emit chat.event.member.add when status is going and eventId is set', async () => {
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith('chat.event.member.add', {
+        eventSlug: 'test-event-slug',
+        userSlug: 'test-user-slug',
+        tenantId: 'test-tenant',
+      });
+    });
+
+    it('should emit chat.event.member.remove when status is notgoing and eventId is set', async () => {
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        status: 'notgoing',
+        previousStatus: 'going',
+      });
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'chat.event.member.remove',
+        {
+          eventSlug: 'test-event-slug',
+          userSlug: 'test-user-slug',
+          tenantId: 'test-tenant',
+        },
+      );
+    });
+
+    it('should skip foreign events (eventId is null)', async () => {
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        eventId: null,
+        eventSlug: null,
+      });
+
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('should not throw on errors', async () => {
+      (mockUserService as any).findByUlid = jest
+        .fn()
+        .mockRejectedValue(new Error('boom'));
+
+      await expect(
+        listener.handleAttendanceChanged(baseEvent),
+      ).resolves.not.toThrow();
     });
   });
 });

@@ -5,6 +5,7 @@ import { EventAttendeeService } from '../../event-attendee/event-attendee.servic
 import { EventAttendeeStatus } from '../../core/constants/constant';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { ModuleRef, ContextIdFactory } from '@nestjs/core';
+import { AttendanceChangedEvent } from '../../attendance/types';
 
 describe('CalendarInviteListener - Behavior Tests', () => {
   let listener: CalendarInviteListener;
@@ -410,6 +411,61 @@ describe('CalendarInviteListener - Behavior Tests', () => {
           status: EventAttendeeStatus.Confirmed,
           tenantId: 'test',
         }),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('handleAttendanceChanged', () => {
+    const baseEvent: AttendanceChangedEvent = {
+      status: 'going',
+      previousStatus: null,
+      eventUri: null,
+      eventId: 1,
+      eventSlug: 'test-event',
+      userUlid: 'user-ulid-123',
+      userDid: 'did:plc:abc',
+      tenantId: 'test',
+    };
+
+    it('should send calendar invite for first-time RSVP to tenant event', async () => {
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(sendInviteSpy).toHaveBeenCalled();
+    });
+
+    it('should NOT send invite when previousStatus is not null (status change, not first RSVP)', async () => {
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        previousStatus: 'notgoing',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT send invite when status is notgoing', async () => {
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        status: 'notgoing',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT send invite for foreign events (eventId is null)', async () => {
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        eventId: null,
+        eventSlug: null,
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not throw on errors', async () => {
+      mockModuleRef.resolve.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        listener.handleAttendanceChanged(baseEvent),
       ).resolves.not.toThrow();
     });
   });

@@ -36,6 +36,7 @@ describe('AttendanceService', () => {
     };
     mockContrailQueryService = {
       findByUri: jest.fn(),
+      find: jest.fn(),
     };
     mockAtprotoEnrichmentService = {
       parseAtprotoSlug: jest.fn(),
@@ -419,6 +420,112 @@ describe('AttendanceService', () => {
           status: 'notgoing',
           previousStatus: 'going',
         }),
+      );
+    });
+  });
+
+  describe('isAttending', () => {
+    it('should find attending status from Contrail RSVP records', async () => {
+      mockContrailQueryService.find!.mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+            record: {
+              status: 'community.lexicon.calendar.rsvp#going',
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      const result = await service.isAttending(
+        'at://did:plc:creator/community.lexicon.calendar.event/evt1',
+        'did:plc:user1',
+      );
+
+      expect(result).toEqual({ attending: true, status: 'going' });
+    });
+
+    it('should return not attending when no RSVP in Contrail', async () => {
+      mockContrailQueryService.find!.mockResolvedValue({
+        records: [],
+        total: 0,
+      });
+
+      const result = await service.isAttending(
+        'at://did:plc:creator/community.lexicon.calendar.event/evt1',
+        'did:plc:user1',
+      );
+
+      expect(result).toEqual({ attending: false, status: null });
+    });
+
+    it('should return not attending for notgoing status', async () => {
+      mockContrailQueryService.find!.mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+            record: {
+              status: 'community.lexicon.calendar.rsvp#notgoing',
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      const result = await service.isAttending(
+        'at://did:plc:creator/community.lexicon.calendar.event/evt1',
+        'did:plc:user1',
+      );
+
+      expect(result).toEqual({ attending: false, status: 'notgoing' });
+    });
+
+    it('should return attending for interested status', async () => {
+      mockContrailQueryService.find!.mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+            record: {
+              status: 'community.lexicon.calendar.rsvp#interested',
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      const result = await service.isAttending(
+        'at://did:plc:creator/community.lexicon.calendar.event/evt1',
+        'did:plc:user1',
+      );
+
+      expect(result).toEqual({ attending: true, status: 'interested' });
+    });
+
+    it('should pass correct conditions to contrailQueryService.find', async () => {
+      mockContrailQueryService.find!.mockResolvedValue({
+        records: [],
+        total: 0,
+      });
+
+      const eventUri =
+        'at://did:plc:creator/community.lexicon.calendar.event/evt1';
+      const userDid = 'did:plc:user1';
+
+      await service.isAttending(eventUri, userDid);
+
+      expect(mockContrailQueryService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.rsvp',
+        {
+          conditions: [
+            {
+              sql: "record->'subject'->>'uri' = $1",
+              params: [eventUri],
+            },
+            { sql: 'did = $1', params: [userDid] },
+          ],
+          limit: 1,
+        },
       );
     });
   });

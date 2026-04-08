@@ -10,6 +10,7 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EVENT_LISTENER_METADATA } from '@nestjs/event-emitter/dist/constants';
+import { AttendanceChangedEvent } from '../attendance/types';
 
 describe('ActivityFeedListener', () => {
   let listener: ActivityFeedListener;
@@ -841,6 +842,88 @@ describe('ActivityFeedListener', () => {
         },
         expect.anything(),
       );
+    });
+  });
+
+  describe('handleAttendanceChanged', () => {
+    const baseEvent: AttendanceChangedEvent = {
+      status: 'going',
+      previousStatus: null,
+      eventUri: 'at://did:plc:abc/community.openmeet.event/123',
+      eventId: 200,
+      eventSlug: 'typescript-workshop',
+      userUlid: 'user-ulid-123',
+      userDid: 'did:plc:abc',
+      tenantId: 'test-tenant',
+    };
+
+    it('should create activity for tenant event attendance change', async () => {
+      eventQueryService.findEventBySlug.mockResolvedValue(
+        mockEvent as EventEntity,
+      );
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser as UserEntity);
+      groupService.getGroupBySlug.mockResolvedValue(
+        mockPublicGroup as GroupEntity,
+      );
+
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activityType: 'event.rsvp',
+          eventSlug: 'typescript-workshop',
+          actorSlug: 'sarah-chen',
+        }),
+      );
+    });
+
+    it('should create activity for foreign event (eventId null) with eventUri', async () => {
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser as UserEntity);
+
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        eventId: null,
+        eventSlug: null,
+      });
+
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activityType: 'event.rsvp',
+          feedScope: 'sitewide',
+          actorSlug: 'sarah-chen',
+        }),
+      );
+    });
+
+    it('should not create activity when user is not found', async () => {
+      (userService as any).findByUlid = jest.fn().mockResolvedValue(null);
+
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockRejectedValue(new Error('DB error'));
+
+      await expect(
+        listener.handleAttendanceChanged(baseEvent),
+      ).resolves.not.toThrow();
+    });
+
+    it('should have @OnEvent(attendance.changed) decorator', () => {
+      const metadata: Array<{ event: string }> = Reflect.getMetadata(
+        EVENT_LISTENER_METADATA,
+        ActivityFeedListener.prototype['handleAttendanceChanged'],
+      );
+      expect(metadata).toBeDefined();
+      expect(metadata.map((m) => m.event)).toContain('attendance.changed');
     });
   });
 });

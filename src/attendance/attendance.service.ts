@@ -282,6 +282,43 @@ export class AttendanceService {
     };
   }
 
+  /**
+   * Check if a user is attending a public event by querying the Contrail RSVP table.
+   * For public events, the Contrail RSVP table is the source of truth.
+   */
+  @Trace('attendance.isAttending')
+  async isAttending(
+    eventUri: string,
+    userDid: string,
+  ): Promise<{ attending: boolean; status: string | null }> {
+    const rsvpRecords = await this.contrailQueryService.find(
+      BLUESKY_COLLECTIONS.RSVP,
+      {
+        conditions: [
+          { sql: "record->'subject'->>'uri' = $1", params: [eventUri] },
+          { sql: 'did = $1', params: [userDid] },
+        ],
+        limit: 1,
+      },
+    );
+
+    if (rsvpRecords.records.length === 0) {
+      return { attending: false, status: null };
+    }
+
+    const record = rsvpRecords.records[0].record as any;
+    const fullStatus = record.status as string;
+    // Strip NSID prefix: "community.lexicon.calendar.rsvp#going" -> "going"
+    const shortStatus = fullStatus.includes('#')
+      ? fullStatus.split('#')[1]
+      : fullStatus;
+
+    return {
+      attending: shortStatus !== 'notgoing',
+      status: shortStatus,
+    };
+  }
+
   private async resolveUser(userUlid: string) {
     const user = await this.userService.findByUlid(userUlid);
     if (!user) {

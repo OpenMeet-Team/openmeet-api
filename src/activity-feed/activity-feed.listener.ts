@@ -7,6 +7,7 @@ import { UserService } from '../user/user.service';
 import { GroupVisibility, EventVisibility } from '../core/constants/constant';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { AttendanceChangedEvent } from '../attendance/types';
 
 interface ResolvedServices {
   activityFeedService: ActivityFeedService;
@@ -571,6 +572,119 @@ export class ActivityFeedListener {
     } catch (error) {
       this.logger.error(
         `Failed to create group.updated activity for ${params.slug}: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Handle attendance.changed events emitted by AttendanceService for ATProto slug RSVPs.
+   * Creates activity feed entries for all attendance changes including foreign events.
+   */
+  @OnEvent('attendance.changed')
+  async handleAttendanceChanged(event: AttendanceChangedEvent) {
+    try {
+      const {
+        activityFeedService,
+        groupService,
+        userService,
+        eventQueryService,
+      } = await this.resolveServices(event.tenantId);
+
+      this.logger.log('attendance.changed received', {
+        status: event.status,
+        eventSlug: event.eventSlug,
+        eventUri: event.eventUri,
+        userUlid: event.userUlid,
+        tenantId: event.tenantId,
+      });
+
+      // Look up user by ULID
+      const user = await userService.findByUlid(event.userUlid);
+      if (!user) {
+        this.logger.warn(
+          `User not found for ULID ${event.userUlid}, skipping activity creation`,
+        );
+        return;
+      }
+
+      const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+
+      // For tenant events (eventSlug is set), do the full lookup
+      if (event.eventSlug && event.eventId !== null) {
+        const tenantEvent = await eventQueryService.findEventBySlug(
+          event.eventSlug,
+        );
+        if (!tenantEvent) {
+          this.logger.warn(
+            `Event not found for slug ${event.eventSlug}, skipping activity creation`,
+          );
+          return;
+        }
+
+        const baseActivity = {
+          activityType: 'event.rsvp' as const,
+          eventId: tenantEvent.id,
+          eventSlug: tenantEvent.slug,
+          eventName: tenantEvent.name,
+          actorId: user.id,
+          actorSlug: user.slug,
+          actorName: actorName,
+          aggregationStrategy: 'time_window' as const,
+          aggregationWindow: 30,
+        };
+
+        if (tenantEvent.group) {
+          const group = await groupService.getGroupBySlug(
+            tenantEvent.group.slug,
+          );
+          if (!group) {
+            this.logger.warn(
+              `Group not found for event ${event.eventSlug}, skipping activity creation`,
+            );
+            return;
+          }
+
+          await activityFeedService.create({
+            ...baseActivity,
+            feedScope: 'group',
+            groupId: group.id,
+            groupSlug: group.slug,
+            groupName: group.name,
+            groupVisibility: group.visibility,
+          });
+        } else {
+          await activityFeedService.create({
+            ...baseActivity,
+            feedScope: 'event',
+          });
+        }
+
+        this.logger.log(
+          `Created event.rsvp activity via attendance.changed for ${tenantEvent.slug} by ${user.slug}`,
+        );
+      } else {
+        // Foreign event (no tenant event) - create sitewide activity
+        await activityFeedService.create({
+          activityType: 'event.rsvp',
+          feedScope: 'sitewide',
+          actorId: user.id,
+          actorSlug: user.slug,
+          actorName: actorName,
+          metadata: {
+            eventUri: event.eventUri,
+            status: event.status,
+          },
+          aggregationStrategy: 'none',
+        });
+
+        this.logger.log(
+          `Created user-scoped event.rsvp activity via attendance.changed for foreign event by ${user.slug}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to create activity via attendance.changed: ${error.message}`,
         error.stack,
       );
     }

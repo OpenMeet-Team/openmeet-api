@@ -10,6 +10,7 @@ import { GlobalMatrixValidationService } from './services/global-matrix-validati
 import { EventAttendeeQueryService } from '../event-attendee/event-attendee-query.service';
 import { EventAttendeeStatus } from '../core/constants/constant';
 import { getTenantConfig } from '../utils/tenant-config';
+import { AttendanceChangedEvent } from '../attendance/types';
 
 interface ChatMemberEvent {
   eventSlug?: string;
@@ -727,6 +728,112 @@ export class MatrixEventListener {
     } catch (error) {
       this.logger.error(
         `Failed to handle attendee status change for Matrix invitation: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Handle attendance.changed events emitted by AttendanceService for ATProto slug RSVPs.
+   * Manages Matrix room membership transitions for tenant events.
+   */
+  @OnEvent('attendance.changed')
+  async handleAttendanceChanged(event: AttendanceChangedEvent): Promise<void> {
+    // Skip foreign events - no Matrix room to manage
+    if (event.eventId === null) {
+      this.logger.debug(
+        'Skipping attendance.changed for Matrix - foreign event (no eventId)',
+      );
+      return;
+    }
+
+    try {
+      this.logger.log(
+        `Handling attendance.changed for Matrix: user ${event.userUlid} in event ${event.eventSlug}, status: ${event.previousStatus} -> ${event.status}`,
+      );
+
+      const { userService, eventQueryService, matrixRoomService } =
+        await this.resolveServices(event.tenantId);
+
+      // Look up user by ULID
+      const user = await userService.findByUlid(event.userUlid);
+      if (!user) {
+        this.logger.warn(
+          `User not found for ULID ${event.userUlid}, skipping Matrix update`,
+        );
+        return;
+      }
+
+      // Get user's Matrix handle
+      const matrixHandleRegistration =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          user.id,
+          event.tenantId,
+        );
+      if (!matrixHandleRegistration) {
+        this.logger.warn(
+          `User ${user.slug} has no Matrix handle, skipping Matrix update`,
+        );
+        return;
+      }
+
+      if (typeof matrixHandleRegistration.handle !== 'string') {
+        this.logger.error(
+          `Invalid Matrix handle data type for user ${user.slug}`,
+        );
+        return;
+      }
+
+      const serverName = this.getMatrixServerName(event.tenantId);
+      const userMatrixId = `@${matrixHandleRegistration.handle}:${serverName}`;
+
+      const roomAlias = this.roomAliasUtils.generateEventRoomAlias(
+        event.eventSlug,
+        event.tenantId,
+      );
+
+      // Determine if user should be added or removed
+      const goingStatuses = ['going', 'maybe'];
+      const wasGoing = goingStatuses.includes(event.previousStatus || '');
+      const isGoing = goingStatuses.includes(event.status);
+
+      if (isGoing && !wasGoing) {
+        // User is newly going - invite to room
+        const tenantEvent = await eventQueryService.showEventBySlugWithTenant(
+          event.eventSlug,
+          event.tenantId,
+        );
+        if (tenantEvent) {
+          await this.ensureRoomExists(
+            tenantEvent,
+            roomAlias,
+            event.tenantId,
+            matrixRoomService,
+          );
+        }
+
+        await matrixRoomService.inviteUser(roomAlias, userMatrixId);
+        this.logger.log(
+          `Invited ${userMatrixId} to event room ${roomAlias} via attendance.changed`,
+        );
+      } else if (!isGoing && wasGoing) {
+        // User is no longer going - remove from room
+        await matrixRoomService.removeUserFromRoom(roomAlias, userMatrixId);
+        this.logger.log(
+          `Removed ${userMatrixId} from event room ${roomAlias} via attendance.changed`,
+        );
+      } else if (isGoing && wasGoing) {
+        this.logger.debug(
+          `User ${user.slug} status changed but still going, no Matrix action needed`,
+        );
+      } else {
+        this.logger.debug(
+          `User ${user.slug} was not going and is still not going, no Matrix action needed`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle attendance.changed for Matrix: ${error.message}`,
         error.stack,
       );
     }

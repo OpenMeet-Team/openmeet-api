@@ -5,6 +5,7 @@ import { EventEntity } from './infrastructure/persistence/relational/entities/ev
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventAttendeeStatus } from '../core/constants/constant';
 import { UserService } from '../user/user.service';
+import { AttendanceChangedEvent } from '../attendance/types';
 
 interface ResolvedServices {
   eventAttendeeService: EventAttendeeService;
@@ -349,6 +350,66 @@ export class EventListener {
     } catch (error) {
       this.logger.error(
         `Failed to reprocess event invitations for user ${params.userId}: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Handle attendance.changed events emitted by AttendanceService for ATProto slug RSVPs.
+   * Emits chat.event.member.add/remove for tenant events only.
+   */
+  @OnEvent('attendance.changed')
+  async handleAttendanceChanged(event: AttendanceChangedEvent): Promise<void> {
+    this.logger.log('attendance.changed received', {
+      status: event.status,
+      eventSlug: event.eventSlug,
+      eventId: event.eventId,
+      userUlid: event.userUlid,
+    });
+
+    // Skip foreign events - no chat room to manage
+    if (event.eventId === null) {
+      this.logger.debug(
+        'Skipping attendance.changed for foreign event (no eventId)',
+      );
+      return;
+    }
+
+    try {
+      const { userService } = await this.resolveServices(event.tenantId);
+
+      // Look up user by ULID to get their slug
+      const user = await userService.findByUlid(event.userUlid);
+      if (!user) {
+        this.logger.warn(
+          `User not found for ULID ${event.userUlid}, skipping chat update`,
+        );
+        return;
+      }
+
+      if (event.status === 'going') {
+        this.eventEmitter.emit('chat.event.member.add', {
+          eventSlug: event.eventSlug,
+          userSlug: user.slug,
+          tenantId: event.tenantId,
+        });
+        this.logger.log(
+          `Emitted chat.event.member.add via attendance.changed for user ${user.slug} in event ${event.eventSlug}`,
+        );
+      } else if (event.status === 'notgoing') {
+        this.eventEmitter.emit('chat.event.member.remove', {
+          eventSlug: event.eventSlug,
+          userSlug: user.slug,
+          tenantId: event.tenantId,
+        });
+        this.logger.log(
+          `Emitted chat.event.member.remove via attendance.changed for user ${user.slug} in event ${event.eventSlug}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle attendance.changed for chat: ${error.message}`,
         error.stack,
       );
     }
