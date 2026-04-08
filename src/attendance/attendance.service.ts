@@ -218,6 +218,70 @@ export class AttendanceService {
     };
   }
 
+  @Trace('attendance.cancelAttendance')
+  async cancelAttendance(
+    slug: string,
+    userUlid: string,
+  ): Promise<AttendanceResult> {
+    const resolved = await this.resolveEvent(slug);
+
+    if (resolved.isPublic) {
+      const did = await this.resolveUserDid(userUlid);
+
+      const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
+        resolved.uri!,
+        'notgoing',
+        did,
+        this.request.tenantId,
+      );
+
+      // If a local record exists (role/approval overlay), cancel it too
+      if (resolved.tenantEvent) {
+        const user = await this.userService.findByUlid(userUlid);
+        try {
+          await this.eventAttendeeService.cancelEventAttendanceBySlug(
+            resolved.tenantEvent.slug,
+            user.slug,
+          );
+        } catch {
+          // No local record to cancel — that's fine for simple public RSVPs
+        }
+      }
+
+      this.emitAttendanceChanged(resolved, userUlid, did, 'notgoing', 'going');
+
+      return {
+        status: 'notgoing',
+        rsvpUri: pdsResult.rsvpUri,
+        attendeeId: null,
+        eventUri: resolved.uri,
+      };
+    }
+
+    // Private event — cancel local record
+    const user = await this.userService.findByUlid(userUlid);
+    const attendee =
+      await this.eventAttendeeService.cancelEventAttendanceBySlug(
+        resolved.tenantEvent!.slug,
+        user.slug,
+      );
+
+    this.emitAttendanceChanged(
+      resolved,
+      userUlid,
+      null,
+      'notgoing',
+      attendee.status,
+    );
+
+    return {
+      status: 'notgoing',
+      rsvpUri: null,
+      attendeeId: attendee.id,
+      eventUri: null,
+    };
+  }
+
   private async resolveUserDid(userUlid: string): Promise<string> {
     const identity = await this.identityService.findByUserUlid(
       this.request.tenantId,

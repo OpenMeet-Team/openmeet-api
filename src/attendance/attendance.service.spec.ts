@@ -337,4 +337,89 @@ describe('AttendanceService', () => {
       );
     });
   });
+
+  describe('cancelAttendance', () => {
+    it('should publish notgoing to PDS for public foreign event', async () => {
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: null,
+        uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
+        isPublic: true,
+        requiresApproval: false,
+      });
+      mockIdentityService.findByUserUlid!.mockResolvedValue({
+        did: 'did:plc:user1',
+      } as any);
+      mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
+        success: true,
+        rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+      });
+
+      const result = await service.cancelAttendance(
+        'did:plc:foreign~evt1',
+        testUserUlid,
+      );
+
+      expect(mockBlueskyRsvpService.createRsvpByUri).toHaveBeenCalledWith(
+        'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
+        'notgoing',
+        'did:plc:user1',
+        testTenantId,
+      );
+      expect(result.status).toBe('notgoing');
+    });
+
+    it('should update local record for private event cancellation', async () => {
+      const mockEvent = { id: 5, slug: 'secret-meetup' };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue({
+        slug: 'user-slug',
+      } as any);
+      mockEventAttendeeService.cancelEventAttendanceBySlug!.mockResolvedValue({
+        id: 42,
+        status: 'cancelled',
+      } as any);
+
+      const result = await service.cancelAttendance(
+        'secret-meetup',
+        testUserUlid,
+      );
+
+      expect(
+        mockEventAttendeeService.cancelEventAttendanceBySlug,
+      ).toHaveBeenCalledWith('secret-meetup', 'user-slug');
+      expect(mockBlueskyRsvpService.createRsvpByUri).not.toHaveBeenCalled();
+      expect(result.attendeeId).toBe(42);
+    });
+
+    it('should emit attendance.changed on cancellation', async () => {
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: null,
+        uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
+        isPublic: true,
+        requiresApproval: false,
+      });
+      mockIdentityService.findByUserUlid!.mockResolvedValue({
+        did: 'did:plc:user1',
+      } as any);
+      mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
+        success: true,
+        rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+      });
+
+      await service.cancelAttendance('did:plc:foreign~evt1', testUserUlid);
+
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        'attendance.changed',
+        expect.objectContaining({
+          status: 'notgoing',
+          previousStatus: 'going',
+        }),
+      );
+    });
+  });
 });
