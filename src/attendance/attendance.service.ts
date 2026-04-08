@@ -145,7 +145,7 @@ export class AttendanceService {
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
     const event = resolved.tenantEvent!;
-    const user = await this.userService.getUserByUlid(userUlid);
+    const user = await this.userService.findByUlid(userUlid);
     const attendeeStatus = this.mapToAttendeeStatus(status);
     const role = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
@@ -190,7 +190,7 @@ export class AttendanceService {
       );
     }
 
-    const user = await this.userService.getUserByUlid(userUlid);
+    const user = await this.userService.findByUlid(userUlid);
     const role = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
     );

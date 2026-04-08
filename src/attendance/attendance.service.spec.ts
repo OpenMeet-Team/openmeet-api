@@ -56,7 +56,7 @@ describe('AttendanceService', () => {
       reactivateEventAttendanceBySlug: jest.fn(),
     };
     mockUserService = {
-      getUserByUlid: jest.fn(),
+      findByUlid: jest.fn(),
     };
     mockEventRoleService = {
       getRoleByName: jest.fn(),
@@ -262,7 +262,7 @@ describe('AttendanceService', () => {
         isPublic: false,
         requiresApproval: false,
       });
-      mockUserService.getUserByUlid!.mockResolvedValue({
+      mockUserService.findByUlid!.mockResolvedValue({
         id: 10,
         ulid: testUserUlid,
         slug: 'user-slug',
@@ -309,7 +309,7 @@ describe('AttendanceService', () => {
         success: true,
         rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/xyz',
       });
-      mockUserService.getUserByUlid!.mockResolvedValue({
+      mockUserService.findByUlid!.mockResolvedValue({
         id: 10,
         ulid: testUserUlid,
         slug: 'user-slug',
