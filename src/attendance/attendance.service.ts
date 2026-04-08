@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  forwardRef,
   Inject,
   Injectable,
   Logger,
@@ -43,7 +44,9 @@ export class AttendanceService {
     private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
     private readonly blueskyRsvpService: BlueskyRsvpService,
     private readonly identityService: UserAtprotoIdentityService,
+    @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly eventRoleService: EventRoleService,
     private readonly eventEmitter: EventEmitter2,
