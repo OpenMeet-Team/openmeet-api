@@ -145,7 +145,7 @@ export class AttendanceService {
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
     const event = resolved.tenantEvent!;
-    const user = await this.userService.findByUlid(userUlid);
+    const user = await this.resolveUser(userUlid);
     const attendeeStatus = this.mapToAttendeeStatus(status);
     const role = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
@@ -190,7 +190,7 @@ export class AttendanceService {
       );
     }
 
-    const user = await this.userService.findByUlid(userUlid);
+    const user = await this.resolveUser(userUlid);
     const role = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
     );
@@ -237,7 +237,7 @@ export class AttendanceService {
 
       // If a local record exists (role/approval overlay), cancel it too
       if (resolved.tenantEvent) {
-        const user = await this.userService.findByUlid(userUlid);
+        const user = await this.resolveUser(userUlid);
         try {
           await this.eventAttendeeService.cancelEventAttendanceBySlug(
             resolved.tenantEvent.slug,
@@ -259,7 +259,7 @@ export class AttendanceService {
     }
 
     // Private event — cancel local record
-    const user = await this.userService.findByUlid(userUlid);
+    const user = await this.resolveUser(userUlid);
     const attendee =
       await this.eventAttendeeService.cancelEventAttendanceBySlug(
         resolved.tenantEvent!.slug,
@@ -280,6 +280,14 @@ export class AttendanceService {
       attendeeId: attendee.id,
       eventUri: null,
     };
+  }
+
+  private async resolveUser(userUlid: string) {
+    const user = await this.userService.findByUlid(userUlid);
+    if (!user) {
+      throw new NotFoundException(`User with ULID ${userUlid} not found`);
+    }
+    return user;
   }
 
   private async resolveUserDid(userUlid: string): Promise<string> {
