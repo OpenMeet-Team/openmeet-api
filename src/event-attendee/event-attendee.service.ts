@@ -131,7 +131,7 @@ export class EventAttendeeService {
 
         // Emit event for activity feed
         const eventPayload = {
-          eventId: saved.event.id,
+          eventId: saved.event!.id,
           eventSlug: createEventAttendeeDto.event.slug,
           userId: saved.user.id,
           userSlug: createEventAttendeeDto.user.slug,
@@ -373,7 +373,7 @@ export class EventAttendeeService {
 
     // Update with actual attendees where found
     attendees.forEach((attendee) => {
-      result.set(attendee.event.id, attendee);
+      result.set(attendee.event!.id, attendee);
     });
 
     return result;
@@ -414,7 +414,7 @@ export class EventAttendeeService {
 
     // Update with actual attendees where found
     attendees.forEach((attendee) => {
-      result.set(attendee.event.slug, attendee);
+      result.set(attendee.event!.slug, attendee);
     });
 
     return result;

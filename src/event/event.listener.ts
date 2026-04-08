@@ -107,12 +107,12 @@ export class EventListener {
         const tenantId = params.tenantId;
 
         this.eventEmitter.emit('chat.event.member.add', {
-          eventSlug: params.eventSlug || attendee.event.slug,
+          eventSlug: params.eventSlug || attendee.event!.slug,
           userSlug: params.userSlug || attendee.user.slug,
           tenantId: tenantId,
         });
         this.logger.log(
-          `Emitted chat.event.member.add event for user ${attendee.user.slug} in event ${attendee.event.slug}`,
+          `Emitted chat.event.member.add event for user ${attendee.user.slug} in event ${attendee.event!.slug}`,
         );
       }
     } catch (error) {
@@ -191,7 +191,7 @@ export class EventListener {
         });
 
         if (attendee) {
-          eventSlug = attendee.event.slug;
+          eventSlug = attendee.event!.slug;
           userSlug = attendee.user.slug;
         }
       }
@@ -339,12 +339,12 @@ export class EventListener {
       // Re-emit chat.event.member.add for each eligible attendance
       for (const attendance of eligibleAttendances) {
         this.eventEmitter.emit('chat.event.member.add', {
-          eventSlug: attendance.event.slug,
+          eventSlug: attendance.event!.slug,
           userSlug: user.slug,
           tenantId: params.tenantId,
         });
         this.logger.log(
-          `Re-emitted chat.event.member.add for user ${user.slug} in event ${attendance.event.slug}`,
+          `Re-emitted chat.event.member.add for user ${user.slug} in event ${attendance.event!.slug}`,
         );
       }
     } catch (error) {

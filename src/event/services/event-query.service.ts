@@ -544,7 +544,9 @@ export class EventQueryService {
     const events = attendees.map((attendee) => attendee.event);
 
     // Add recurrence descriptions
-    return events.map((event) => this.addRecurrenceInformation(event));
+    return events
+      .filter((event): event is EventEntity => event !== null)
+      .map((event) => this.addRecurrenceInformation(event));
   }
 
   @Trace('event-query.findEventsForGroup')

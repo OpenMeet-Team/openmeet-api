@@ -787,6 +787,13 @@ export class MatrixEventListener {
       const serverName = this.getMatrixServerName(event.tenantId);
       const userMatrixId = `@${matrixHandleRegistration.handle}:${serverName}`;
 
+      if (!event.eventSlug) {
+        this.logger.warn(
+          `attendance.changed event has no eventSlug, skipping Matrix update`,
+        );
+        return;
+      }
+
       const roomAlias = this.roomAliasUtils.generateEventRoomAlias(
         event.eventSlug,
         event.tenantId,
