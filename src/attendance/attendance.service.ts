@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -9,7 +10,11 @@ import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
-import { EventVisibility } from '../core/constants/constant';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+  EventVisibility,
+} from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { ContrailQueryService } from '../contrail/contrail-query.service';
 import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
@@ -18,8 +23,12 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
-import { BLUESKY_COLLECTIONS } from '../bluesky/BlueskyTypes';
-import { ResolvedEvent } from './types';
+import { BLUESKY_COLLECTIONS, RsvpStatusShort } from '../bluesky/BlueskyTypes';
+import {
+  AttendanceChangedEvent,
+  AttendanceResult,
+  ResolvedEvent,
+} from './types';
 import { Trace } from '../utils/trace.decorator';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
@@ -85,5 +94,170 @@ export class AttendanceService {
       isPublic: event.visibility === EventVisibility.Public,
       requiresApproval: event.requireApproval || false,
     };
+  }
+
+  @Trace('attendance.recordAttendance')
+  async recordAttendance(
+    slug: string,
+    userUlid: string,
+    status: RsvpStatusShort,
+  ): Promise<AttendanceResult> {
+    const resolved = await this.resolveEvent(slug);
+
+    if (!resolved.isPublic) {
+      return this.recordPrivateAttendance(resolved, userUlid, status);
+    }
+
+    if (resolved.requiresApproval) {
+      return this.recordPublicWithOverlay(resolved, userUlid, status);
+    }
+
+    return this.recordPublicSimple(resolved, userUlid, status);
+  }
+
+  private async recordPublicSimple(
+    resolved: ResolvedEvent,
+    userUlid: string,
+    status: RsvpStatusShort,
+  ): Promise<AttendanceResult> {
+    const did = await this.resolveUserDid(userUlid);
+
+    const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
+      resolved.uri!,
+      status,
+      did,
+      this.request.tenantId,
+    );
+
+    this.emitAttendanceChanged(resolved, userUlid, did, status);
+
+    return {
+      status,
+      rsvpUri: pdsResult.rsvpUri,
+      attendeeId: null,
+      eventUri: resolved.uri,
+    };
+  }
+
+  private async recordPrivateAttendance(
+    resolved: ResolvedEvent,
+    userUlid: string,
+    status: RsvpStatusShort,
+  ): Promise<AttendanceResult> {
+    const event = resolved.tenantEvent!;
+    const user = await this.userService.getUserByUlid(userUlid);
+    const attendeeStatus = this.mapToAttendeeStatus(status);
+    const role = await this.eventRoleService.getRoleByName(
+      EventAttendeeRole.Participant,
+    );
+
+    const attendee = await this.eventAttendeeService.create({
+      event,
+      user,
+      status: attendeeStatus,
+      role,
+    } as any);
+
+    this.emitAttendanceChanged(resolved, userUlid, null, status);
+
+    return {
+      status,
+      rsvpUri: null,
+      attendeeId: attendee.id,
+      eventUri: null,
+    };
+  }
+
+  private async recordPublicWithOverlay(
+    resolved: ResolvedEvent,
+    userUlid: string,
+    status: RsvpStatusShort,
+  ): Promise<AttendanceResult> {
+    const did = await this.resolveUserDid(userUlid);
+
+    let rsvpUri: string | null = null;
+    try {
+      const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
+        resolved.uri!,
+        status,
+        did,
+        this.request.tenantId,
+      );
+      rsvpUri = pdsResult.rsvpUri;
+    } catch (error) {
+      this.logger.warn(
+        `[recordAttendance] PDS publish failed for approval-gated event, continuing with local record: ${error.message}`,
+      );
+    }
+
+    const user = await this.userService.getUserByUlid(userUlid);
+    const role = await this.eventRoleService.getRoleByName(
+      EventAttendeeRole.Participant,
+    );
+
+    const createDto: any = {
+      event: resolved.tenantEvent!,
+      user,
+      status: EventAttendeeStatus.Pending,
+      role,
+    };
+
+    if (!resolved.tenantEvent) {
+      createDto.eventUri = resolved.uri;
+    }
+
+    const attendee = await this.eventAttendeeService.create(createDto);
+
+    this.emitAttendanceChanged(resolved, userUlid, did, status);
+
+    return {
+      status: 'pending',
+      rsvpUri,
+      attendeeId: attendee.id,
+      eventUri: resolved.uri,
+    };
+  }
+
+  private async resolveUserDid(userUlid: string): Promise<string> {
+    const identity = await this.identityService.findByUserUlid(
+      this.request.tenantId,
+      userUlid,
+    );
+    if (!identity) {
+      throw new BadRequestException(
+        'User has no AT Protocol identity. Link a Bluesky account to RSVP to public events.',
+      );
+    }
+    return identity.did;
+  }
+
+  private mapToAttendeeStatus(status: RsvpStatusShort): EventAttendeeStatus {
+    switch (status) {
+      case 'going':
+        return EventAttendeeStatus.Confirmed;
+      case 'interested':
+        return EventAttendeeStatus.Maybe;
+      case 'notgoing':
+        return EventAttendeeStatus.Cancelled;
+    }
+  }
+
+  private emitAttendanceChanged(
+    resolved: ResolvedEvent,
+    userUlid: string,
+    userDid: string | null,
+    status: string,
+    previousStatus: string | null = null,
+  ): void {
+    this.eventEmitter.emit('attendance.changed', {
+      status,
+      previousStatus,
+      eventUri: resolved.uri,
+      eventId: resolved.tenantEvent?.id ?? null,
+      eventSlug: resolved.tenantEvent?.slug ?? null,
+      userUlid,
+      userDid,
+      tenantId: this.request.tenantId,
+    } satisfies AttendanceChangedEvent);
   }
 }

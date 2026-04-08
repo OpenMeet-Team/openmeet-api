@@ -28,6 +28,7 @@ describe('AttendanceService', () => {
   let mockEventRepo: any;
 
   const testTenantId = 'test-tenant';
+  const testUserUlid = 'user-ulid-123';
 
   beforeEach(async () => {
     mockEventRepo = {
@@ -192,6 +193,148 @@ describe('AttendanceService', () => {
 
       expect(result.isPublic).toBe(true);
       expect(result.requiresApproval).toBe(true);
+    });
+  });
+
+  describe('recordAttendance', () => {
+    it('should publish to PDS only for simple public foreign event', async () => {
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: null,
+        uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
+        isPublic: true,
+        requiresApproval: false,
+      });
+      mockIdentityService.findByUserUlid!.mockResolvedValue({
+        did: 'did:plc:user1',
+      } as any);
+      mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
+        success: true,
+        rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+      });
+
+      const result = await service.recordAttendance(
+        'did:plc:foreign~evt1',
+        testUserUlid,
+        'going',
+      );
+
+      expect(mockBlueskyRsvpService.createRsvpByUri).toHaveBeenCalledWith(
+        'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
+        'going',
+        'did:plc:user1',
+        testTenantId,
+      );
+      expect(result.rsvpUri).toBe(
+        'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+      );
+      expect(result.attendeeId).toBeNull();
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        'attendance.changed',
+        expect.objectContaining({ status: 'going', previousStatus: null }),
+      );
+    });
+
+    it('should throw when user has no ATProto identity for public event', async () => {
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: null,
+        uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
+        isPublic: true,
+        requiresApproval: false,
+      });
+      mockIdentityService.findByUserUlid!.mockResolvedValue(null);
+
+      await expect(
+        service.recordAttendance('did:plc:foreign~evt1', testUserUlid, 'going'),
+      ).rejects.toThrow();
+    });
+
+    it('should create local record only for private event', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'secret-meetup',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+      });
+      mockUserService.getUserByUlid!.mockResolvedValue({
+        id: 10,
+        ulid: testUserUlid,
+        slug: 'user-slug',
+      } as any);
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 1,
+        name: 'Participant',
+      } as any);
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 42,
+        status: 'confirmed',
+      } as any);
+
+      const result = await service.recordAttendance(
+        'secret-meetup',
+        testUserUlid,
+        'going',
+      );
+
+      expect(mockEventAttendeeService.create).toHaveBeenCalled();
+      expect(mockBlueskyRsvpService.createRsvpByUri).not.toHaveBeenCalled();
+      expect(result.attendeeId).toBe(42);
+      expect(result.rsvpUri).toBeNull();
+    });
+
+    it('should create local record AND publish to PDS for approval-required public event', async () => {
+      const mockEvent = {
+        id: 7,
+        slug: 'gated-event',
+        visibility: EventVisibility.Public,
+        atprotoUri: 'at://did:plc:me/community.lexicon.calendar.event/gated',
+        requireApproval: true,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: mockEvent.atprotoUri,
+        isPublic: true,
+        requiresApproval: true,
+      });
+      mockIdentityService.findByUserUlid!.mockResolvedValue({
+        did: 'did:plc:user1',
+      } as any);
+      mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
+        success: true,
+        rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/xyz',
+      });
+      mockUserService.getUserByUlid!.mockResolvedValue({
+        id: 10,
+        ulid: testUserUlid,
+        slug: 'user-slug',
+      } as any);
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 1,
+        name: 'Participant',
+      } as any);
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 55,
+        status: 'pending',
+      } as any);
+
+      const result = await service.recordAttendance(
+        'gated-event',
+        testUserUlid,
+        'going',
+      );
+
+      expect(mockBlueskyRsvpService.createRsvpByUri).toHaveBeenCalled();
+      expect(mockEventAttendeeService.create).toHaveBeenCalled();
+      expect(result.attendeeId).toBe(55);
+      expect(result.rsvpUri).toBe(
+        'at://did:plc:user1/community.lexicon.calendar.rsvp/xyz',
+      );
     });
   });
 });
