@@ -8,7 +8,7 @@ import {
   EventVisibility,
   EventType,
 } from '../../core/constants/constant';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventQueryService } from './event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
@@ -19,6 +19,9 @@ import { ContrailQueryService } from '../../contrail/contrail-query.service';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { UserService } from '../../user/user.service';
+import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
+import { DashboardEventsTab } from '../dto/dashboard-events-query.dto';
 
 // Define a mock event entity for consistent use
 const mockEventEntity: EventEntity = {
@@ -46,6 +49,8 @@ describe('EventQueryService', () => {
   let mockGroupMemberService: jest.Mocked<GroupMemberService>; // Add declaration for the mock service
   let mockGroupDIDFollowService: { getFollowedDidsForGroup: jest.Mock };
   let mockEnrichmentService: any;
+  let mockUserService: { getUserById: jest.Mock };
+  let mockIdentityService: { findByUserUlid: jest.Mock };
 
   beforeEach(async () => {
     // Define the mock repository behavior here
@@ -94,6 +99,16 @@ describe('EventQueryService', () => {
       getFollowedDidsForGroup: jest.fn().mockResolvedValue([]),
     };
 
+    // Define mock UserService behavior
+    mockUserService = {
+      getUserById: jest.fn().mockResolvedValue({ id: 1, ulid: '01HABCDEF' }),
+    };
+
+    // Define mock UserAtprotoIdentityService behavior
+    mockIdentityService = {
+      findByUserUlid: jest.fn().mockResolvedValue(null),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventQueryService,
@@ -133,6 +148,14 @@ describe('EventQueryService', () => {
         {
           provide: GroupDIDFollowService,
           useValue: mockGroupDIDFollowService,
+        },
+        {
+          provide: UserService,
+          useValue: mockUserService,
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: mockIdentityService,
         },
         {
           provide: ContrailQueryService,
@@ -1747,6 +1770,186 @@ describe('EventQueryService', () => {
       // External event (earlier date) should come first
       expect(result[0].name).toBe('External Calendar Event');
       expect(result[1].name).toBe('Test Event');
+    });
+  });
+
+  describe('showDashboardEventsPaginated - Contrail RSVP union', () => {
+    it('should include Contrail RSVP subquery when user has ATProto identity', async () => {
+      // Set up user with ATProto identity
+      mockUserService.getUserById.mockResolvedValue({
+        id: 1,
+        ulid: '01HABCDEF',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:testuser123',
+      });
+
+      const mockQb: Record<string, any> = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getMany: jest.fn().mockResolvedValue([]),
+        getCount: jest.fn().mockResolvedValue(0),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        getQuery: jest.fn().mockReturnValue('SELECT ...'),
+        getParameters: jest.fn().mockReturnValue({}),
+        expressionMap: {
+          mainAlias: { metadata: { name: 'EventEntity' } },
+        },
+      };
+      // Ensure chainable methods return mockQb
+      for (const key of ['skip', 'take']) {
+        mockQb[key] = jest.fn().mockReturnValue(mockQb);
+      }
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      await service.showDashboardEventsPaginated(1, {
+        tab: DashboardEventsTab.Attending,
+        page: 1,
+        limit: 10,
+      });
+
+      // Verify that resolveUserDid was called
+      expect(mockUserService.getUserById).toHaveBeenCalledWith(1);
+      expect(mockIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        TESTING_TENANT_ID,
+        '01HABCDEF',
+      );
+
+      // Verify that the where was called with Brackets (which includes the Contrail subquery)
+      expect(mockQb.where).toHaveBeenCalled();
+      // The first call to where should be a Brackets instance (not a plain string)
+      const whereArg = mockQb.where.mock.calls[0][0];
+      expect(whereArg).toBeInstanceOf(Brackets);
+    });
+
+    it('should not include Contrail subquery when user has no ATProto identity', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 1,
+        ulid: '01HABCDEF',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      const mockQb: Record<string, any> = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getMany: jest.fn().mockResolvedValue([]),
+        getCount: jest.fn().mockResolvedValue(0),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        getQuery: jest.fn().mockReturnValue('SELECT ...'),
+        getParameters: jest.fn().mockReturnValue({}),
+        expressionMap: {
+          mainAlias: { metadata: { name: 'EventEntity' } },
+        },
+      };
+      for (const key of ['skip', 'take']) {
+        mockQb[key] = jest.fn().mockReturnValue(mockQb);
+      }
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      await service.showDashboardEventsPaginated(1, {
+        tab: DashboardEventsTab.Attending,
+        page: 1,
+        limit: 10,
+      });
+
+      // resolveUserDid was called but returned null
+      expect(mockUserService.getUserById).toHaveBeenCalledWith(1);
+      expect(mockIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        TESTING_TENANT_ID,
+        '01HABCDEF',
+      );
+
+      // Where should still be called with Brackets, but without the Contrail orWhere
+      expect(mockQb.where).toHaveBeenCalled();
+      const whereArg = mockQb.where.mock.calls[0][0];
+      expect(whereArg).toBeInstanceOf(Brackets);
+    });
+  });
+
+  describe('getDashboardSummary - Contrail RSVP union', () => {
+    it('should resolve user DID for attending count query', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 1,
+        ulid: '01HABCDEF',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:testuser123',
+      });
+
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getMany: jest.fn().mockResolvedValue([]),
+        getOne: jest.fn().mockResolvedValue(null),
+        getCount: jest.fn().mockResolvedValue(0),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        getRawOne: jest.fn().mockResolvedValue({ count: '0' }),
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      await service.getDashboardSummary(1);
+
+      // Verify DID resolution was attempted
+      expect(mockUserService.getUserById).toHaveBeenCalledWith(1);
+      expect(mockIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        TESTING_TENANT_ID,
+        '01HABCDEF',
+      );
     });
   });
 });

@@ -52,6 +52,8 @@ import type {
 import type { Main as CalendarEvent } from '../../generated-lexicon-types/types/community/lexicon/calendar/event';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
+import { UserService } from '../../user/user.service';
+import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -70,6 +72,9 @@ export class EventQueryService {
     private readonly groupDidFollowService: GroupDIDFollowService,
     private readonly contrailQueryService: ContrailQueryService,
     private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
+    @Inject(forwardRef(() => UserService))
+    private readonly userService: UserService,
+    private readonly identityService: UserAtprotoIdentityService,
   ) {
     void this.initializeRepository();
   }
@@ -82,6 +87,27 @@ export class EventQueryService {
     this.eventRepository = dataSource.getRepository(EventEntity);
     this.eventAttendeesRepository =
       dataSource.getRepository(EventAttendeesEntity);
+  }
+
+  /**
+   * Resolve a userId to an ATProto DID for Contrail queries.
+   * Returns null if the user has no ATProto identity.
+   */
+  private async resolveUserDid(userId: number): Promise<string | null> {
+    try {
+      const user = await this.userService.getUserById(userId);
+      if (!user?.ulid) return null;
+      const identity = await this.identityService.findByUserUlid(
+        this.request.tenantId,
+        user.ulid,
+      );
+      return identity?.did || null;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to resolve DID for userId ${userId}: ${error.message}`,
+      );
+      return null;
+    }
   }
 
   /**
@@ -772,9 +798,13 @@ export class EventQueryService {
         .leftJoinAndSelect('event.image', 'image')
         .where('event.userId = :userId', { userId });
 
+    // Resolve user DID for Contrail RSVP union
+    const userDid = await this.resolveUserDid(userId);
+
     // Base query builder for events user is attending (not cancelled, not host)
-    const createAttendingQuery = () =>
-      this.eventRepository
+    // Union: local event_attendees OR Contrail RSVP records for public events
+    const createAttendingQuery = () => {
+      const qb = this.eventRepository
         .createQueryBuilder('event')
         .leftJoinAndSelect('event.user', 'user')
         .leftJoinAndSelect('user.photo', 'userPhoto')
@@ -782,13 +812,27 @@ export class EventQueryService {
         .leftJoinAndSelect('group.image', 'groupImage')
         .leftJoinAndSelect('event.categories', 'categories')
         .leftJoinAndSelect('event.image', 'image')
-        .innerJoin(
+        .leftJoin(
           'event.attendees',
           'attendee',
           'attendee.userId = :userId AND attendee.status != :cancelledStatus',
           { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
         )
+        .where(
+          new Brackets((wb) => {
+            wb.where('attendee.id IS NOT NULL');
+            if (userDid) {
+              wb.orWhere(
+                `event."atprotoUri" IN (SELECT record->'subject'->>'uri' FROM public.records_community_lexicon_calendar_rsvp WHERE did = :userDid AND record->>'status' LIKE '%#going')`,
+                { userDid },
+              );
+            }
+          }),
+        )
         .andWhere('event.userId != :userId', { userId }); // Exclude events they're hosting
+
+      return qb;
+    };
 
     // Execute all queries in parallel
     const [
@@ -939,14 +983,28 @@ export class EventQueryService {
         .orderBy('event.startDate', 'ASC');
     } else if (tab === DashboardEventsTab.Attending) {
       // Events user is attending (not hosting, upcoming)
+      // Union: local event_attendees OR Contrail RSVP records for public events
+      const userDid = await this.resolveUserDid(userId);
+
       eventQuery = eventQuery
-        .innerJoin(
+        .leftJoin(
           'event.attendees',
           'attendee',
           'attendee.userId = :userId AND attendee.status != :cancelledStatus',
           { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
         )
-        .where('event.userId != :userId', { userId })
+        .where(
+          new Brackets((qb) => {
+            qb.where('attendee.id IS NOT NULL');
+            if (userDid) {
+              qb.orWhere(
+                `event."atprotoUri" IN (SELECT record->'subject'->>'uri' FROM public.records_community_lexicon_calendar_rsvp WHERE did = :userDid AND record->>'status' LIKE '%#going')`,
+                { userDid },
+              );
+            }
+          }),
+        )
+        .andWhere('event.userId != :userId', { userId })
         .andWhere('event.startDate >= :now', { now })
         .orderBy('event.startDate', 'ASC');
     } else if (tab === DashboardEventsTab.Past) {

@@ -3024,4 +3024,75 @@ describe('UserService', () => {
       ).not.toHaveBeenCalled();
     });
   });
+
+  describe('getProfileSummary - Contrail RSVP union', () => {
+    it('should attempt to resolve user DID for attending count', async () => {
+      const mockUserEntity = {
+        ...mockUser,
+        id: 1,
+        ulid: '01HABCDEF',
+        slug: 'test-user',
+        interests: [],
+        photo: null,
+        preferences: {},
+        isShadowAccount: false,
+      };
+
+      const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+        getCount: jest.fn().mockResolvedValue(0),
+      };
+
+      const mockManager = {
+        createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+        query: jest.fn().mockResolvedValue([{ count: '2' }]),
+      };
+
+      // Mock the repository to return our user
+      jest
+        .spyOn(userService['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            findOne: jest.fn().mockResolvedValue(mockUserEntity),
+            manager: mockManager,
+          }),
+        } as any);
+
+      // Also set up the usersRepository directly
+      (userService as any).usersRepository = {
+        findOne: jest.fn().mockResolvedValue(mockUserEntity),
+        manager: mockManager,
+      };
+
+      // Mock identity service to return a DID
+      const identityService = (userService as any).userAtprotoIdentityService;
+      identityService.findByUserUlid = jest
+        .fn()
+        .mockResolvedValue({ did: 'did:plc:testuser123' });
+
+      const result = await userService.getProfileSummary('test-user');
+
+      // Verify DID resolution was attempted
+      expect(identityService.findByUserUlid).toHaveBeenCalledWith(
+        TESTING_TENANT_ID,
+        '01HABCDEF',
+      );
+
+      // Verify Contrail count query was executed
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining('records_community_lexicon_calendar_rsvp'),
+        expect.arrayContaining(['did:plc:testuser123']),
+      );
+
+      // Result should include Contrail count
+      expect(result).toBeDefined();
+      expect(result!.counts.attendingEvents).toBe(2); // 0 local + 2 Contrail
+    });
+  });
 });
