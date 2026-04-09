@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   forwardRef,
   Inject,
   Injectable,
@@ -15,6 +16,7 @@ import {
   EventAttendeeRole,
   EventAttendeeStatus,
   EventVisibility,
+  GroupRole,
 } from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { ContrailQueryService } from '../contrail/contrail-query.service';
@@ -24,6 +26,7 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
+import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 import { BLUESKY_COLLECTIONS, RsvpStatusShort } from '../bluesky/BlueskyTypes';
 import {
   AttendanceChangedEvent,
@@ -49,6 +52,8 @@ export class AttendanceService {
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly eventRoleService: EventRoleService,
+    @Inject(forwardRef(() => GroupMemberQueryService))
+    private readonly groupMemberQueryService: GroupMemberQueryService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -112,13 +117,16 @@ export class AttendanceService {
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
     const resolved = await this.resolveEvent(slug);
+    const user = await this.resolveUser(userUlid);
+
+    await this.authorizeAttendance(resolved, user.id);
 
     if (!resolved.isPublic) {
-      return this.recordPrivateAttendance(resolved, userUlid, status);
+      return this.recordPrivateAttendance(resolved, user, status);
     }
 
     if (resolved.requiresApproval) {
-      return this.recordPublicWithOverlay(resolved, userUlid, status);
+      return this.recordPublicWithOverlay(resolved, user, userUlid, status);
     }
 
     return this.recordPublicSimple(resolved, userUlid, status);
@@ -150,11 +158,10 @@ export class AttendanceService {
 
   private async recordPrivateAttendance(
     resolved: ResolvedEvent,
-    userUlid: string,
+    user: { id: number; ulid?: string; slug?: string; [key: string]: any },
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
     const event = resolved.tenantEvent!;
-    const user = await this.resolveUser(userUlid);
     const attendeeStatus = this.mapToAttendeeStatus(status);
     const role = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
@@ -167,7 +174,7 @@ export class AttendanceService {
       role,
     } as any);
 
-    this.emitAttendanceChanged(resolved, userUlid, null, status);
+    this.emitAttendanceChanged(resolved, user.ulid!, null, status);
 
     return {
       status,
@@ -179,6 +186,7 @@ export class AttendanceService {
 
   private async recordPublicWithOverlay(
     resolved: ResolvedEvent,
+    user: { id: number; ulid?: string; slug?: string; [key: string]: any },
     userUlid: string,
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
@@ -199,7 +207,6 @@ export class AttendanceService {
       );
     }
 
-    const user = await this.resolveUser(userUlid);
     const role = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
     );
@@ -326,6 +333,63 @@ export class AttendanceService {
       attending: shortStatus !== 'notgoing',
       status: shortStatus,
     };
+  }
+
+  private async authorizeAttendance(
+    resolved: ResolvedEvent,
+    userId: number,
+  ): Promise<void> {
+    const event = resolved.tenantEvent;
+    if (!event) return; // Foreign events are always public, no auth needed
+
+    // Private event access control
+    if (!resolved.isPublic) {
+      if (event.user && event.user.id === userId) return; // Creator always allowed
+
+      const existing =
+        await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          userId,
+        );
+      if (existing) return; // Already an attendee
+
+      if (event.group?.id) {
+        const member =
+          await this.groupMemberQueryService.findGroupMemberByUserId(
+            event.group.id,
+            userId,
+            this.request.tenantId,
+          );
+        if (!member) {
+          throw new ForbiddenException(
+            'You must be invited to RSVP to this private event',
+          );
+        }
+      } else {
+        throw new ForbiddenException(
+          'You must be invited to RSVP to this private event',
+        );
+      }
+    }
+
+    // Group membership requirement (applies to public events too)
+    if (resolved.requireGroupMembership && event.group) {
+      const member = await this.groupMemberQueryService.findGroupMemberByUserId(
+        event.group.id,
+        userId,
+        this.request.tenantId,
+      );
+      if (!member) {
+        throw new BadRequestException(
+          `You must be a member of the "${event.group.slug}" group to attend this event.`,
+        );
+      }
+      if (member.groupRole?.name === GroupRole.Guest) {
+        throw new BadRequestException(
+          'Guests are not allowed to attend this event. Please contact a group admin to change your role.',
+        );
+      }
+    }
   }
 
   private async resolveUser(userUlid: string) {

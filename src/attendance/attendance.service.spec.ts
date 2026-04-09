@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { EventVisibility } from '../core/constants/constant';
 import { REQUEST } from '@nestjs/core';
@@ -11,6 +12,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
+import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 
 describe('AttendanceService', () => {
   let service: AttendanceService;
@@ -24,6 +26,9 @@ describe('AttendanceService', () => {
   let mockEventAttendeeService: jest.Mocked<Partial<EventAttendeeService>>;
   let mockUserService: jest.Mocked<Partial<UserService>>;
   let mockEventRoleService: jest.Mocked<Partial<EventRoleService>>;
+  let mockGroupMemberQueryService: jest.Mocked<
+    Partial<GroupMemberQueryService>
+  >;
   let mockTenantConnectionService: any;
   let mockEventRepo: any;
 
@@ -62,6 +67,9 @@ describe('AttendanceService', () => {
     mockEventRoleService = {
       getRoleByName: jest.fn(),
     };
+    mockGroupMemberQueryService = {
+      findGroupMemberByUserId: jest.fn(),
+    };
     mockTenantConnectionService = {
       getTenantConnection: jest.fn().mockResolvedValue({
         getRepository: jest.fn().mockReturnValue(mockEventRepo),
@@ -88,6 +96,10 @@ describe('AttendanceService', () => {
         },
         { provide: UserService, useValue: mockUserService },
         { provide: EventRoleService, useValue: mockEventRoleService },
+        {
+          provide: GroupMemberQueryService,
+          useValue: mockGroupMemberQueryService,
+        },
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
@@ -270,6 +282,11 @@ describe('AttendanceService', () => {
         maxAttendees: 0,
         requireGroupMembership: false,
       });
+      mockUserService.findByUlid!.mockResolvedValue({
+        id: 10,
+        ulid: testUserUlid,
+        slug: 'user-slug',
+      } as any);
       mockIdentityService.findByUserUlid!.mockResolvedValue({
         did: 'did:plc:user1',
       } as any);
@@ -310,6 +327,11 @@ describe('AttendanceService', () => {
         maxAttendees: 0,
         requireGroupMembership: false,
       });
+      mockUserService.findByUlid!.mockResolvedValue({
+        id: 10,
+        ulid: testUserUlid,
+        slug: 'user-slug',
+      } as any);
       mockIdentityService.findByUserUlid!.mockResolvedValue(null);
 
       await expect(
@@ -324,6 +346,8 @@ describe('AttendanceService', () => {
         visibility: EventVisibility.Private,
         atprotoUri: null,
         requireApproval: false,
+        user: { id: 10 },
+        group: null,
       };
       jest.spyOn(service, 'resolveEvent').mockResolvedValue({
         tenantEvent: mockEvent as any,
@@ -504,6 +528,252 @@ describe('AttendanceService', () => {
           previousStatus: 'going',
         }),
       );
+    });
+  });
+
+  describe('authorization', () => {
+    const mockUser = { id: 10, ulid: 'user-ulid-123', slug: 'user-slug' };
+
+    it('should allow creator to RSVP to own private event', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'private-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+        user: { id: 10 },
+        group: null,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 1,
+        name: 'Participant',
+      } as any);
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 42,
+        status: 'confirmed',
+      } as any);
+
+      const result = await service.recordAttendance(
+        'private-event',
+        testUserUlid,
+        'going',
+      );
+
+      expect(result.attendeeId).toBe(42);
+    });
+
+    it('should deny non-member from private group event', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'private-group-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+        user: { id: 999 },
+        group: { id: 1, slug: 'my-group' },
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+      mockGroupMemberQueryService.findGroupMemberByUserId!.mockResolvedValue(
+        null,
+      );
+
+      await expect(
+        service.recordAttendance('private-group-event', testUserUlid, 'going'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow group member to RSVP to private group event', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'private-group-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+        user: { id: 999 },
+        group: { id: 1, slug: 'my-group' },
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+      mockGroupMemberQueryService.findGroupMemberByUserId!.mockResolvedValue({
+        id: 1,
+        groupRole: { name: 'member' },
+      } as any);
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 1,
+        name: 'Participant',
+      } as any);
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 55,
+        status: 'confirmed',
+      } as any);
+
+      const result = await service.recordAttendance(
+        'private-group-event',
+        testUserUlid,
+        'going',
+      );
+
+      expect(result.attendeeId).toBe(55);
+    });
+
+    it('should deny non-member from private non-group event', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'private-invite-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+        user: { id: 999 },
+        group: null,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+
+      await expect(
+        service.recordAttendance('private-invite-event', testUserUlid, 'going'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should deny guest role from group-restricted event', async () => {
+      const mockEvent = {
+        id: 6,
+        slug: 'group-restricted',
+        visibility: EventVisibility.Public,
+        atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/grp',
+        requireApproval: false,
+        user: { id: 999 },
+        group: { id: 1, slug: 'my-group' },
+        requireGroupMembership: true,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: mockEvent.atprotoUri,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: true,
+      });
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+      mockGroupMemberQueryService.findGroupMemberByUserId!.mockResolvedValue({
+        id: 1,
+        groupRole: { name: 'guest' },
+      } as any);
+
+      await expect(
+        service.recordAttendance('group-restricted', testUserUlid, 'going'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should deny non-group-member from requireGroupMembership event', async () => {
+      const mockEvent = {
+        id: 6,
+        slug: 'group-restricted',
+        visibility: EventVisibility.Public,
+        atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/grp',
+        requireApproval: false,
+        user: { id: 999 },
+        group: { id: 1, slug: 'my-group' },
+        requireGroupMembership: true,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: mockEvent.atprotoUri,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: true,
+      });
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+      mockGroupMemberQueryService.findGroupMemberByUserId!.mockResolvedValue(
+        null,
+      );
+
+      await expect(
+        service.recordAttendance('group-restricted', testUserUlid, 'going'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should skip authorization entirely for foreign events', async () => {
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: null,
+        uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue({
+        id: 10,
+        ulid: testUserUlid,
+        slug: 'user-slug',
+      } as any);
+      mockIdentityService.findByUserUlid!.mockResolvedValue({
+        did: 'did:plc:user1',
+      } as any);
+      mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
+        success: true,
+        rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+      });
+
+      const result = await service.recordAttendance(
+        'did:plc:foreign~evt1',
+        testUserUlid,
+        'going',
+      );
+
+      expect(result.rsvpUri).toBe(
+        'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+      );
+      expect(
+        mockGroupMemberQueryService.findGroupMemberByUserId,
+      ).not.toHaveBeenCalled();
     });
   });
 

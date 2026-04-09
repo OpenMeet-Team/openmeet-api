@@ -8,6 +8,7 @@ import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { UserModule } from '../user/user.module';
 import { EventRoleModule } from '../event-role/event-role.module';
+import { GroupMemberModule } from '../group-member/group-member.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { EventRoleModule } from '../event-role/event-role.module';
     forwardRef(() => EventAttendeeModule),
     forwardRef(() => UserModule),
     EventRoleModule,
+    forwardRef(() => GroupMemberModule),
   ],
   providers: [AttendanceService],
   exports: [AttendanceService],
