@@ -18,7 +18,6 @@ import { CreateEventDto } from '../dto/create-event.dto';
 import { CategoryEntity } from '../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../../file/infrastructure/uploader/s3-presigned/file.service';
-import { mockEventAttendee } from '../../test/mocks';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from '../../user/user.service';
@@ -158,6 +157,8 @@ describe('EventManagementService', () => {
     } as any;
     mockUser = {
       id: TESTING_USER_ID,
+      ulid: '01HABCDEFGHJKMNPQRSTVWXYZ',
+      slug: 'test-user',
       name: 'Test User',
       role: { id: 1, name: RoleEnum.User } as any,
       preferences: {},
@@ -577,827 +578,243 @@ describe('EventManagementService', () => {
   });
 
   describe('attendEvent', () => {
-    it('should attend an event', async () => {
-      const targetEvent = findOneMockEventEntity;
-      const currentMockEventAttendee =
-        mockEventAttendee ||
-        ({ id: 1, status: EventAttendeeStatus.Confirmed } as any);
+    let mockAttendanceService: {
+      recordAttendance: jest.Mock;
+      cancelAttendance: jest.Mock;
+    };
 
-      // Restore the original implementation for this test
+    beforeEach(() => {
+      // Access the injected mock AttendanceService
+      mockAttendanceService = service['attendanceService'] as any;
+      // Reset mocks for each test
       jest.spyOn(service, 'attendEvent').mockRestore();
+    });
 
-      // Mock repository findOne to return the event
-      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
-
-      // Mock userService.getUserById
+    it('should delegate to attendanceService.recordAttendance with "going" status', async () => {
       const mockUserService = service[
         'userService'
       ] as jest.Mocked<UserService>;
       mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
 
-      // Mock eventAttendeeService.findEventAttendeeByUserId to return null (no existing record)
+      mockAttendanceService.recordAttendance.mockResolvedValueOnce({
+        status: 'going',
+        rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid123',
+        attendeeId: 42,
+        eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+      });
+
       const mockEventAttendeeService = service[
         'eventAttendeeService'
       ] as jest.Mocked<EventAttendeeService>;
-      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-        null,
-      );
-
-      // Mock eventRoleService.getRoleByName
-      const mockEventRoleService = service[
-        'eventRoleService'
-      ] as jest.Mocked<EventRoleService>;
-      mockEventRoleService.getRoleByName.mockResolvedValueOnce({
-        id: 1,
-        name: EventAttendeeRole.Participant,
-        attendees: [],
-        permissions: [],
+      mockEventAttendeeService.findOne.mockResolvedValueOnce({
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+        event: findOneMockEventEntity,
+        user: mockUser,
+        role: { id: 1, name: EventAttendeeRole.Participant, permissions: [] },
       } as any);
 
-      // Mock eventAttendeeService.showEventAttendeesCount
-      mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
-
-      // Mock eventAttendeeService.create to return a new attendee
-      mockEventAttendeeService.create.mockResolvedValueOnce(
-        currentMockEventAttendee,
-      );
-
-      // Mock eventMailService.sendMailAttendeeGuestJoined
-      const mockEventMailService = service[
-        'eventMailService'
-      ] as jest.Mocked<EventMailService>;
-      mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
-
-      // Mock the extra findEventAttendeeByUserId call that happens after we find a duplicate
-      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-        currentMockEventAttendee,
-      );
-
-      // Convert entity to DTO
-      const mockAttendeeDto = {
-        ...currentMockEventAttendee,
-        sourceType: currentMockEventAttendee.sourceType || undefined,
-        sourceId: currentMockEventAttendee.sourceId || undefined,
-        sourceUrl: currentMockEventAttendee.sourceUrl || undefined,
-        sourceData: currentMockEventAttendee.sourceData || undefined,
-        lastSyncedAt: currentMockEventAttendee.lastSyncedAt || undefined,
-      };
-
       const result = await service.attendEvent(
-        targetEvent.slug,
+        findOneMockEventEntity.slug,
         mockUser.id,
-        mockAttendeeDto,
+        {},
       );
 
+      expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
+        findOneMockEventEntity.slug,
+        mockUser.ulid,
+        'going',
+      );
       expect(result).toBeDefined();
-      expect(mockEventAttendeeService.create).toHaveBeenCalled();
-      expect(
-        mockEventMailService.sendMailAttendeeGuestJoined,
-      ).toHaveBeenCalled();
-      expect(eventEmitter.emit).toHaveBeenCalledWith(
-        'event.attendee.added',
-        expect.any(Object),
-      );
+      expect(result.id).toBe(42);
     });
 
-    it('should return existing attendee when already attending an event', async () => {
-      const targetEvent = findOneMockEventEntity;
-      const existingAttendee = {
-        id: 1,
-        status: EventAttendeeStatus.Confirmed,
-        user: mockUser,
-        event: targetEvent,
-        role: { id: 1, name: EventAttendeeRole.Participant },
-      } as any;
-
-      // Restore the original implementation for this test
-      jest.spyOn(service, 'attendEvent').mockRestore();
-
-      // Mock repository findOne to return the event
-      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
-
-      // Mock userService.getUserById
+    it('should map EventAttendeeStatus.Cancelled to "notgoing"', async () => {
       const mockUserService = service[
         'userService'
       ] as jest.Mocked<UserService>;
       mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
 
-      // Mock eventAttendeeService.findEventAttendeeByUserId to return an existing record
+      mockAttendanceService.recordAttendance.mockResolvedValueOnce({
+        status: 'notgoing',
+        rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid123',
+        attendeeId: 42,
+        eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+      });
+
       const mockEventAttendeeService = service[
         'eventAttendeeService'
       ] as jest.Mocked<EventAttendeeService>;
-      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-        existingAttendee,
-      );
-
-      // Convert entity to DTO
-      const mockAttendeeDto = {
-        ...existingAttendee,
-        sourceType: existingAttendee.sourceType || undefined,
-        sourceId: existingAttendee.sourceId || undefined,
-        sourceUrl: existingAttendee.sourceUrl || undefined,
-        sourceData: existingAttendee.sourceData || undefined,
-        lastSyncedAt: existingAttendee.lastSyncedAt || undefined,
-      };
-
-      const result = await service.attendEvent(
-        targetEvent.slug,
-        mockUser.id,
-        mockAttendeeDto,
-      );
-
-      // Should return the existing attendee without creating a new one
-      expect(result).toEqual(existingAttendee);
-      expect(mockEventAttendeeService.create).not.toHaveBeenCalled();
-      expect(
-        mockEventAttendeeService.findEventAttendeeByUserId,
-      ).toHaveBeenCalledWith(targetEvent.id, mockUser.id);
-    });
-
-    it('should handle duplicate key errors when creating attendee record', async () => {
-      const targetEvent = findOneMockEventEntity;
-      const existingAttendee = {
-        id: 1,
-        status: EventAttendeeStatus.Confirmed,
-        user: mockUser,
-        event: targetEvent,
-        role: { id: 1, name: EventAttendeeRole.Participant },
-      } as any;
-
-      // Restore the original implementation for this test
-      jest.spyOn(service, 'attendEvent').mockRestore();
-
-      // Mock repository findOne to return the event
-      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
-
-      // Mock userService.getUserById
-      const mockUserService = service[
-        'userService'
-      ] as jest.Mocked<UserService>;
-      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
-
-      // Mock eventAttendeeService.findEventAttendeeByUserId to initially return null
-      // and then return an existing record after the duplicate error
-      const mockEventAttendeeService = service[
-        'eventAttendeeService'
-      ] as jest.Mocked<EventAttendeeService>;
-      mockEventAttendeeService.findEventAttendeeByUserId
-        .mockResolvedValueOnce(null) // Initial check - no record found
-        .mockResolvedValueOnce(existingAttendee); // Second check after duplicate error
-
-      // Mock eventRoleService.getRoleByName
-      const mockEventRoleService = service[
-        'eventRoleService'
-      ] as jest.Mocked<EventRoleService>;
-      mockEventRoleService.getRoleByName.mockResolvedValueOnce({
-        id: 1,
-        name: EventAttendeeRole.Participant,
-        attendees: [],
-        permissions: [],
-      } as any);
-
-      // Mock eventAttendeeService.showEventAttendeesCount
-      mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
-
-      // Mock eventAttendeeService.create to throw a duplicate error
-      mockEventAttendeeService.create.mockRejectedValueOnce(
-        new Error('duplicate key value violates unique constraint'),
-      );
-
-      // Convert entity to DTO
-      const mockAttendeeDto = {
-        ...existingAttendee,
-        sourceType: existingAttendee.sourceType || undefined,
-        sourceId: existingAttendee.sourceId || undefined,
-        sourceUrl: existingAttendee.sourceUrl || undefined,
-        sourceData: existingAttendee.sourceData || undefined,
-        lastSyncedAt: existingAttendee.lastSyncedAt || undefined,
-      };
-
-      const result = await service.attendEvent(
-        targetEvent.slug,
-        mockUser.id,
-        mockAttendeeDto,
-      );
-
-      // Should handle the duplicate error and return the existing record
-      expect(result).toEqual(existingAttendee);
-      expect(mockEventAttendeeService.create).toHaveBeenCalled();
-      expect(
-        mockEventAttendeeService.findEventAttendeeByUserId,
-      ).toHaveBeenCalledTimes(2);
-    });
-
-    it('should respect status from CreateEventAttendeeDto when provided', async () => {
-      const targetEvent = findOneMockEventEntity;
-      const mockCancelledAttendee = {
-        id: 1,
+      mockEventAttendeeService.findOne.mockResolvedValueOnce({
+        id: 42,
         status: EventAttendeeStatus.Cancelled,
-        user: mockUser,
-        event: targetEvent,
-        role: { id: 1, name: EventAttendeeRole.Participant },
-      } as any;
+      } as any);
 
-      // Restore the original implementation for this test
-      jest.spyOn(service, 'attendEvent').mockRestore();
+      await service.attendEvent(findOneMockEventEntity.slug, mockUser.id, {
+        status: EventAttendeeStatus.Cancelled,
+      });
 
-      // Mock repository findOne to return the event
-      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
+      expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
+        findOneMockEventEntity.slug,
+        mockUser.ulid,
+        'notgoing',
+      );
+    });
 
-      // Mock userService.getUserById
+    it('should map EventAttendeeStatus.Maybe to "interested"', async () => {
       const mockUserService = service[
         'userService'
       ] as jest.Mocked<UserService>;
       mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
 
-      // Mock eventAttendeeService.findEventAttendeeByUserId to return null (no existing record)
+      mockAttendanceService.recordAttendance.mockResolvedValueOnce({
+        status: 'interested',
+        rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid123',
+        attendeeId: 42,
+        eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+      });
+
       const mockEventAttendeeService = service[
         'eventAttendeeService'
       ] as jest.Mocked<EventAttendeeService>;
-      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-        null,
-      );
-
-      // Mock eventRoleService.getRoleByName
-      const mockEventRoleService = service[
-        'eventRoleService'
-      ] as jest.Mocked<EventRoleService>;
-      mockEventRoleService.getRoleByName.mockResolvedValueOnce({
-        id: 1,
-        name: EventAttendeeRole.Participant,
-        attendees: [],
-        permissions: [],
+      mockEventAttendeeService.findOne.mockResolvedValueOnce({
+        id: 42,
+        status: EventAttendeeStatus.Maybe,
       } as any);
 
-      // Mock eventAttendeeService.showEventAttendeesCount
-      mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+      await service.attendEvent(findOneMockEventEntity.slug, mockUser.id, {
+        status: EventAttendeeStatus.Maybe,
+      });
 
-      // Mock eventAttendeeService.create to return cancelled attendee
-      mockEventAttendeeService.create.mockResolvedValueOnce(
-        mockCancelledAttendee,
-      );
-
-      // Mock eventMailService.sendMailAttendeeGuestJoined
-      const mockEventMailService = service[
-        'eventMailService'
-      ] as jest.Mocked<EventMailService>;
-      mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
-
-      // Mock the extra findEventAttendeeByUserId call that happens after creation
-      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-        mockCancelledAttendee,
-      );
-
-      // Create DTO with cancelled status - this tests the new two-button RSVP functionality
-      const attendeeDto = {
-        status: EventAttendeeStatus.Cancelled, // Explicitly set cancelled status
-      };
-
-      const result = await service.attendEvent(
-        targetEvent.slug,
-        mockUser.id,
-        attendeeDto,
-      );
-
-      expect(result).toBeDefined();
-      expect(result.status).toBe(EventAttendeeStatus.Cancelled);
-
-      // Verify the eventAttendeeService.create was called with cancelled status
-      expect(mockEventAttendeeService.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: EventAttendeeStatus.Cancelled,
-        }),
-      );
-
-      expect(eventEmitter.emit).toHaveBeenCalledWith(
-        'event.attendee.added',
-        expect.any(Object),
+      expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
+        findOneMockEventEntity.slug,
+        mockUser.ulid,
+        'interested',
       );
     });
 
-    it('should default to confirmed status when no status provided in DTO', async () => {
-      const targetEvent = findOneMockEventEntity;
-      const mockConfirmedAttendee = {
-        id: 1,
+    it('should return minimal shape when no local attendee record exists', async () => {
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+      mockAttendanceService.recordAttendance.mockResolvedValueOnce({
+        status: 'going',
+        rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid123',
+        attendeeId: null,
+        eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+      });
+
+      const result = await service.attendEvent(
+        findOneMockEventEntity.slug,
+        mockUser.id,
+        {},
+      );
+
+      expect(result).toEqual({
+        id: null,
         status: EventAttendeeStatus.Confirmed,
-        user: mockUser,
-        event: targetEvent,
-        role: { id: 1, name: EventAttendeeRole.Participant },
-      } as any;
+        rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid123',
+        eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+      });
+    });
 
-      // Restore the original implementation for this test
-      jest.spyOn(service, 'attendEvent').mockRestore();
-
-      // Mock repository findOne to return the event
-      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
-
-      // Mock userService.getUserById
+    it('should throw NotFoundException when user not found', async () => {
       const mockUserService = service[
         'userService'
       ] as jest.Mocked<UserService>;
-      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
-
-      // Mock eventAttendeeService.findEventAttendeeByUserId to return null (no existing record)
-      const mockEventAttendeeService = service[
-        'eventAttendeeService'
-      ] as jest.Mocked<EventAttendeeService>;
-      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-        null,
-      );
-
-      // Mock eventRoleService.getRoleByName
-      const mockEventRoleService = service[
-        'eventRoleService'
-      ] as jest.Mocked<EventRoleService>;
-      mockEventRoleService.getRoleByName.mockResolvedValueOnce({
-        id: 1,
-        name: EventAttendeeRole.Participant,
-        attendees: [],
-        permissions: [],
-      } as any);
-
-      // Mock eventAttendeeService.showEventAttendeesCount
-      mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
-
-      // Mock eventAttendeeService.create to return confirmed attendee
-      mockEventAttendeeService.create.mockResolvedValueOnce(
-        mockConfirmedAttendee,
-      );
-
-      // Mock eventMailService.sendMailAttendeeGuestJoined
-      const mockEventMailService = service[
-        'eventMailService'
-      ] as jest.Mocked<EventMailService>;
-      mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
-
-      // Mock the extra findEventAttendeeByUserId call that happens after creation
-      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-        mockConfirmedAttendee,
-      );
-
-      // Create DTO without status - should default to confirmed
-      const attendeeDto = {
-        // No status field provided
-      };
-
-      const result = await service.attendEvent(
-        targetEvent.slug,
-        mockUser.id,
-        attendeeDto,
-      );
-
-      expect(result).toBeDefined();
-      expect(result.status).toBe(EventAttendeeStatus.Confirmed);
-
-      // Verify the eventAttendeeService.create was called with confirmed status
-      expect(mockEventAttendeeService.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: EventAttendeeStatus.Confirmed,
-        }),
-      );
-    });
-
-    // Issue #8: RSVP Pre-Access Check Tests
-    describe('Private Event Access Control (Issue #8)', () => {
-      it('should deny RSVP to private event for non-invited users (no group)', async () => {
-        const privateEvent = {
-          ...findOneMockEventEntity,
-          visibility: EventVisibility.Private,
-          group: null,
-          groupId: null,
-          user: { id: 99999 } as UserEntity, // Different user than mockUser (not the creator)
-        } as EventEntity;
-
-        // Restore the original implementation for this test
-        jest.spyOn(service, 'attendEvent').mockRestore();
-
-        // Mock repository findOne to return the private event
-        mockRepository.findOne.mockResolvedValueOnce(privateEvent);
-
-        // Mock eventAttendeeService.findEventAttendeeByUserId to return null (not invited)
-        const mockEventAttendeeService = service[
-          'eventAttendeeService'
-        ] as jest.Mocked<EventAttendeeService>;
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          null,
-        );
-
-        const attendeeDto = {};
-
-        await expect(
-          service.attendEvent(privateEvent.slug, mockUser.id, attendeeDto),
-        ).rejects.toThrow('You must be invited to RSVP to this private event');
-      });
-
-      it('should allow RSVP to private event for already invited users', async () => {
-        const privateEvent = {
-          ...findOneMockEventEntity,
-          visibility: EventVisibility.Private,
-          group: null,
-          groupId: null,
-        } as EventEntity;
-
-        const existingAttendee = {
-          id: 1,
-          status: EventAttendeeStatus.Invited,
-          user: mockUser,
-          event: privateEvent,
-          role: { id: 1, name: EventAttendeeRole.Participant },
-        } as any;
-
-        // Restore the original implementation for this test
-        jest.spyOn(service, 'attendEvent').mockRestore();
-
-        // Mock repository findOne to return the private event
-        mockRepository.findOne.mockResolvedValueOnce(privateEvent);
-
-        // Mock eventAttendeeService.findEventAttendeeByUserId to return existing attendee
-        const mockEventAttendeeService = service[
-          'eventAttendeeService'
-        ] as jest.Mocked<EventAttendeeService>;
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          existingAttendee,
-        );
-
-        // Mock userService.getUserById
-        const mockUserService = service[
-          'userService'
-        ] as jest.Mocked<UserService>;
-        mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
-
-        // Mock the second findEventAttendeeByUserId call
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          existingAttendee,
-        );
-
-        const attendeeDto = {};
-
-        const result = await service.attendEvent(
-          privateEvent.slug,
-          mockUser.id,
-          attendeeDto,
-        );
-
-        expect(result).toBeDefined();
-        expect(result).toEqual(existingAttendee);
-      });
-
-      it('should allow RSVP to private group event for group members', async () => {
-        const privateGroupEvent = {
-          ...findOneMockEventEntity,
-          visibility: EventVisibility.Private,
-          group: { id: 123, slug: 'test-group' },
-          groupId: 123,
-          user: { id: 99999 } as UserEntity, // Different user than mockUser (not the creator)
-        } as EventEntity;
-
-        const currentMockEventAttendee = {
-          id: 1,
-          status: EventAttendeeStatus.Confirmed,
-        } as any;
-
-        // Restore the original implementation for this test
-        jest.spyOn(service, 'attendEvent').mockRestore();
-
-        // Mock repository findOne to return the private group event
-        mockRepository.findOne.mockResolvedValueOnce(privateGroupEvent);
-
-        // Mock eventAttendeeService.findEventAttendeeByUserId to return null (not yet an attendee)
-        const mockEventAttendeeService = service[
-          'eventAttendeeService'
-        ] as jest.Mocked<EventAttendeeService>;
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          null,
-        );
-
-        // Mock groupMemberService to return group member
-        mockGroupMemberQueryService.findGroupMemberByUserId.mockResolvedValueOnce(
-          {
-            id: 1,
-            userId: mockUser.id,
-            groupId: 123,
-          } as any,
-        );
-
-        // Mock userService.getUserById
-        const mockUserService = service[
-          'userService'
-        ] as jest.Mocked<UserService>;
-        mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
-
-        // Mock eventAttendeeService.findEventAttendeeByUserId second call
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          null,
-        );
-
-        // Mock eventRoleService.getRoleByName
-        const mockEventRoleService = service[
-          'eventRoleService'
-        ] as jest.Mocked<EventRoleService>;
-        mockEventRoleService.getRoleByName.mockResolvedValueOnce({
-          id: 1,
-          name: EventAttendeeRole.Participant,
-          attendees: [],
-          permissions: [],
-        } as any);
-
-        // Mock eventAttendeeService.showEventAttendeesCount
-        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(
-          0,
-        );
-
-        // Mock eventAttendeeService.create
-        mockEventAttendeeService.create.mockResolvedValueOnce(
-          currentMockEventAttendee,
-        );
-
-        // Mock eventMailService.sendMailAttendeeGuestJoined
-        const mockEventMailService = service[
-          'eventMailService'
-        ] as jest.Mocked<EventMailService>;
-        mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
-
-        // Mock the extra findEventAttendeeByUserId call
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          currentMockEventAttendee,
-        );
-
-        const attendeeDto = {};
-
-        const result = await service.attendEvent(
-          privateGroupEvent.slug,
-          mockUser.id,
-          attendeeDto,
-        );
-
-        expect(result).toBeDefined();
-        expect(
-          mockGroupMemberQueryService.findGroupMemberByUserId,
-        ).toHaveBeenCalledWith(123, mockUser.id, 'test-tenant');
-      });
-
-      it('should deny RSVP to private group event for non-group members', async () => {
-        const privateGroupEvent = {
-          ...findOneMockEventEntity,
-          visibility: EventVisibility.Private,
-          group: { id: 123, slug: 'test-group' },
-          groupId: 123,
-          user: { id: 99999 } as UserEntity, // Different user than mockUser (not the creator)
-        } as EventEntity;
-
-        // Restore the original implementation for this test
-        jest.spyOn(service, 'attendEvent').mockRestore();
-
-        // Mock repository findOne to return the private group event
-        mockRepository.findOne.mockResolvedValueOnce(privateGroupEvent);
-
-        // Mock eventAttendeeService.findEventAttendeeByUserId to return null (not an attendee)
-        const mockEventAttendeeService = service[
-          'eventAttendeeService'
-        ] as jest.Mocked<EventAttendeeService>;
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          null,
-        );
-
-        // Mock groupMemberService to return null (not a group member)
-        mockGroupMemberQueryService.findGroupMemberByUserId.mockResolvedValueOnce(
-          null,
-        );
-
-        const attendeeDto = {};
-
-        await expect(
-          service.attendEvent(privateGroupEvent.slug, mockUser.id, attendeeDto),
-        ).rejects.toThrow('You must be invited to RSVP to this private event');
-      });
-    });
-
-    describe('Creator host role preservation', () => {
-      it('should assign host role when event creator RSVPs to their own event', async () => {
-        // findOneMockEventEntity.user.id === TESTING_USER_ID === mockUser.id
-        // so the creator IS the user RSVPing
-        const targetEvent = findOneMockEventEntity;
-
-        jest.spyOn(service, 'attendEvent').mockRestore();
-
-        mockRepository.findOne.mockResolvedValueOnce(targetEvent);
-
-        const mockUserService = service[
-          'userService'
-        ] as jest.Mocked<UserService>;
-        mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
-
-        const mockEventAttendeeService = service[
-          'eventAttendeeService'
-        ] as jest.Mocked<EventAttendeeService>;
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          null,
-        );
-
-        const mockEventRoleService = service[
-          'eventRoleService'
-        ] as jest.Mocked<EventRoleService>;
-        mockEventRoleService.getRoleByName.mockResolvedValueOnce({
-          id: 2,
-          name: EventAttendeeRole.Host,
-          attendees: [],
-          permissions: [],
-        } as any);
-
-        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(
-          0,
-        );
-
-        const createdAttendee = {
-          id: 1,
-          status: EventAttendeeStatus.Confirmed,
-          role: { id: 2, name: EventAttendeeRole.Host },
-        } as any;
-        mockEventAttendeeService.create.mockResolvedValueOnce(createdAttendee);
-
-        const mockEventMailService = service[
-          'eventMailService'
-        ] as jest.Mocked<EventMailService>;
-        mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
-
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          createdAttendee,
-        );
-
-        const attendeeDto = {};
-
-        await service.attendEvent(targetEvent.slug, mockUser.id, attendeeDto);
-
-        // The key assertion: getRoleByName should be called with Host, not Participant
-        expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
-          EventAttendeeRole.Host,
-        );
-      });
-
-      it('should assign host role when event creator re-RSVPs after cancellation', async () => {
-        const targetEvent = findOneMockEventEntity;
-
-        jest.spyOn(service, 'attendEvent').mockRestore();
-
-        mockRepository.findOne.mockResolvedValueOnce(targetEvent);
-
-        const mockUserService = service[
-          'userService'
-        ] as jest.Mocked<UserService>;
-        mockUserService.getUserById.mockResolvedValueOnce({
-          ...mockUser,
-          slug: 'test-user',
-        } as any);
-
-        // Existing cancelled attendee record
-        const cancelledAttendee = {
-          id: 1,
-          status: EventAttendeeStatus.Cancelled,
-          role: { id: 1, name: EventAttendeeRole.Participant },
-        } as any;
-
-        const mockEventAttendeeService = service[
-          'eventAttendeeService'
-        ] as jest.Mocked<EventAttendeeService>;
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          cancelledAttendee,
-        );
-
-        const mockEventRoleService = service[
-          'eventRoleService'
-        ] as jest.Mocked<EventRoleService>;
-        mockEventRoleService.getRoleByName.mockResolvedValueOnce({
-          id: 2,
-          name: EventAttendeeRole.Host,
-          attendees: [],
-          permissions: [],
-        } as any);
-
-        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(
-          0,
-        );
-
-        const reactivatedAttendee = {
-          id: 1,
-          status: EventAttendeeStatus.Confirmed,
-          role: { id: 2, name: EventAttendeeRole.Host },
-        } as any;
-        mockEventAttendeeService.reactivateEventAttendanceBySlug.mockResolvedValueOnce(
-          reactivatedAttendee,
-        );
-
-        const mockEventMailService = service[
-          'eventMailService'
-        ] as jest.Mocked<EventMailService>;
-        mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
-
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          reactivatedAttendee,
-        );
-
-        const attendeeDto = {};
-
-        await service.attendEvent(targetEvent.slug, mockUser.id, attendeeDto);
-
-        // The key assertion: getRoleByName should be called with Host
-        expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
-          EventAttendeeRole.Host,
-        );
-        // And reactivation should use the host role id
-        expect(
-          mockEventAttendeeService.reactivateEventAttendanceBySlug,
-        ).toHaveBeenCalledWith(
-          targetEvent.slug,
-          'test-user',
-          EventAttendeeStatus.Confirmed,
-          2, // host role id
-        );
-      });
-
-      it('should assign participant role when non-creator RSVPs to an event', async () => {
-        const nonCreatorEvent = {
-          ...findOneMockEventEntity,
-          user: { id: 99999 } as UserEntity, // Different user than mockUser
-        } as EventEntity;
-
-        jest.spyOn(service, 'attendEvent').mockRestore();
-
-        mockRepository.findOne.mockResolvedValueOnce(nonCreatorEvent);
-
-        const mockUserService = service[
-          'userService'
-        ] as jest.Mocked<UserService>;
-        mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
-
-        const mockEventAttendeeService = service[
-          'eventAttendeeService'
-        ] as jest.Mocked<EventAttendeeService>;
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          null,
-        );
-
-        const mockEventRoleService = service[
-          'eventRoleService'
-        ] as jest.Mocked<EventRoleService>;
-        mockEventRoleService.getRoleByName.mockResolvedValueOnce({
-          id: 1,
-          name: EventAttendeeRole.Participant,
-          attendees: [],
-          permissions: [],
-        } as any);
-
-        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(
-          0,
-        );
-
-        const createdAttendee = {
-          id: 1,
-          status: EventAttendeeStatus.Confirmed,
-          role: { id: 1, name: EventAttendeeRole.Participant },
-        } as any;
-        mockEventAttendeeService.create.mockResolvedValueOnce(createdAttendee);
-
-        const mockEventMailService = service[
-          'eventMailService'
-        ] as jest.Mocked<EventMailService>;
-        mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
-
-        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
-          createdAttendee,
-        );
-
-        const attendeeDto = {};
-
-        await service.attendEvent(
-          nonCreatorEvent.slug,
-          mockUser.id,
-          attendeeDto,
-        );
-
-        // The key assertion: getRoleByName should be called with Participant, not Host
-        expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
-          EventAttendeeRole.Participant,
-        );
-      });
+      mockUserService.getUserById.mockResolvedValueOnce(null as any);
+
+      await expect(
+        service.attendEvent(findOneMockEventEntity.slug, 99999, {}),
+      ).rejects.toThrow('User with ID 99999 not found');
     });
   });
 
   describe('cancelAttendingEvent', () => {
-    it('should cancel attending an event', async () => {
-      const targetEvent = findOneMockEventEntity;
-      const currentMockEventAttendee =
-        mockEventAttendee ||
-        ({ id: 1, status: EventAttendeeStatus.Cancelled } as any);
+    let mockAttendanceService: {
+      recordAttendance: jest.Mock;
+      cancelAttendance: jest.Mock;
+    };
 
-      jest
-        .spyOn(service, 'cancelAttendingEvent')
-        .mockResolvedValue(currentMockEventAttendee);
+    beforeEach(() => {
+      mockAttendanceService = service['attendanceService'] as any;
+      jest.spyOn(service, 'cancelAttendingEvent').mockRestore();
+    });
+
+    it('should delegate to attendanceService.cancelAttendance', async () => {
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+      mockAttendanceService.cancelAttendance.mockResolvedValueOnce({
+        status: 'notgoing',
+        rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid789',
+        attendeeId: 42,
+        eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+      });
+
+      const mockEventAttendeeService = service[
+        'eventAttendeeService'
+      ] as jest.Mocked<EventAttendeeService>;
+      mockEventAttendeeService.findOne.mockResolvedValueOnce({
+        id: 42,
+        status: EventAttendeeStatus.Cancelled,
+        event: findOneMockEventEntity,
+        user: mockUser,
+        role: { id: 1, name: EventAttendeeRole.Participant, permissions: [] },
+      } as any);
 
       const result = await service.cancelAttendingEvent(
-        targetEvent.slug,
+        findOneMockEventEntity.slug,
         mockUser.id,
       );
-      expect(result).toEqual(currentMockEventAttendee);
+
+      expect(mockAttendanceService.cancelAttendance).toHaveBeenCalledWith(
+        findOneMockEventEntity.slug,
+        mockUser.ulid,
+      );
+      expect(result).toBeDefined();
+      expect(result.id).toBe(42);
+    });
+
+    it('should return minimal shape when no local attendee record exists', async () => {
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+      mockAttendanceService.cancelAttendance.mockResolvedValueOnce({
+        status: 'notgoing',
+        rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid789',
+        attendeeId: null,
+        eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+      });
+
+      const result = await service.cancelAttendingEvent(
+        findOneMockEventEntity.slug,
+        mockUser.id,
+      );
+
+      expect(result).toEqual({
+        id: null,
+        status: EventAttendeeStatus.Cancelled,
+        rsvpUri: 'at://did:plc:test/community.lexicon.rsvp/tid789',
+        eventUri: 'at://did:plc:test/community.lexicon.event/tid456',
+      });
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(null as any);
+
+      await expect(
+        service.cancelAttendingEvent(findOneMockEventEntity.slug, 99999),
+      ).rejects.toThrow('User with ID 99999 not found');
     });
   });
 
@@ -3102,15 +2519,11 @@ describe('EventManagementService', () => {
     });
   });
 
-  describe('attendEvent - ATProto slug delegation', () => {
-    it('should delegate to AttendanceService for ATProto slugs', async () => {
+  describe('attendEvent - unified delegation (ATProto and regular slugs)', () => {
+    it('should delegate ATProto slugs to AttendanceService', async () => {
       const atprotoSlug = 'did:plc:abc123~tid456';
-      const mockAtprotoEnrichmentService = service[
-        'atprotoEnrichmentService'
-      ] as jest.Mocked<AtprotoEnrichmentService>;
-      mockAtprotoEnrichmentService.parseAtprotoSlug = jest
-        .fn()
-        .mockReturnValue({ did: 'did:plc:abc123', rkey: 'tid456' });
+
+      jest.spyOn(service, 'attendEvent').mockRestore();
 
       const mockAttendanceService = service[
         'attendanceService'
@@ -3147,40 +2560,53 @@ describe('EventManagementService', () => {
       });
     });
 
-    it('should NOT delegate for regular slugs', async () => {
+    it('should also delegate regular slugs to AttendanceService', async () => {
       const regularSlug = 'my-cool-event-abc123';
-      const mockAtprotoEnrichmentService = service[
-        'atprotoEnrichmentService'
-      ] as jest.Mocked<AtprotoEnrichmentService>;
-      mockAtprotoEnrichmentService.parseAtprotoSlug = jest
-        .fn()
-        .mockReturnValue(null);
 
-      // Regular slug will proceed to find event in repository
-      mockRepository.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.attendEvent(regularSlug, TESTING_USER_ID, {
-          status: EventAttendeeStatus.Confirmed,
-        } as any),
-      ).rejects.toThrow();
+      jest.spyOn(service, 'attendEvent').mockRestore();
 
       const mockAttendanceService = service[
         'attendanceService'
       ] as jest.Mocked<AttendanceService>;
-      expect(mockAttendanceService.recordAttendance).not.toHaveBeenCalled();
+      mockAttendanceService.recordAttendance = jest.fn().mockResolvedValue({
+        status: 'going',
+        rsvpUri: null,
+        attendeeId: 42,
+        eventUri: null,
+      });
+
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById = jest.fn().mockResolvedValue(mockUser);
+
+      const mockEventAttendeeService = service[
+        'eventAttendeeService'
+      ] as jest.Mocked<EventAttendeeService>;
+      mockEventAttendeeService.findOne.mockResolvedValueOnce({
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+
+      const result = await service.attendEvent(regularSlug, TESTING_USER_ID, {
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+
+      expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
+        regularSlug,
+        mockUser.ulid,
+        'going',
+      );
+      expect(result).toBeDefined();
+      expect(result.id).toBe(42);
     });
   });
 
-  describe('cancelAttendingEvent - ATProto slug delegation', () => {
-    it('should delegate to AttendanceService for ATProto slugs', async () => {
+  describe('cancelAttendingEvent - unified delegation (ATProto and regular slugs)', () => {
+    it('should delegate ATProto slugs to AttendanceService', async () => {
       const atprotoSlug = 'did:plc:abc123~tid456';
-      const mockAtprotoEnrichmentService = service[
-        'atprotoEnrichmentService'
-      ] as jest.Mocked<AtprotoEnrichmentService>;
-      mockAtprotoEnrichmentService.parseAtprotoSlug = jest
-        .fn()
-        .mockReturnValue({ did: 'did:plc:abc123', rkey: 'tid456' });
+
+      jest.spyOn(service, 'cancelAttendingEvent').mockRestore();
 
       const mockAttendanceService = service[
         'attendanceService'
@@ -3210,33 +2636,52 @@ describe('EventManagementService', () => {
         '01TESTULID',
       );
       expect(result).toEqual({
-        status: 'notgoing',
+        id: null,
+        status: EventAttendeeStatus.Cancelled,
         rsvpUri: 'at://did:plc:abc123/community.lexicon.rsvp/tid789',
-        attendeeId: null,
         eventUri: 'at://did:plc:abc123/community.lexicon.event/tid456',
       });
     });
 
-    it('should NOT delegate for regular slugs', async () => {
+    it('should also delegate regular slugs to AttendanceService', async () => {
       const regularSlug = 'my-cool-event-abc123';
-      const mockAtprotoEnrichmentService = service[
-        'atprotoEnrichmentService'
-      ] as jest.Mocked<AtprotoEnrichmentService>;
-      mockAtprotoEnrichmentService.parseAtprotoSlug = jest
-        .fn()
-        .mockReturnValue(null);
 
-      // Regular slug will proceed to find event in repository
-      mockRepository.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.cancelAttendingEvent(regularSlug, TESTING_USER_ID),
-      ).rejects.toThrow();
+      jest.spyOn(service, 'cancelAttendingEvent').mockRestore();
 
       const mockAttendanceService = service[
         'attendanceService'
       ] as jest.Mocked<AttendanceService>;
-      expect(mockAttendanceService.cancelAttendance).not.toHaveBeenCalled();
+      mockAttendanceService.cancelAttendance = jest.fn().mockResolvedValue({
+        status: 'notgoing',
+        rsvpUri: null,
+        attendeeId: 42,
+        eventUri: null,
+      });
+
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById = jest.fn().mockResolvedValue(mockUser);
+
+      const mockEventAttendeeService = service[
+        'eventAttendeeService'
+      ] as jest.Mocked<EventAttendeeService>;
+      mockEventAttendeeService.findOne.mockResolvedValueOnce({
+        id: 42,
+        status: EventAttendeeStatus.Cancelled,
+      } as any);
+
+      const result = await service.cancelAttendingEvent(
+        regularSlug,
+        TESTING_USER_ID,
+      );
+
+      expect(mockAttendanceService.cancelAttendance).toHaveBeenCalledWith(
+        regularSlug,
+        mockUser.ulid,
+      );
+      expect(result).toBeDefined();
+      expect(result.id).toBe(42);
     });
   });
 
