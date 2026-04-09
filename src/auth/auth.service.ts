@@ -1329,7 +1329,7 @@ export class AuthService {
     }
 
     // 7. Return success - calendar invite will be sent via CalendarInviteListener
-    // which listens for the 'event.rsvp.added' event emitted by eventAttendeeService
+    // which listens for the 'attendance.changed' event emitted by AttendanceService
     return {
       success: true,
       message:

@@ -643,14 +643,13 @@ describe('EventAttendeeService', () => {
     });
   });
 
-  describe('Calendar invite integration', () => {
-    it('should emit event.rsvp.added event when confirmed attendee is created', async () => {
+  describe('create() event emission', () => {
+    it('should NOT emit event.rsvp.added (removed - attendance.changed used instead)', async () => {
       const mockEventRole: Partial<EventRoleEntity> = {
         id: 1,
         name: 'attendee',
       };
 
-      // Create fresh mock for this test to avoid pollution
       const freshConfirmedAttendee: Partial<EventAttendeesEntity> = {
         id: 1,
         user: mockUser as UserEntity,
@@ -663,15 +662,13 @@ describe('EventAttendeeService', () => {
       const eventEmitter = module.get(EventEmitter2);
       const emitSpy = jest.spyOn(eventEmitter, 'emit');
 
-      // Setup mocks
       mockUserService.findBySlug = jest.fn().mockResolvedValue({
         ...mockUser,
-        provider: 'local', // Not a Bluesky user, skip Bluesky sync
+        provider: 'local',
       });
       mockRepository.create.mockReturnValue(freshConfirmedAttendee);
       mockRepository.save.mockResolvedValue(freshConfirmedAttendee);
 
-      // Create confirmed attendee
       const createDto = {
         event: mockEvent as EventEntity,
         user: mockUser as UserEntity,
@@ -681,95 +678,10 @@ describe('EventAttendeeService', () => {
 
       await service.create(createDto);
 
-      // Verify event.rsvp.added was emitted with correct payload
-      expect(emitSpy).toHaveBeenCalledWith(
+      // event.rsvp.added should no longer be emitted - AttendanceService emits attendance.changed instead
+      expect(emitSpy).not.toHaveBeenCalledWith(
         'event.rsvp.added',
-        expect.objectContaining({
-          eventId: mockEvent.id,
-          eventSlug: mockEvent.slug,
-          userId: mockUser.id,
-          userSlug: mockUser.slug,
-          status: EventAttendeeStatus.Confirmed,
-          tenantId: 'test-tenant',
-        }),
-      );
-    });
-
-    it('should NOT emit event.rsvp.added for pending attendees', async () => {
-      const mockEventRole: Partial<EventRoleEntity> = {
-        id: 1,
-        name: 'attendee',
-      };
-
-      const pendingAttendee = {
-        ...mockConfirmedAttendee,
-        status: EventAttendeeStatus.Pending,
-      };
-
-      const eventEmitter = module.get(EventEmitter2);
-      const emitSpy = jest.spyOn(eventEmitter, 'emit');
-
-      mockUserService.findBySlug = jest.fn().mockResolvedValue({
-        ...mockUser,
-        provider: 'local',
-      });
-      mockRepository.create.mockReturnValue(pendingAttendee);
-      mockRepository.save.mockResolvedValue(pendingAttendee);
-
-      const createDto = {
-        event: mockEvent as EventEntity,
-        user: mockUser as UserEntity,
-        role: mockEventRole as EventRoleEntity,
-        status: EventAttendeeStatus.Pending,
-      };
-
-      await service.create(createDto);
-
-      // event.rsvp.added should still be emitted for activity feed, but listener filters by status
-      expect(emitSpy).toHaveBeenCalledWith(
-        'event.rsvp.added',
-        expect.objectContaining({
-          status: EventAttendeeStatus.Pending,
-        }),
-      );
-    });
-
-    it('should still emit event.rsvp.added from create() (regression)', async () => {
-      const roleEntity = new EventRoleEntity();
-      roleEntity.id = 1;
-      roleEntity.name = EventAttendeeRole.Participant;
-
-      const createDto = {
-        event: mockEvent as EventEntity,
-        user: mockUser as UserEntity,
-        status: EventAttendeeStatus.Confirmed,
-        role: roleEntity,
-      };
-
-      const savedAttendee = {
-        id: 1,
-        ...createDto,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      mockUserService.findBySlug = jest.fn().mockResolvedValue({
-        ...mockUser,
-        provider: 'local',
-      });
-      mockRepository.create.mockReturnValue(savedAttendee);
-      mockRepository.save.mockResolvedValue(savedAttendee);
-
-      const eventEmitter = module.get(EventEmitter2);
-      const emitSpy = jest.spyOn(eventEmitter, 'emit');
-
-      await service.create(createDto);
-
-      expect(emitSpy).toHaveBeenCalledWith(
-        'event.rsvp.added',
-        expect.objectContaining({
-          eventId: mockEvent.id,
-        }),
+        expect.anything(),
       );
     });
   });

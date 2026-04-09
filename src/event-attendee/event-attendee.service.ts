@@ -129,20 +129,6 @@ export class EventAttendeeService {
           await this.syncRsvpToAtproto(attendeeWithEvent);
         }
 
-        // Emit event for activity feed
-        const eventPayload = {
-          eventId: saved.event!.id,
-          eventSlug: createEventAttendeeDto.event.slug,
-          userId: saved.user.id,
-          userSlug: createEventAttendeeDto.user.slug,
-          status: saved.status,
-          tenantId: this.request.tenantId,
-        };
-        this.logger.log(
-          `📣 Emitting event.rsvp.added: ${JSON.stringify(eventPayload)}`,
-        );
-        this.eventEmitter.emit('event.rsvp.added', eventPayload);
-
         return saved;
       } catch (error) {
         // Pass through any errors from the inner try block
