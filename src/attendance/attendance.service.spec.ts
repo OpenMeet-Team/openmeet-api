@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { EventVisibility } from '../core/constants/constant';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+  EventVisibility,
+} from '../core/constants/constant';
 import { REQUEST } from '@nestjs/core';
 import { ContrailQueryService } from '../contrail/contrail-query.service';
 import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
@@ -57,9 +61,11 @@ describe('AttendanceService', () => {
     };
     mockEventAttendeeService = {
       create: jest.fn(),
+      save: jest.fn(),
       cancelEventAttendanceBySlug: jest.fn(),
       findEventAttendeeByUserId: jest.fn(),
       reactivateEventAttendanceBySlug: jest.fn(),
+      showEventAttendeesCount: jest.fn(),
     };
     mockUserService = {
       findByUlid: jest.fn(),
@@ -774,6 +780,319 @@ describe('AttendanceService', () => {
       expect(
         mockGroupMemberQueryService.findGroupMemberByUserId,
       ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('upsert behavior', () => {
+    const mockUser = { id: 10, ulid: 'user-ulid-123', slug: 'user-slug' };
+    const mockEvent = {
+      id: 5,
+      slug: 'upsert-event',
+      visibility: EventVisibility.Private,
+      atprotoUri: null,
+      requireApproval: false,
+      user: { id: 10 }, // same as mockUser.id — creator can always attend
+      group: null,
+    };
+
+    const makeResolved = (overrides = {}) => ({
+      tenantEvent: mockEvent as any,
+      uri: null,
+      isPublic: false,
+      requiresApproval: false,
+      allowWaitlist: false,
+      maxAttendees: 0,
+      requireGroupMembership: false,
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 1,
+        name: EventAttendeeRole.Participant,
+      } as any);
+    });
+
+    it('should return existing active attendee without writing (idempotent)', async () => {
+      const existing = {
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+        role: { id: 1, name: EventAttendeeRole.Participant },
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue(makeResolved());
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        existing as any,
+      );
+
+      const result = await service.recordAttendance(
+        'upsert-event',
+        testUserUlid,
+        'going',
+      );
+
+      expect(mockEventAttendeeService.create).not.toHaveBeenCalled();
+      expect(mockEventAttendeeService.save).not.toHaveBeenCalled();
+      expect(result.attendeeId).toBe(42);
+    });
+
+    it('should reactivate cancelled attendee via save (not create)', async () => {
+      const existing = {
+        id: 42,
+        status: EventAttendeeStatus.Cancelled,
+        role: { id: 1, name: EventAttendeeRole.Participant },
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue(makeResolved());
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        existing as any,
+      );
+      mockEventAttendeeService.save!.mockResolvedValue({
+        ...existing,
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+
+      const result = await service.recordAttendance(
+        'upsert-event',
+        testUserUlid,
+        'going',
+      );
+
+      expect(mockEventAttendeeService.save).toHaveBeenCalled();
+      expect(mockEventAttendeeService.create).not.toHaveBeenCalled();
+      expect(result.attendeeId).toBe(42);
+    });
+
+    it('should create new attendee when none exists', async () => {
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue(makeResolved());
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 99,
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+
+      const result = await service.recordAttendance(
+        'upsert-event',
+        testUserUlid,
+        'going',
+      );
+
+      expect(mockEventAttendeeService.create).toHaveBeenCalled();
+      expect(result.attendeeId).toBe(99);
+    });
+  });
+
+  describe('waitlist and approval', () => {
+    const mockUser = { id: 10, ulid: 'user-ulid-123', slug: 'user-slug' };
+
+    beforeEach(() => {
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 1,
+        name: EventAttendeeRole.Participant,
+      } as any);
+    });
+
+    it('should set Waitlist status when event at capacity', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'full-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+        allowWaitlist: true,
+        maxAttendees: 10,
+        user: { id: 10 }, // creator can always attend
+        group: null,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: true,
+        maxAttendees: 10,
+        requireGroupMembership: false,
+      });
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+      mockEventAttendeeService.showEventAttendeesCount!.mockResolvedValue(10);
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Waitlist,
+      } as any);
+
+      await service.recordAttendance('full-event', testUserUlid, 'going');
+
+      expect(mockEventAttendeeService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ status: EventAttendeeStatus.Waitlist }),
+      );
+    });
+
+    it('should set Pending status for approval-required event', async () => {
+      const mockEvent = {
+        id: 6,
+        slug: 'approval-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: true,
+        user: { id: 10 }, // creator can always attend
+        group: null,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: true,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 43,
+        status: EventAttendeeStatus.Pending,
+      } as any);
+
+      await service.recordAttendance('approval-event', testUserUlid, 'going');
+
+      expect(mockEventAttendeeService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
+    });
+  });
+
+  describe('role determination', () => {
+    const mockUser = { id: 10, ulid: 'user-ulid-123', slug: 'user-slug' };
+
+    beforeEach(() => {
+      mockUserService.findByUlid!.mockResolvedValue(mockUser as any);
+    });
+
+    it('should assign Host role to event creator', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'my-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+        user: { id: 10 }, // same as mockUser.id — creator
+        group: null,
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 2,
+        name: EventAttendeeRole.Host,
+      } as any);
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+
+      await service.recordAttendance('my-event', testUserUlid, 'going');
+
+      expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
+        EventAttendeeRole.Host,
+      );
+    });
+
+    it('should assign Host role to group admin', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'group-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+        user: { id: 999 },
+        group: { id: 1, slug: 'my-group' },
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+      mockGroupMemberQueryService.findGroupMemberByUserId!.mockResolvedValue({
+        id: 1,
+        groupRole: { name: 'admin' },
+      } as any);
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 2,
+        name: EventAttendeeRole.Host,
+      } as any);
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+
+      await service.recordAttendance('group-event', testUserUlid, 'going');
+
+      expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
+        EventAttendeeRole.Host,
+      );
+    });
+
+    it('should assign Participant role to regular user', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'regular-event',
+        visibility: EventVisibility.Private,
+        atprotoUri: null,
+        requireApproval: false,
+        user: { id: 999 },
+        group: { id: 1, slug: 'my-group' },
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        null,
+      );
+      mockGroupMemberQueryService.findGroupMemberByUserId!.mockResolvedValue({
+        id: 1,
+        groupRole: { name: 'member' },
+      } as any);
+      mockEventRoleService.getRoleByName!.mockResolvedValue({
+        id: 1,
+        name: EventAttendeeRole.Participant,
+      } as any);
+      mockEventAttendeeService.create!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+
+      await service.recordAttendance('regular-event', testUserUlid, 'going');
+
+      expect(mockEventRoleService.getRoleByName).toHaveBeenCalledWith(
+        EventAttendeeRole.Participant,
+      );
     });
   });
 

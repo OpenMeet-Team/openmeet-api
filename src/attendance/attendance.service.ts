@@ -161,20 +161,19 @@ export class AttendanceService {
     user: { id: number; ulid?: string; slug?: string; [key: string]: any },
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
-    const event = resolved.tenantEvent!;
-    const attendeeStatus = this.mapToAttendeeStatus(status);
-    const role = await this.eventRoleService.getRoleByName(
-      EventAttendeeRole.Participant,
+    const { attendee, previousStatus } = await this.upsertAttendee(
+      resolved,
+      user,
+      status,
     );
 
-    const attendee = await this.eventAttendeeService.create({
-      event,
-      user,
-      status: attendeeStatus,
-      role,
-    } as any);
-
-    this.emitAttendanceChanged(resolved, user.ulid!, null, status);
+    this.emitAttendanceChanged(
+      resolved,
+      user.ulid!,
+      null,
+      status,
+      previousStatus,
+    );
 
     return {
       status,
@@ -203,35 +202,122 @@ export class AttendanceService {
       rsvpUri = pdsResult.rsvpUri;
     } catch (error) {
       this.logger.warn(
-        `[recordAttendance] PDS publish failed for approval-gated event, continuing with local record: ${error.message}`,
+        `PDS publish failed, continuing with local record: ${error.message}`,
       );
     }
 
-    const role = await this.eventRoleService.getRoleByName(
-      EventAttendeeRole.Participant,
+    const { attendee, previousStatus } = await this.upsertAttendee(
+      resolved,
+      user,
+      status,
     );
 
-    const createDto: any = {
-      event: resolved.tenantEvent!,
-      user,
-      status: EventAttendeeStatus.Pending,
-      role,
-    };
-
-    if (!resolved.tenantEvent) {
-      createDto.eventUri = resolved.uri;
-    }
-
-    const attendee = await this.eventAttendeeService.create(createDto);
-
-    this.emitAttendanceChanged(resolved, userUlid, did, status);
+    this.emitAttendanceChanged(resolved, userUlid, did, status, previousStatus);
 
     return {
-      status: 'pending',
+      status:
+        attendee.status === EventAttendeeStatus.Pending ? 'pending' : status,
       rsvpUri,
       attendeeId: attendee.id,
       eventUri: resolved.uri,
     };
+  }
+
+  private async upsertAttendee(
+    resolved: ResolvedEvent,
+    user: { id: number; [key: string]: any },
+    status: RsvpStatusShort,
+  ): Promise<{
+    attendee: any;
+    isNew: boolean;
+    previousStatus: string | null;
+  }> {
+    const event = resolved.tenantEvent!;
+    const existing = await this.eventAttendeeService.findEventAttendeeByUserId(
+      event.id,
+      user.id,
+    );
+    const attendeeStatus =
+      status === 'notgoing'
+        ? EventAttendeeStatus.Cancelled
+        : await this.calculateStatus(resolved);
+
+    if (existing) {
+      if (
+        existing.status === attendeeStatus &&
+        existing.status !== EventAttendeeStatus.Cancelled
+      ) {
+        return { attendee: existing, isNew: false, previousStatus: null };
+      }
+      const previousStatus = existing.status;
+      existing.status = attendeeStatus;
+      const roleName = await this.determineRole(resolved, user.id);
+      existing.role = await this.eventRoleService.getRoleByName(roleName);
+      const updated = await this.eventAttendeeService.save(existing);
+      return { attendee: updated, isNew: false, previousStatus };
+    }
+
+    // New record
+    const roleName = await this.determineRole(resolved, user.id);
+    const role = await this.eventRoleService.getRoleByName(roleName);
+    const attendee = await this.eventAttendeeService.create({
+      event,
+      user,
+      status: attendeeStatus,
+      role,
+    } as any);
+    return { attendee, isNew: true, previousStatus: null };
+  }
+
+  private async calculateStatus(
+    resolved: ResolvedEvent,
+  ): Promise<EventAttendeeStatus> {
+    if (resolved.requiresApproval) {
+      return EventAttendeeStatus.Pending;
+    }
+    if (resolved.allowWaitlist && resolved.maxAttendees > 0) {
+      const count = await this.eventAttendeeService.showEventAttendeesCount(
+        resolved.tenantEvent!.id,
+      );
+      if (count >= resolved.maxAttendees) {
+        return EventAttendeeStatus.Waitlist;
+      }
+    }
+    return EventAttendeeStatus.Confirmed;
+  }
+
+  private async determineRole(
+    resolved: ResolvedEvent,
+    userId: number,
+  ): Promise<EventAttendeeRole> {
+    const event = resolved.tenantEvent!;
+
+    // Event creator is always Host
+    if (event.user && event.user.id === userId) {
+      return EventAttendeeRole.Host;
+    }
+
+    // Group owner/admin is Host
+    if (event.group?.id) {
+      try {
+        const member =
+          await this.groupMemberQueryService.findGroupMemberByUserId(
+            event.group.id,
+            userId,
+            this.request.tenantId,
+          );
+        if (
+          member?.groupRole?.name === 'owner' ||
+          member?.groupRole?.name === 'admin'
+        ) {
+          return EventAttendeeRole.Host;
+        }
+      } catch {
+        // Not a group member — fall through to Participant
+      }
+    }
+
+    return EventAttendeeRole.Participant;
   }
 
   @Trace('attendance.cancelAttendance')
