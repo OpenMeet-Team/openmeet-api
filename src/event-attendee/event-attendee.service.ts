@@ -24,7 +24,6 @@ import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
 
 import { EventAttendeeQueryService } from './event-attendee-query.service';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
 import { markAtprotoSynced } from '../atproto-publisher/atproto-sync.utils';
 
@@ -40,7 +39,6 @@ export class EventAttendeeService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventRoleService: EventRoleService,
     private readonly eventAttendeeQueryService: EventAttendeeQueryService,
-    private readonly eventEmitter: EventEmitter2,
     private readonly atprotoPublisherService: AtprotoPublisherService,
   ) {
     this.logger.log('EventAttendeeService Constructed');

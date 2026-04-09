@@ -499,17 +499,6 @@ export class AttendanceService {
     return identity.did;
   }
 
-  private mapToAttendeeStatus(status: RsvpStatusShort): EventAttendeeStatus {
-    switch (status) {
-      case 'going':
-        return EventAttendeeStatus.Confirmed;
-      case 'interested':
-        return EventAttendeeStatus.Maybe;
-      case 'notgoing':
-        return EventAttendeeStatus.Cancelled;
-    }
-  }
-
   private emitAttendanceChanged(
     resolved: ResolvedEvent,
     userUlid: string,
