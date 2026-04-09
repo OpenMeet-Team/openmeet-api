@@ -5,6 +5,9 @@ export interface ResolvedEvent {
   uri: string | null;
   isPublic: boolean;
   requiresApproval: boolean;
+  allowWaitlist: boolean;
+  maxAttendees: number;
+  requireGroupMembership: boolean;
 }
 
 export interface AttendanceResult {

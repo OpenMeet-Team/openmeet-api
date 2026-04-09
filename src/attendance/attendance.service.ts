@@ -80,6 +80,9 @@ export class AttendanceService {
         uri,
         isPublic: true,
         requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
       };
     }
 
@@ -96,6 +99,9 @@ export class AttendanceService {
       uri: event.atprotoUri || null,
       isPublic: event.visibility === EventVisibility.Public,
       requiresApproval: event.requireApproval || false,
+      allowWaitlist: event.allowWaitlist || false,
+      maxAttendees: event.maxAttendees || 0,
+      requireGroupMembership: event.requireGroupMembership || false,
     };
   }
 

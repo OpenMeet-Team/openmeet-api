@@ -179,6 +179,68 @@ describe('AttendanceService', () => {
       expect(result.uri).toBeNull();
     });
 
+    it('should return authorization context fields for tenant events', async () => {
+      const mockEvent = {
+        id: 4,
+        slug: 'group-event',
+        visibility: EventVisibility.Public,
+        atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/grp',
+        requireApproval: false,
+        allowWaitlist: true,
+        maxAttendees: 50,
+        requireGroupMembership: true,
+      };
+      mockAtprotoEnrichmentService.parseAtprotoSlug!.mockReturnValue(null);
+      mockEventRepo.findOne.mockResolvedValue(mockEvent);
+
+      const result = await service.resolveEvent('group-event');
+
+      expect(result.allowWaitlist).toBe(true);
+      expect(result.maxAttendees).toBe(50);
+      expect(result.requireGroupMembership).toBe(true);
+    });
+
+    it('should default authorization context fields to false/0 for tenant events missing them', async () => {
+      const mockEvent = {
+        id: 5,
+        slug: 'simple-event',
+        visibility: EventVisibility.Public,
+        atprotoUri: null,
+        requireApproval: false,
+        // no allowWaitlist, maxAttendees, requireGroupMembership
+      };
+      mockAtprotoEnrichmentService.parseAtprotoSlug!.mockReturnValue(null);
+      mockEventRepo.findOne.mockResolvedValue(mockEvent);
+
+      const result = await service.resolveEvent('simple-event');
+
+      expect(result.allowWaitlist).toBe(false);
+      expect(result.maxAttendees).toBe(0);
+      expect(result.requireGroupMembership).toBe(false);
+    });
+
+    it('should set authorization context to false/0 for foreign events', async () => {
+      mockAtprotoEnrichmentService.parseAtprotoSlug!.mockReturnValue({
+        did: 'did:plc:foreign123',
+        rkey: 'evt456',
+      });
+      mockContrailQueryService.findByUri!.mockResolvedValue({
+        uri: 'at://did:plc:foreign123/community.lexicon.calendar.event/evt456',
+        did: 'did:plc:foreign123',
+        rkey: 'evt456',
+        cid: 'bafyabc',
+        record: { name: 'Foreign Event' },
+        time_us: 0,
+        indexed_at: new Date(),
+      } as any);
+
+      const result = await service.resolveEvent('did:plc:foreign123~evt456');
+
+      expect(result.allowWaitlist).toBe(false);
+      expect(result.maxAttendees).toBe(0);
+      expect(result.requireGroupMembership).toBe(false);
+    });
+
     it('should flag approval-required events', async () => {
       const mockEvent = {
         id: 3,
@@ -204,6 +266,9 @@ describe('AttendanceService', () => {
         uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
         isPublic: true,
         requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
       });
       mockIdentityService.findByUserUlid!.mockResolvedValue({
         did: 'did:plc:user1',
@@ -241,6 +306,9 @@ describe('AttendanceService', () => {
         uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
         isPublic: true,
         requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
       });
       mockIdentityService.findByUserUlid!.mockResolvedValue(null);
 
@@ -262,6 +330,9 @@ describe('AttendanceService', () => {
         uri: null,
         isPublic: false,
         requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
       });
       mockUserService.findByUlid!.mockResolvedValue({
         id: 10,
@@ -302,6 +373,9 @@ describe('AttendanceService', () => {
         uri: mockEvent.atprotoUri,
         isPublic: true,
         requiresApproval: true,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
       });
       mockIdentityService.findByUserUlid!.mockResolvedValue({
         did: 'did:plc:user1',
@@ -346,6 +420,9 @@ describe('AttendanceService', () => {
         uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
         isPublic: true,
         requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
       });
       mockIdentityService.findByUserUlid!.mockResolvedValue({
         did: 'did:plc:user1',
@@ -376,6 +453,9 @@ describe('AttendanceService', () => {
         uri: null,
         isPublic: false,
         requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
       });
       mockUserService.findByUlid!.mockResolvedValue({
         slug: 'user-slug',
@@ -403,6 +483,9 @@ describe('AttendanceService', () => {
         uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
         isPublic: true,
         requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
       });
       mockIdentityService.findByUserUlid!.mockResolvedValue({
         did: 'did:plc:user1',
