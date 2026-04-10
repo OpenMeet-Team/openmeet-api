@@ -216,6 +216,8 @@ describe('EventManagementService', () => {
             reactivateEventAttendance: jest.fn(),
             reactivateEventAttendanceBySlug: jest.fn(),
             findOne: jest.fn(),
+            showEventAttendee: jest.fn(),
+            updateEventAttendee: jest.fn(),
           },
         },
         {
@@ -2682,6 +2684,136 @@ describe('EventManagementService', () => {
       );
       expect(result).toBeDefined();
       expect(result.id).toBe(42);
+    });
+  });
+
+  describe('updateEventAttendee', () => {
+    const slug = 'test-event';
+    const attendeeId = 42;
+    const updateDto = {
+      status: EventAttendeeStatus.Confirmed,
+      role: EventAttendeeRole.Attendee,
+    };
+
+    const existingAttendee = {
+      id: attendeeId,
+      status: EventAttendeeStatus.Pending,
+      event: { id: 10, slug: 'test-event' },
+      user: { ulid: 'user-ulid-123' },
+    };
+
+    const updatedAttendee = {
+      id: attendeeId,
+      status: EventAttendeeStatus.Confirmed,
+      event: { id: 10, slug: 'test-event' },
+      user: { ulid: 'user-ulid-123' },
+    };
+
+    beforeEach(() => {
+      mockRepository.findOneOrFail = jest
+        .fn()
+        .mockResolvedValue(findOneMockEventEntity);
+      (eventAttendeeService.updateEventAttendee as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue({ affected: 1 });
+      // First call returns existing (before update), second returns updated (after update)
+      (eventAttendeeService.showEventAttendee as jest.Mock) = jest
+        .fn()
+        .mockResolvedValueOnce(existingAttendee)
+        .mockResolvedValueOnce(updatedAttendee);
+      // findOne returns attendee with full relations for the event emission
+      (eventAttendeeService.findOne as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue(updatedAttendee);
+    });
+
+    it('should emit attendance.changed when admin changes attendee status', async () => {
+      await service.updateEventAttendee(slug, attendeeId, updateDto);
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'attendance.changed',
+        expect.objectContaining({
+          status: 'going',
+          previousStatus: 'pending',
+          eventId: 10,
+          eventSlug: 'test-event',
+          userUlid: 'user-ulid-123',
+          eventUri: null,
+          userDid: null,
+          tenantId: 'test-tenant',
+        }),
+      );
+    });
+
+    it('should NOT emit attendance.changed when status does not change', async () => {
+      const sameStatusAttendee = {
+        ...existingAttendee,
+        status: EventAttendeeStatus.Confirmed,
+      };
+      (eventAttendeeService.showEventAttendee as jest.Mock) = jest
+        .fn()
+        .mockResolvedValueOnce(sameStatusAttendee)
+        .mockResolvedValueOnce(sameStatusAttendee);
+      (eventAttendeeService.findOne as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue(sameStatusAttendee);
+
+      await service.updateEventAttendee(slug, attendeeId, updateDto);
+
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'attendance.changed',
+        expect.anything(),
+      );
+    });
+
+    it('should map Cancelled status to notgoing', async () => {
+      const cancelledAttendee = {
+        ...updatedAttendee,
+        status: EventAttendeeStatus.Cancelled,
+      };
+      (eventAttendeeService.showEventAttendee as jest.Mock) = jest
+        .fn()
+        .mockResolvedValueOnce(existingAttendee)
+        .mockResolvedValueOnce(cancelledAttendee);
+      (eventAttendeeService.findOne as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue(cancelledAttendee);
+
+      const cancelDto = {
+        status: EventAttendeeStatus.Cancelled,
+        role: EventAttendeeRole.Attendee,
+      };
+      await service.updateEventAttendee(slug, attendeeId, cancelDto);
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'attendance.changed',
+        expect.objectContaining({
+          status: 'notgoing',
+          previousStatus: 'pending',
+        }),
+      );
+    });
+
+    it('should still send mail and return updated attendee', async () => {
+      const result = await service.updateEventAttendee(
+        slug,
+        attendeeId,
+        updateDto,
+      );
+
+      expect(result).toEqual(updatedAttendee);
+    });
+
+    it('should capture previousStatus BEFORE the update', async () => {
+      await service.updateEventAttendee(slug, attendeeId, updateDto);
+
+      // showEventAttendee should be called twice: once before update, once after
+      expect(eventAttendeeService.showEventAttendee).toHaveBeenCalledTimes(2);
+      // First call captures the old status
+      expect(eventAttendeeService.showEventAttendee).toHaveBeenNthCalledWith(
+        1,
+        attendeeId,
+      );
     });
   });
 

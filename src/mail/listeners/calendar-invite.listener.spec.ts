@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CalendarInviteListener } from './calendar-invite.listener';
 import { CalendarInviteService } from '../services/calendar-invite.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { UserService } from '../../user/user.service';
 import { EventAttendeeStatus } from '../../core/constants/constant';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { ModuleRef, ContextIdFactory } from '@nestjs/core';
@@ -16,6 +17,7 @@ describe('CalendarInviteListener - Behavior Tests', () => {
   };
   let mockEventAttendeeService: { findOne: jest.Mock };
   let mockCalendarInviteService: { sendCalendarInvite: jest.Mock };
+  let mockUserService: { findByUlid: jest.Mock };
 
   const mockTenantConfig = {
     tenantId: 'test',
@@ -43,6 +45,14 @@ describe('CalendarInviteListener - Behavior Tests', () => {
       sendCalendarInvite: jest.fn(),
     };
 
+    mockUserService = {
+      findByUlid: jest.fn().mockResolvedValue({
+        id: 1,
+        ulid: 'user-ulid-123',
+        email: 'attendee@example.com',
+      }),
+    };
+
     mockModuleRef = {
       registerRequestByContextId: jest.fn(),
       resolve: jest.fn().mockImplementation((serviceClass: any) => {
@@ -51,6 +61,9 @@ describe('CalendarInviteListener - Behavior Tests', () => {
         }
         if (serviceClass === EventAttendeeService) {
           return Promise.resolve(mockEventAttendeeService);
+        }
+        if (serviceClass === UserService) {
+          return Promise.resolve(mockUserService);
         }
         return Promise.resolve({});
       }),
@@ -196,6 +209,44 @@ describe('CalendarInviteListener - Behavior Tests', () => {
       await expect(
         listener.handleAttendanceChanged(baseEvent),
       ).resolves.not.toThrow();
+    });
+
+    it('should resolve UserService via ModuleRef', async () => {
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(mockModuleRef.resolve).toHaveBeenCalledWith(
+        UserService,
+        expect.anything(),
+        { strict: false },
+      );
+    });
+
+    it('should look up user by ULID from the event', async () => {
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(mockUserService.findByUlid).toHaveBeenCalledWith('user-ulid-123');
+    });
+
+    it('should filter attendee lookup by both event ID and user ID', async () => {
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(mockEventAttendeeService.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            event: { id: 1 },
+            user: { id: 1 },
+          },
+        }),
+      );
+    });
+
+    it('should NOT send invite when user is not found by ULID', async () => {
+      mockUserService.findByUlid.mockResolvedValue(null);
+
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+      expect(mockEventAttendeeService.findOne).not.toHaveBeenCalled();
     });
   });
 });

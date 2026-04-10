@@ -3,6 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { CalendarInviteService } from '../services/calendar-invite.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { AttendanceChangedEvent } from '../../attendance/types';
 
@@ -31,15 +32,19 @@ export class CalendarInviteListener {
       { tenantId, headers: { 'x-tenant-id': tenantId } },
       contextId,
     );
-    const [calendarInviteService, eventAttendeeService] = await Promise.all([
-      this.moduleRef.resolve(CalendarInviteService, contextId, {
-        strict: false,
-      }),
-      this.moduleRef.resolve(EventAttendeeService, contextId, {
-        strict: false,
-      }),
-    ]);
-    return { calendarInviteService, eventAttendeeService };
+    const [calendarInviteService, eventAttendeeService, userService] =
+      await Promise.all([
+        this.moduleRef.resolve(CalendarInviteService, contextId, {
+          strict: false,
+        }),
+        this.moduleRef.resolve(EventAttendeeService, contextId, {
+          strict: false,
+        }),
+        this.moduleRef.resolve(UserService, contextId, {
+          strict: false,
+        }),
+      ]);
+    return { calendarInviteService, eventAttendeeService, userService };
   }
 
   /**
@@ -75,21 +80,30 @@ export class CalendarInviteListener {
     }
 
     try {
-      const { calendarInviteService, eventAttendeeService } =
+      const { calendarInviteService, eventAttendeeService, userService } =
         await this.resolveServices(event.tenantId);
 
-      // Look up the attendee by event ID and user ULID
-      // We need to find the user first, then the attendee record
+      // Look up the user by ULID so we can filter the attendee query
+      const user = await userService.findByUlid(event.userUlid);
+      if (!user) {
+        this.logger.warn(
+          `User not found for ULID ${event.userUlid}, skipping calendar invite`,
+        );
+        return;
+      }
+
+      // Look up the attendee by event ID and user ID
       const attendees = await eventAttendeeService.findOne({
         where: {
           event: { id: event.eventId },
+          user: { id: user.id },
         },
         relations: ['event', 'event.user', 'user'],
       });
 
       if (!attendees) {
         this.logger.warn(
-          `Attendee record not found for event ${event.eventId}`,
+          `Attendee record not found for event ${event.eventId}, user ${user.id}`,
         );
         return;
       }

@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { Agent } from '@atproto/api';
 import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter, Histogram } from 'prom-client';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
@@ -36,6 +37,8 @@ export class BlueskyRsvpService {
     @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
     private readonly blueskyIdService: BlueskyIdService,
+    @Inject(forwardRef(() => PdsSessionService))
+    private readonly pdsSessionService: PdsSessionService,
     @InjectMetric('bluesky_rsvp_operations_total')
     private readonly rsvpOperationsCounter: Counter<string>,
     @InjectMetric('bluesky_rsvp_processing_duration_seconds')
@@ -289,7 +292,7 @@ export class BlueskyRsvpService {
    *
    * @param eventUri The AT Protocol URI of the event
    * @param status The RSVP status (going, interested, or notgoing)
-   * @param did The user's Bluesky DID
+   * @param did The user's AT Protocol DID
    * @param tenantId The tenant ID
    * @param providedAgent Optional pre-authenticated agent
    */
@@ -309,30 +312,55 @@ export class BlueskyRsvpService {
 
     try {
       this.logger.debug(
-        `Starting Bluesky RSVP creation by URI for user ${did}`,
+        `Starting AT Protocol RSVP creation by URI for user ${did}`,
         { eventUri, userDid: did, tenantId, status },
       );
 
       // Get agent for the user
+      // Use PdsSessionService which handles both OAuth and custodial accounts
       let agent: Agent;
       if (providedAgent) {
         agent = providedAgent;
         this.logger.debug(`Using provided agent for user ${did}`);
       } else {
-        const resumedAgent = await this.blueskyService.resumeSession(
+        const sessionResult = await this.pdsSessionService.getSessionForDid(
           tenantId,
           did,
         );
-        if (!resumedAgent) {
-          throw new Error(`Failed to create Bluesky session for user ${did}`);
+        if (!sessionResult) {
+          throw new Error(
+            `Failed to create AT Protocol session for user ${did}`,
+          );
         }
-        agent = resumedAgent;
+        agent = sessionResult.agent;
+        this.logger.debug(
+          `Got session for user ${did} (custodial=${sessionResult.isCustodial}, source=${sessionResult.source})`,
+        );
       }
 
-      // Build RSVP record with uri-only subject (no CID for Contrail-only events)
+      // Fetch CID from PDS so the RSVP subject is a valid StrongRef
+      let eventCid: string | undefined;
+      try {
+        const parsedUri = this.blueskyIdService.parseUri(eventUri);
+        const getResult = await agent.com.atproto.repo.getRecord({
+          repo: parsedUri.did,
+          collection: parsedUri.collection,
+          rkey: parsedUri.rkey,
+        });
+        eventCid = getResult.data.cid;
+        this.logger.debug(`Fetched CID for event: ${eventCid}`);
+      } catch (error) {
+        this.logger.warn(
+          `Could not fetch CID for event ${eventUri}: ${error.message}`,
+        );
+      }
+
       const recordData: Record<string, unknown> = {
         $type: BLUESKY_COLLECTIONS.RSVP,
-        subject: { uri: eventUri },
+        subject: {
+          uri: eventUri,
+          ...(eventCid && { cid: eventCid }),
+        },
         status: RSVP_STATUS[status],
         createdAt: new Date().toISOString(),
       };
@@ -392,10 +420,12 @@ export class BlueskyRsvpService {
     } catch (error) {
       timer();
       this.logger.error(
-        `Failed to create Bluesky RSVP by URI: ${error.message}`,
+        `Failed to create AT Protocol RSVP by URI: ${error.message}`,
         { error: error.stack, eventUri, userDid: did, tenantId, status },
       );
-      throw new Error(`Failed to create Bluesky RSVP by URI: ${error.message}`);
+      throw new Error(
+        `Failed to create AT Protocol RSVP by URI: ${error.message}`,
+      );
     }
   }
 
@@ -405,7 +435,7 @@ export class BlueskyRsvpService {
    * and uses generateRsvpRkey() to deterministically find the record to delete.
    *
    * @param eventUri The AT Protocol URI of the event
-   * @param did The user's Bluesky DID
+   * @param did The user's AT Protocol DID
    * @param tenantId The tenant ID
    * @param providedAgent Optional pre-authenticated agent
    */
@@ -426,18 +456,21 @@ export class BlueskyRsvpService {
       const rkey = this.generateRsvpRkey(eventUri);
 
       // Get agent for the user
+      // Use PdsSessionService which handles both OAuth and custodial accounts
       let agent: Agent;
       if (providedAgent) {
         agent = providedAgent;
       } else {
-        const resumedAgent = await this.blueskyService.resumeSession(
+        const sessionResult = await this.pdsSessionService.getSessionForDid(
           tenantId,
           did,
         );
-        if (!resumedAgent) {
-          throw new Error(`Failed to create Bluesky session for user ${did}`);
+        if (!sessionResult) {
+          throw new Error(
+            `Failed to create AT Protocol session for user ${did}`,
+          );
         }
-        agent = resumedAgent;
+        agent = sessionResult.agent;
       }
 
       const standardRsvpCollection = BLUESKY_COLLECTIONS.RSVP;
@@ -466,10 +499,12 @@ export class BlueskyRsvpService {
     } catch (error) {
       timer();
       this.logger.error(
-        `Failed to delete Bluesky RSVP by URI: ${error.message}`,
+        `Failed to delete AT Protocol RSVP by URI: ${error.message}`,
         error.stack,
       );
-      throw new Error(`Failed to delete Bluesky RSVP by URI: ${error.message}`);
+      throw new Error(
+        `Failed to delete AT Protocol RSVP by URI: ${error.message}`,
+      );
     }
   }
 

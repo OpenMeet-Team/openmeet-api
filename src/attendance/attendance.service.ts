@@ -161,19 +161,21 @@ export class AttendanceService {
     user: { id: number; ulid?: string; slug?: string; [key: string]: any },
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
-    const { attendee, previousStatus } = await this.upsertAttendee(
+    const { attendee, previousStatus, changed } = await this.upsertAttendee(
       resolved,
       user,
       status,
     );
 
-    this.emitAttendanceChanged(
-      resolved,
-      user.ulid!,
-      null,
-      status,
-      previousStatus,
-    );
+    if (changed) {
+      this.emitAttendanceChanged(
+        resolved,
+        user.ulid!,
+        null,
+        status,
+        previousStatus,
+      );
+    }
 
     return {
       status,
@@ -206,13 +208,21 @@ export class AttendanceService {
       );
     }
 
-    const { attendee, previousStatus } = await this.upsertAttendee(
+    const { attendee, previousStatus, changed } = await this.upsertAttendee(
       resolved,
       user,
       status,
     );
 
-    this.emitAttendanceChanged(resolved, userUlid, did, status, previousStatus);
+    if (changed) {
+      this.emitAttendanceChanged(
+        resolved,
+        userUlid,
+        did,
+        status,
+        previousStatus,
+      );
+    }
 
     return {
       status:
@@ -231,6 +241,7 @@ export class AttendanceService {
     attendee: any;
     isNew: boolean;
     previousStatus: string | null;
+    changed: boolean;
   }> {
     const event = resolved.tenantEvent!;
     const existing = await this.eventAttendeeService.findEventAttendeeByUserId(
@@ -247,14 +258,19 @@ export class AttendanceService {
         existing.status === attendeeStatus &&
         existing.status !== EventAttendeeStatus.Cancelled
       ) {
-        return { attendee: existing, isNew: false, previousStatus: null };
+        return {
+          attendee: existing,
+          isNew: false,
+          previousStatus: null,
+          changed: false,
+        };
       }
       const previousStatus = existing.status;
       existing.status = attendeeStatus;
       const roleName = await this.determineRole(resolved, user.id);
       existing.role = await this.eventRoleService.getRoleByName(roleName);
       const updated = await this.eventAttendeeService.save(existing);
-      return { attendee: updated, isNew: false, previousStatus };
+      return { attendee: updated, isNew: false, previousStatus, changed: true };
     }
 
     // New record
@@ -266,7 +282,7 @@ export class AttendanceService {
       status: attendeeStatus,
       role,
     } as any);
-    return { attendee, isNew: true, previousStatus: null };
+    return { attendee, isNew: true, previousStatus: null, changed: true };
   }
 
   private async calculateStatus(
@@ -362,6 +378,15 @@ export class AttendanceService {
 
     // Private event — cancel local record
     const user = await this.resolveUser(userUlid);
+
+    // Capture previous status before the cancel mutates it
+    const existingAttendee =
+      await this.eventAttendeeService.findEventAttendeeByUserSlug(
+        resolved.tenantEvent!.slug,
+        user.slug,
+      );
+    const previousStatus = existingAttendee?.status ?? null;
+
     const attendee =
       await this.eventAttendeeService.cancelEventAttendanceBySlug(
         resolved.tenantEvent!.slug,
@@ -373,7 +398,7 @@ export class AttendanceService {
       userUlid,
       null,
       'notgoing',
-      attendee.status,
+      previousStatus,
     );
 
     return {
@@ -493,7 +518,7 @@ export class AttendanceService {
     );
     if (!identity) {
       throw new BadRequestException(
-        'User has no AT Protocol identity. Link a Bluesky account to RSVP to public events.',
+        'User has no AT Protocol identity. Link an AT Protocol account to RSVP to public events.',
       );
     }
     return identity.did;

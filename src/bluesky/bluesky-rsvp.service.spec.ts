@@ -3,6 +3,7 @@ import { BlueskyRsvpService } from './bluesky-rsvp.service';
 import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventSourceType } from '../core/constants/source-type.constant';
 import { Counter, Histogram } from 'prom-client';
@@ -13,6 +14,7 @@ describe('BlueskyRsvpService', () => {
   let blueskyService: jest.Mocked<BlueskyService>;
   let blueskyIdService: jest.Mocked<BlueskyIdService>;
   let atprotoLexiconService: jest.Mocked<AtprotoLexiconService>;
+  let pdsSessionService: jest.Mocked<PdsSessionService>;
   let rsvpOperationsCounter: jest.Mocked<Counter<string>>;
   let processingDuration: jest.Mocked<Histogram<string>>;
 
@@ -30,6 +32,10 @@ describe('BlueskyRsvpService', () => {
     atprotoLexiconService = {
       validate: jest.fn().mockReturnValue({ success: true, value: {} }),
     } as unknown as jest.Mocked<AtprotoLexiconService>;
+
+    pdsSessionService = {
+      getSessionForDid: jest.fn(),
+    } as unknown as jest.Mocked<PdsSessionService>;
 
     rsvpOperationsCounter = {
       inc: jest.fn(),
@@ -53,6 +59,10 @@ describe('BlueskyRsvpService', () => {
         {
           provide: AtprotoLexiconService,
           useValue: atprotoLexiconService,
+        },
+        {
+          provide: PdsSessionService,
+          useValue: pdsSessionService,
         },
         {
           provide: 'PROM_METRIC_BLUESKY_RSVP_OPERATIONS_TOTAL',
@@ -822,9 +832,12 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValue(
-        mockAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       const result = await service.createRsvpByUri(
         eventUri,
@@ -832,6 +845,13 @@ describe('BlueskyRsvpService', () => {
         userDid,
         tenantId,
       );
+
+      // Should use pdsSessionService, not blueskyService.resumeSession
+      expect(pdsSessionService.getSessionForDid).toHaveBeenCalledWith(
+        tenantId,
+        userDid,
+      );
+      expect(blueskyService.resumeSession).not.toHaveBeenCalled();
 
       // Should build record with uri-only subject (no CID)
       expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith({
@@ -853,7 +873,7 @@ describe('BlueskyRsvpService', () => {
       });
     });
 
-    it('should use providedAgent instead of resumeSession when given', async () => {
+    it('should use providedAgent instead of getSessionForDid when given', async () => {
       const mockRsvpUri =
         'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
       blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
@@ -878,16 +898,17 @@ describe('BlueskyRsvpService', () => {
         providedAgent as unknown as Agent,
       );
 
+      expect(pdsSessionService.getSessionForDid).not.toHaveBeenCalled();
       expect(blueskyService.resumeSession).not.toHaveBeenCalled();
       expect(providedAgent.com.atproto.repo.putRecord).toHaveBeenCalled();
     });
 
     it('should throw when session cannot be created', async () => {
-      blueskyService.resumeSession.mockResolvedValue(null as unknown as Agent);
+      pdsSessionService.getSessionForDid.mockResolvedValue(null);
 
       await expect(
         service.createRsvpByUri(eventUri, 'going', userDid, tenantId),
-      ).rejects.toThrow(/Failed to create Bluesky session/);
+      ).rejects.toThrow(/Failed to create AT Protocol session/);
     });
 
     it('should throw when lexicon validation fails', async () => {
@@ -900,9 +921,12 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValue(
-        mockAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       atprotoLexiconService.validate.mockReturnValueOnce({
         success: false,
@@ -932,9 +956,12 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValue(
-        mockAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       await service.createRsvpByUri(eventUri, 'going', userDid, tenantId);
 
@@ -961,9 +988,12 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValue(
-        mockAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       // Call twice with same eventUri - rkey should be identical
       await service.createRsvpByUri(eventUri, 'going', userDid, tenantId);
@@ -1003,11 +1033,21 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValue(
-        mockAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       const result = await service.deleteRsvpByUri(eventUri, userDid, tenantId);
+
+      // Should use pdsSessionService, not blueskyService.resumeSession
+      expect(pdsSessionService.getSessionForDid).toHaveBeenCalledWith(
+        tenantId,
+        userDid,
+      );
+      expect(blueskyService.resumeSession).not.toHaveBeenCalled();
 
       expect(mockAgent.com.atproto.repo.deleteRecord).toHaveBeenCalledWith({
         repo: userDid,
@@ -1017,7 +1057,7 @@ describe('BlueskyRsvpService', () => {
       expect(result).toEqual({ success: true });
     });
 
-    it('should use providedAgent instead of resumeSession when given', async () => {
+    it('should use providedAgent instead of getSessionForDid when given', async () => {
       const providedAgent = {
         com: {
           atproto: {
@@ -1035,6 +1075,7 @@ describe('BlueskyRsvpService', () => {
         providedAgent as unknown as Agent,
       );
 
+      expect(pdsSessionService.getSessionForDid).not.toHaveBeenCalled();
       expect(blueskyService.resumeSession).not.toHaveBeenCalled();
       expect(providedAgent.com.atproto.repo.deleteRecord).toHaveBeenCalled();
     });
@@ -1049,9 +1090,12 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValue(
-        mockAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       await service.deleteRsvpByUri(eventUri, userDid, tenantId);
 
@@ -1078,9 +1122,12 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValueOnce(
-        mockCreateAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValueOnce({
+        agent: mockCreateAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       await service.createRsvpByUri(eventUri, 'going', userDid, tenantId);
       const createRkey =
@@ -1096,9 +1143,12 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValueOnce(
-        mockDeleteAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValueOnce({
+        agent: mockDeleteAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       await service.deleteRsvpByUri(eventUri, userDid, tenantId);
       const deleteRkey =
@@ -1120,13 +1170,24 @@ describe('BlueskyRsvpService', () => {
           },
         },
       };
-      blueskyService.resumeSession.mockResolvedValue(
-        mockAgent as unknown as Agent,
-      );
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
 
       await expect(
         service.deleteRsvpByUri(eventUri, userDid, tenantId),
-      ).rejects.toThrow(/Failed to delete Bluesky RSVP/);
+      ).rejects.toThrow(/Failed to delete AT Protocol RSVP/);
+    });
+
+    it('should throw when session cannot be created', async () => {
+      pdsSessionService.getSessionForDid.mockResolvedValue(null);
+
+      await expect(
+        service.deleteRsvpByUri(eventUri, userDid, tenantId),
+      ).rejects.toThrow(/Failed to create AT Protocol session/);
     });
   });
 });

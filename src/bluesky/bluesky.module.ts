@@ -15,6 +15,7 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
+import { PdsModule } from '../pds/pds.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto
     MetricsModule,
     UserAtprotoIdentityModule,
     forwardRef(() => EventModule),
+    forwardRef(() => PdsModule),
   ],
   controllers: [BlueskyController, AtprotoResolveController],
   providers: [

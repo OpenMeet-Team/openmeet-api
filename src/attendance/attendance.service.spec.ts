@@ -17,6 +17,7 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
 import { GroupMemberQueryService } from '../group-member/group-member-query.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 
 describe('AttendanceService', () => {
   let service: AttendanceService;
@@ -33,6 +34,7 @@ describe('AttendanceService', () => {
   let mockGroupMemberQueryService: jest.Mocked<
     Partial<GroupMemberQueryService>
   >;
+  let mockPdsSessionService: jest.Mocked<Partial<PdsSessionService>>;
   let mockTenantConnectionService: any;
   let mockEventRepo: any;
 
@@ -64,6 +66,7 @@ describe('AttendanceService', () => {
       save: jest.fn(),
       cancelEventAttendanceBySlug: jest.fn(),
       findEventAttendeeByUserId: jest.fn(),
+      findEventAttendeeByUserSlug: jest.fn(),
       reactivateEventAttendanceBySlug: jest.fn(),
       showEventAttendeesCount: jest.fn(),
     };
@@ -75,6 +78,9 @@ describe('AttendanceService', () => {
     };
     mockGroupMemberQueryService = {
       findGroupMemberByUserId: jest.fn(),
+    };
+    mockPdsSessionService = {
+      getSessionForUser: jest.fn(),
     };
     mockTenantConnectionService = {
       getTenantConnection: jest.fn().mockResolvedValue({
@@ -105,6 +111,10 @@ describe('AttendanceService', () => {
         {
           provide: GroupMemberQueryService,
           useValue: mockGroupMemberQueryService,
+        },
+        {
+          provide: PdsSessionService,
+          useValue: mockPdsSessionService,
         },
         {
           provide: TenantConnectionService,
@@ -342,7 +352,9 @@ describe('AttendanceService', () => {
 
       await expect(
         service.recordAttendance('did:plc:foreign~evt1', testUserUlid, 'going'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(
+        'User has no AT Protocol identity. Link an AT Protocol account to RSVP to public events.',
+      );
     });
 
     it('should create local record only for private event', async () => {
@@ -505,6 +517,42 @@ describe('AttendanceService', () => {
       ).toHaveBeenCalledWith('secret-meetup', 'user-slug');
       expect(mockBlueskyRsvpService.createRsvpByUri).not.toHaveBeenCalled();
       expect(result.attendeeId).toBe(42);
+    });
+
+    it('should emit previousStatus as the status BEFORE cancellation for private events', async () => {
+      const mockEvent = { id: 5, slug: 'secret-meetup' };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: false,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue({
+        slug: 'user-slug',
+      } as any);
+      // The attendee was confirmed BEFORE cancellation
+      mockEventAttendeeService.findEventAttendeeByUserSlug!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+      // After cancellation, the returned attendee has status Cancelled
+      mockEventAttendeeService.cancelEventAttendanceBySlug!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Cancelled,
+      } as any);
+
+      await service.cancelAttendance('secret-meetup', testUserUlid);
+
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        'attendance.changed',
+        expect.objectContaining({
+          status: 'notgoing',
+          previousStatus: EventAttendeeStatus.Confirmed,
+        }),
+      );
     });
 
     it('should emit attendance.changed on cancellation', async () => {
@@ -834,6 +882,22 @@ describe('AttendanceService', () => {
       expect(mockEventAttendeeService.create).not.toHaveBeenCalled();
       expect(mockEventAttendeeService.save).not.toHaveBeenCalled();
       expect(result.attendeeId).toBe(42);
+    });
+
+    it('should NOT emit attendance.changed on no-op re-RSVP (same status)', async () => {
+      const existing = {
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+        role: { id: 1, name: EventAttendeeRole.Participant },
+      };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue(makeResolved());
+      mockEventAttendeeService.findEventAttendeeByUserId!.mockResolvedValue(
+        existing as any,
+      );
+
+      await service.recordAttendance('upsert-event', testUserUlid, 'going');
+
+      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
     });
 
     it('should reactivate cancelled attendee via save (not create)', async () => {

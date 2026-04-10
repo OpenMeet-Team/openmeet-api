@@ -72,109 +72,6 @@ export class EventListener {
     // The rooms will remain in the database but can be marked as inactive
   }
 
-  @OnEvent('event.attendee.created')
-  async handleEventAttendeeCreatedEvent(params: {
-    eventId: number;
-    userId: number;
-    eventSlug?: string;
-    userSlug?: string;
-    tenantId?: string;
-  }) {
-    this.logger.log('event.attendee.created', params);
-
-    try {
-      if (!params.tenantId) {
-        this.logger.error(
-          'No tenantId available in event parameters for event.attendee.created',
-        );
-        return;
-      }
-
-      const { eventAttendeeService } = await this.resolveServices(
-        params.tenantId,
-      );
-
-      // Only add users to the chat room if they're approved
-      const attendee = await eventAttendeeService.findOne({
-        where: {
-          event: { id: params.eventId },
-          user: { id: params.userId },
-        },
-        relations: ['event', 'user'],
-      });
-
-      if (attendee && attendee.status === EventAttendeeStatus.Confirmed) {
-        const tenantId = params.tenantId;
-
-        this.eventEmitter.emit('chat.event.member.add', {
-          eventSlug: params.eventSlug || attendee.event!.slug,
-          userSlug: params.userSlug || attendee.user.slug,
-          tenantId: tenantId,
-        });
-        this.logger.log(
-          `Emitted chat.event.member.add event for user ${attendee.user.slug} in event ${attendee.event!.slug}`,
-        );
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to process event attendee created for user ${params.userId} in event ${params.eventId}: ${error.message}`,
-      );
-    }
-  }
-
-  @OnEvent('event.attendee.deleted')
-  async handleEventAttendeeDeletedEvent(params: {
-    eventId: number;
-    userId: number;
-    tenantId?: string;
-  }) {
-    this.logger.log('event.attendee.deleted', params);
-
-    try {
-      if (!params.tenantId) {
-        this.logger.error(
-          'No tenantId available in event parameters for event.attendee.deleted',
-        );
-        return;
-      }
-
-      const { eventAttendeeService } = await this.resolveServices(
-        params.tenantId,
-      );
-
-      // Find event and user to get slugs
-      const attendee = await eventAttendeeService.findOne({
-        where: {
-          event: { id: params.eventId },
-          user: { id: params.userId },
-        },
-        relations: ['event', 'user'],
-      });
-
-      if (attendee && attendee.event && attendee.user) {
-        const tenantId = params.tenantId;
-
-        // Emit an event for the chat module to handle using slugs
-        this.eventEmitter.emit('chat.event.member.remove', {
-          eventSlug: attendee.event.slug,
-          userSlug: attendee.user.slug,
-          tenantId: tenantId,
-        });
-        this.logger.log(
-          `Emitted chat.event.member.remove event for user ${attendee.user.slug} in event ${attendee.event.slug}`,
-        );
-      } else {
-        this.logger.warn(
-          `Could not retrieve event or user details for attendee (event: ${params.eventId}, user: ${params.userId})`,
-        );
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to process event attendee deleted for user ${params.userId} in event ${params.eventId}: ${error.message}`,
-      );
-    }
-  }
-
   /**
    * Handle Matrix handle registration event
    * Reprocess pending event chat invitations for users who RSVP'd before connecting to Matrix
@@ -271,7 +168,7 @@ export class EventListener {
         return;
       }
 
-      if (event.status === 'going') {
+      if (event.status === 'going' || event.status === 'maybe') {
         this.eventEmitter.emit('chat.event.member.add', {
           eventSlug: event.eventSlug,
           userSlug: user.slug,

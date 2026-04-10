@@ -4,8 +4,6 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import { EventAttendeeStatus } from '../core/constants/constant';
-import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
-import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { UserService } from '../user/user.service';
 import { AttendanceChangedEvent } from '../attendance/types';
@@ -24,23 +22,10 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
   };
 
   // Mock data
-  const mockEvent: Partial<EventEntity> = {
-    id: 1,
-    slug: 'test-event-slug',
-    name: 'Test Event',
-  };
-
   const mockUser: Partial<UserEntity> = {
     id: 1,
     slug: 'test-user-slug',
     name: 'Test User',
-  };
-
-  const mockAttendee: Partial<EventAttendeesEntity> = {
-    id: 1,
-    event: mockEvent as EventEntity,
-    user: mockUser as UserEntity,
-    status: EventAttendeeStatus.Confirmed,
   };
 
   beforeEach(async () => {
@@ -99,77 +84,6 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
   });
 
   describe('Dynamic service resolution via ModuleRef', () => {
-    it('should resolve EventAttendeeService and UserService dynamically via ModuleRef (not constructor-injected)', async () => {
-      mockEventAttendeeService.findOne.mockResolvedValue(
-        mockAttendee as EventAttendeesEntity,
-      );
-
-      await listener.handleEventAttendeeCreatedEvent({
-        eventId: 1,
-        userId: 1,
-        eventSlug: 'test-event-slug',
-        userSlug: 'test-user-slug',
-        tenantId: 'test-tenant',
-      });
-
-      // Verify ContextIdFactory.create() was called
-      expect(ContextIdFactory.create).toHaveBeenCalled();
-
-      // Verify registerRequestByContextId was called with synthetic request containing tenantId
-      expect(mockModuleRef.registerRequestByContextId).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tenantId: 'test-tenant',
-        }),
-        expect.anything(),
-      );
-
-      // Verify resolve was called for EventAttendeeService
-      expect(mockModuleRef.resolve).toHaveBeenCalledWith(
-        EventAttendeeService,
-        expect.anything(),
-        { strict: false },
-      );
-    });
-
-    it('should include x-tenant-id header in synthetic request', async () => {
-      mockEventAttendeeService.findOne.mockResolvedValue(
-        mockAttendee as EventAttendeesEntity,
-      );
-
-      await listener.handleEventAttendeeCreatedEvent({
-        eventId: 1,
-        userId: 1,
-        eventSlug: 'test-event-slug',
-        userSlug: 'test-user-slug',
-        tenantId: 'my-tenant',
-      });
-
-      expect(mockModuleRef.registerRequestByContextId).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tenantId: 'my-tenant',
-          headers: { 'x-tenant-id': 'my-tenant' },
-        }),
-        expect.anything(),
-      );
-    });
-
-    it('should resolve services for handleEventAttendeeDeletedEvent', async () => {
-      mockEventAttendeeService.findOne.mockResolvedValue(
-        mockAttendee as EventAttendeesEntity,
-      );
-
-      await listener.handleEventAttendeeDeletedEvent({
-        eventId: 1,
-        userId: 1,
-        tenantId: 'test-tenant',
-      });
-
-      expect(mockModuleRef.registerRequestByContextId).toHaveBeenCalledWith(
-        expect.objectContaining({ tenantId: 'test-tenant' }),
-        expect.anything(),
-      );
-    });
-
     it('should resolve UserService for handleMatrixHandleRegistered', async () => {
       mockUserService.findById.mockResolvedValue({
         ...mockUser,
@@ -188,120 +102,6 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
         expect.anything(),
         { strict: false },
       );
-    });
-  });
-
-  describe('handleEventAttendeeCreatedEvent', () => {
-    it('should emit chat.event.member.add when attendee is confirmed', async () => {
-      // Arrange
-      const params = {
-        eventId: 1,
-        userId: 1,
-        eventSlug: 'test-event-slug',
-        userSlug: 'test-user-slug',
-        tenantId: 'test-tenant',
-      };
-
-      mockEventAttendeeService.findOne.mockResolvedValue(
-        mockAttendee as EventAttendeesEntity,
-      );
-
-      // Act
-      await listener.handleEventAttendeeCreatedEvent(params);
-
-      // Assert
-      expect(mockEventAttendeeService.findOne).toHaveBeenCalledWith({
-        where: {
-          event: { id: 1 },
-          user: { id: 1 },
-        },
-        relations: ['event', 'user'],
-      });
-
-      expect(eventEmitter.emit).toHaveBeenCalledWith('chat.event.member.add', {
-        eventSlug: 'test-event-slug',
-        userSlug: 'test-user-slug',
-        tenantId: 'test-tenant',
-      });
-    });
-
-    it('should not emit events when attendee is not confirmed', async () => {
-      // Arrange
-      const params = {
-        eventId: 1,
-        userId: 1,
-        eventSlug: 'test-event-slug',
-        userSlug: 'test-user-slug',
-        tenantId: 'test-tenant',
-      };
-
-      const pendingAttendee = {
-        ...mockAttendee,
-        status: EventAttendeeStatus.Pending,
-      };
-
-      mockEventAttendeeService.findOne.mockResolvedValue(
-        pendingAttendee as EventAttendeesEntity,
-      );
-
-      // Act
-      await listener.handleEventAttendeeCreatedEvent(params);
-
-      // Assert
-      expect(eventEmitter.emit).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('handleEventAttendeeDeletedEvent', () => {
-    it('should emit chat.event.member.remove when attendee is deleted', async () => {
-      // Arrange
-      const params = {
-        eventId: 1,
-        userId: 1,
-        tenantId: 'test-tenant',
-      };
-
-      mockEventAttendeeService.findOne.mockResolvedValue(
-        mockAttendee as EventAttendeesEntity,
-      );
-
-      // Act
-      await listener.handleEventAttendeeDeletedEvent(params);
-
-      // Assert
-      expect(mockEventAttendeeService.findOne).toHaveBeenCalledWith({
-        where: {
-          event: { id: 1 },
-          user: { id: 1 },
-        },
-        relations: ['event', 'user'],
-      });
-
-      expect(eventEmitter.emit).toHaveBeenCalledWith(
-        'chat.event.member.remove',
-        {
-          eventSlug: 'test-event-slug',
-          userSlug: 'test-user-slug',
-          tenantId: 'test-tenant',
-        },
-      );
-    });
-
-    it('should log warning when attendee cannot be found', async () => {
-      // Arrange
-      const params = {
-        eventId: 1,
-        userId: 1,
-        tenantId: 'test-tenant',
-      };
-
-      mockEventAttendeeService.findOne.mockResolvedValue(null);
-
-      // Act
-      await listener.handleEventAttendeeDeletedEvent(params);
-
-      // Assert
-      expect(eventEmitter.emit).not.toHaveBeenCalled();
     });
   });
 
@@ -376,6 +176,19 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
 
     it('should emit chat.event.member.add when status is going and eventId is set', async () => {
       await listener.handleAttendanceChanged(baseEvent);
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith('chat.event.member.add', {
+        eventSlug: 'test-event-slug',
+        userSlug: 'test-user-slug',
+        tenantId: 'test-tenant',
+      });
+    });
+
+    it('should emit chat.event.member.add when status is maybe and eventId is set', async () => {
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        status: 'maybe',
+      });
 
       expect(eventEmitter.emit).toHaveBeenCalledWith('chat.event.member.add', {
         eventSlug: 'test-event-slug',

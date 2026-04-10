@@ -51,6 +51,7 @@ import { markAtprotoSynced } from '../../atproto-publisher/atproto-sync.utils';
 import { SyncAtprotoResponseDto } from '../dto/sync-atproto-response.dto';
 import { TID } from '@atproto/common-web';
 import { AttendanceService } from '../../attendance/attendance.service';
+import { AttendanceChangedEvent } from '../../attendance/types';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import { RsvpStatusShort } from '../../bluesky/BlueskyTypes';
 
@@ -1624,6 +1625,11 @@ export class EventManagementService {
 
     await this.eventRepository.findOneOrFail({ where: { slug } });
 
+    // Capture previous status before the update
+    const existingAttendee =
+      await this.eventAttendeeService.showEventAttendee(attendeeId);
+    const previousStatus = existingAttendee?.status;
+
     await this.eventAttendeeService.updateEventAttendee(
       attendeeId,
       updateEventAttendeeDto,
@@ -1631,7 +1637,47 @@ export class EventManagementService {
 
     await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
 
-    return await this.eventAttendeeService.showEventAttendee(attendeeId);
+    // Use showEventAttendee for the return value (same as before)
+    const updatedAttendee =
+      await this.eventAttendeeService.showEventAttendee(attendeeId);
+
+    // Also look up with event/user relations for the attendance.changed emission
+    const attendeeWithRelations = await this.eventAttendeeService.findOne({
+      where: { id: attendeeId },
+      relations: ['event', 'user'],
+    });
+
+    // Map EventAttendeeStatus to short status strings
+    const statusMap: Record<string, string> = {
+      [EventAttendeeStatus.Confirmed]: 'going',
+      [EventAttendeeStatus.Cancelled]: 'notgoing',
+      [EventAttendeeStatus.Maybe]: 'maybe',
+      [EventAttendeeStatus.Pending]: 'pending',
+      [EventAttendeeStatus.Waitlist]: 'waitlist',
+    };
+    const newStatus = attendeeWithRelations?.status;
+    const newShortStatus = newStatus
+      ? statusMap[newStatus] || newStatus
+      : undefined;
+    const oldShortStatus = previousStatus
+      ? statusMap[previousStatus] || previousStatus
+      : undefined;
+
+    // Only emit if status actually changed and we have valid status values
+    if (newShortStatus && newShortStatus !== oldShortStatus) {
+      this.eventEmitter.emit('attendance.changed', {
+        status: newShortStatus,
+        previousStatus: oldShortStatus ?? null,
+        eventUri: null, // admin updates are always on tenant events
+        eventId: attendeeWithRelations?.event?.id ?? null,
+        eventSlug: attendeeWithRelations?.event?.slug ?? null,
+        userUlid: attendeeWithRelations?.user?.ulid ?? '',
+        userDid: null,
+        tenantId: this.request.tenantId,
+      } satisfies AttendanceChangedEvent);
+    }
+
+    return updatedAttendee;
   }
 
   async delete(id: number): Promise<void> {
