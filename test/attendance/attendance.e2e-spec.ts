@@ -96,9 +96,9 @@ describe('Attendance Service (e2e)', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.status).toBe(EventAttendeeStatus.Confirmed);
-      // Public-simple RSVPs return a minimal shape (no local attendee record)
-      // They have rsvpUri/eventUri instead of full user/event relations
-      expect(res.body.rsvpUri).toBeDefined();
+      // Public tenant events create a local attendee record via recordPublicWithOverlay.
+      // PDS publish is best-effort, so rsvpUri may or may not be present.
+      expect(res.body.id).toBeDefined();
     });
 
     it('should cancel attendance on a public event', async () => {
