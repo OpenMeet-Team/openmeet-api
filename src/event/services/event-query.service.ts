@@ -978,6 +978,7 @@ export class EventQueryService {
     const now = new Date().toISOString();
 
     // Fetch upcoming public events from Contrail (larger window for random sampling)
+    // skipCount: true — we only need records for random sampling, not the total count
     const contrailResult = await this.contrailQueryService.find<CalendarEvent>(
       'community.lexicon.calendar.event',
       {
@@ -990,6 +991,7 @@ export class EventQueryService {
         orderBy: `record->>'startsAt' ASC, uri ASC`,
         limit: 50,
         offset: 0,
+        skipCount: true,
       },
     );
 

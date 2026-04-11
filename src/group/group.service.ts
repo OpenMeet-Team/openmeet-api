@@ -908,21 +908,33 @@ export class GroupService {
   async getHomePageFeaturedGroups(): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
-    const groups = await this.groupRepository
+    // Fetch IDs only (lightweight) then shuffle in JS to avoid ORDER BY RANDOM()
+    // which forces PostgreSQL to load and sort ALL matching rows
+    const idRows = await this.groupRepository
       .createQueryBuilder('group')
-      .select(['group'])
-      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
-      .leftJoinAndSelect('group.categories', 'categories')
-      .leftJoinAndSelect('group.image', 'image')
+      .select('group.id')
       .where({
         visibility: GroupVisibility.Public,
         status: GroupStatus.Published,
       })
-      .orderBy('RANDOM()')
-      .limit(5)
       .getMany();
 
-    return groups;
+    if (idRows.length === 0) return [];
+
+    // Shuffle and pick 5 in JS
+    const selectedIds = idRows
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 5)
+      .map((g) => g.id);
+
+    // Load full entities with relations for only the selected IDs
+    return this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoinAndSelect('group.image', 'image')
+      .whereInIds(selectedIds)
+      .getMany();
   }
 
   async getHomePageUserCreatedGroups(

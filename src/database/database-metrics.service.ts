@@ -123,12 +123,18 @@ export class DatabaseMetricsService implements OnModuleInit {
     operation: string,
     durationMs: number,
     status: 'success' | 'error' = 'success',
+    fingerprint?: string,
   ): void {
     try {
       const durationSeconds = durationMs / 1000;
 
       this.queryDurationHistogram.observe(
-        { tenant: tenantId, operation, status },
+        {
+          tenant: tenantId,
+          operation,
+          status,
+          fingerprint: fingerprint || 'unknown',
+        },
         durationSeconds,
       );
 
@@ -138,7 +144,7 @@ export class DatabaseMetricsService implements OnModuleInit {
       // Warn on slow queries (> 1 second)
       if (durationMs > 1000) {
         this.logger.warn(
-          `Slow query detected for tenant ${tenantId} (${operation}, ${status}): ${durationMs}ms`,
+          `Slow query detected for tenant ${tenantId} (${operation}, ${status}, fingerprint=${fingerprint || 'unknown'}): ${durationMs}ms`,
         );
       }
     } catch (error) {

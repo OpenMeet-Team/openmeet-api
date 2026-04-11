@@ -780,6 +780,28 @@ describe('EventQueryService', () => {
       // 3. Result contains at most 4 events
       expect(result.length).toBeLessThanOrEqual(4);
     });
+
+    it('should pass skipCount: true to contrail find (no COUNT query needed for random sampling)', async () => {
+      const contrailService = service[
+        'contrailQueryService'
+      ] as jest.Mocked<ContrailQueryService>;
+      const enrichmentService = service[
+        'atprotoEnrichmentService'
+      ] as jest.Mocked<AtprotoEnrichmentService>;
+
+      contrailService.find.mockResolvedValueOnce({
+        records: [] as any,
+        total: -1,
+      });
+      enrichmentService.enrichRecords.mockResolvedValueOnce([]);
+
+      await service.getHomePageFeaturedEvents();
+
+      expect(contrailService.find).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        expect.objectContaining({ skipCount: true }),
+      );
+    });
   });
 
   describe('getHomePageUserNextHostedEvent', () => {

@@ -63,6 +63,7 @@ export class ContrailQueryService {
       orderBy?: string;
       limit?: number;
       offset?: number;
+      skipCount?: boolean;
     } = {},
   ): Promise<{ records: ContrailRecord<T>[]; total: number }> {
     if (options.orderBy) {
@@ -89,11 +90,14 @@ export class ContrailQueryService {
 
     const where = sqlParts.length > 0 ? `WHERE ${sqlParts.join(' AND ')}` : '';
 
-    const countResult = await ds.query(
-      `SELECT count(*) as total FROM ${table} ${where}`,
-      allParams,
-    );
-    const total = parseInt(countResult[0]?.total ?? '0', 10);
+    let total = -1;
+    if (!options.skipCount) {
+      const countResult = await ds.query(
+        `SELECT count(*) as total FROM ${table} ${where}`,
+        allParams,
+      );
+      total = parseInt(countResult[0]?.total ?? '0', 10);
+    }
 
     const orderClause = options.orderBy ? `ORDER BY ${options.orderBy}` : '';
 
