@@ -18,6 +18,7 @@ import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
 import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 import { PdsSessionService } from '../pds/pds-session.service';
+import { SessionUnavailableError } from '../pds/pds.errors';
 
 describe('AttendanceService', () => {
   let service: AttendanceService;
@@ -289,6 +290,7 @@ describe('AttendanceService', () => {
 
   describe('recordAttendance', () => {
     it('should publish to PDS only for simple public foreign event', async () => {
+      const mockAgent = { did: 'did:plc:user1' } as any;
       jest.spyOn(service, 'resolveEvent').mockResolvedValue({
         tenantEvent: null,
         uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
@@ -303,9 +305,12 @@ describe('AttendanceService', () => {
         ulid: testUserUlid,
         slug: 'user-slug',
       } as any);
-      mockIdentityService.findByUserUlid!.mockResolvedValue({
+      mockPdsSessionService.getSessionForUser!.mockResolvedValue({
         did: 'did:plc:user1',
-      } as any);
+        agent: mockAgent,
+        isCustodial: true,
+        source: 'fresh',
+      });
       mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
         success: true,
         rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
@@ -317,11 +322,16 @@ describe('AttendanceService', () => {
         'going',
       );
 
+      expect(mockPdsSessionService.getSessionForUser).toHaveBeenCalledWith(
+        testTenantId,
+        testUserUlid,
+      );
       expect(mockBlueskyRsvpService.createRsvpByUri).toHaveBeenCalledWith(
         'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
         'going',
         'did:plc:user1',
         testTenantId,
+        mockAgent,
       );
       expect(result.rsvpUri).toBe(
         'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
@@ -348,13 +358,35 @@ describe('AttendanceService', () => {
         ulid: testUserUlid,
         slug: 'user-slug',
       } as any);
-      mockIdentityService.findByUserUlid!.mockResolvedValue(null);
+      mockPdsSessionService.getSessionForUser!.mockResolvedValue(null);
 
       await expect(
         service.recordAttendance('did:plc:foreign~evt1', testUserUlid, 'going'),
-      ).rejects.toThrow(
-        'User has no AT Protocol identity. Link an AT Protocol account to RSVP to public events.',
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when SessionUnavailableError occurs', async () => {
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: null,
+        uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue({
+        id: 10,
+        ulid: testUserUlid,
+        slug: 'user-slug',
+      } as any);
+      mockPdsSessionService.getSessionForUser!.mockRejectedValue(
+        new SessionUnavailableError('Session expired', true, 'did:plc:user1'),
       );
+
+      await expect(
+        service.recordAttendance('did:plc:foreign~evt1', testUserUlid, 'going'),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should create local record only for private event', async () => {
@@ -419,9 +451,13 @@ describe('AttendanceService', () => {
         maxAttendees: 0,
         requireGroupMembership: false,
       });
-      mockIdentityService.findByUserUlid!.mockResolvedValue({
+      const mockAgent = { did: 'did:plc:user1' } as any;
+      mockPdsSessionService.getSessionForUser!.mockResolvedValue({
         did: 'did:plc:user1',
-      } as any);
+        agent: mockAgent,
+        isCustodial: true,
+        source: 'fresh',
+      });
       mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
         success: true,
         rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/xyz',
@@ -466,9 +502,13 @@ describe('AttendanceService', () => {
         maxAttendees: 0,
         requireGroupMembership: false,
       });
-      mockIdentityService.findByUserUlid!.mockResolvedValue({
+      const mockAgent = { did: 'did:plc:user1' } as any;
+      mockPdsSessionService.getSessionForUser!.mockResolvedValue({
         did: 'did:plc:user1',
-      } as any);
+        agent: mockAgent,
+        isCustodial: true,
+        source: 'fresh',
+      });
       mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
         success: true,
         rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
@@ -479,11 +519,16 @@ describe('AttendanceService', () => {
         testUserUlid,
       );
 
+      expect(mockPdsSessionService.getSessionForUser).toHaveBeenCalledWith(
+        testTenantId,
+        testUserUlid,
+      );
       expect(mockBlueskyRsvpService.createRsvpByUri).toHaveBeenCalledWith(
         'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
         'notgoing',
         'did:plc:user1',
         testTenantId,
+        mockAgent,
       );
       expect(result.status).toBe('notgoing');
     });
@@ -565,9 +610,13 @@ describe('AttendanceService', () => {
         maxAttendees: 0,
         requireGroupMembership: false,
       });
-      mockIdentityService.findByUserUlid!.mockResolvedValue({
+      const mockAgent = { did: 'did:plc:user1' } as any;
+      mockPdsSessionService.getSessionForUser!.mockResolvedValue({
         did: 'did:plc:user1',
-      } as any);
+        agent: mockAgent,
+        isCustodial: true,
+        source: 'fresh',
+      });
       mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
         success: true,
         rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
@@ -808,9 +857,13 @@ describe('AttendanceService', () => {
         ulid: testUserUlid,
         slug: 'user-slug',
       } as any);
-      mockIdentityService.findByUserUlid!.mockResolvedValue({
+      const mockAgent = { did: 'did:plc:user1' } as any;
+      mockPdsSessionService.getSessionForUser!.mockResolvedValue({
         did: 'did:plc:user1',
-      } as any);
+        agent: mockAgent,
+        isCustodial: true,
+        source: 'fresh',
+      });
       mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
         success: true,
         rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',

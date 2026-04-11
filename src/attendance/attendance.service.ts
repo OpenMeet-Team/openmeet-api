@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
+import { Agent } from '@atproto/api';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import {
@@ -23,6 +24,8 @@ import { ContrailQueryService } from '../contrail/contrail-query.service';
 import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { PdsSessionService } from '../pds/pds-session.service';
+import { SessionUnavailableError } from '../pds/pds.errors';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
@@ -47,6 +50,8 @@ export class AttendanceService {
     private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
     private readonly blueskyRsvpService: BlueskyRsvpService,
     private readonly identityService: UserAtprotoIdentityService,
+    @Inject(forwardRef(() => PdsSessionService))
+    private readonly pdsSessionService: PdsSessionService,
     @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
     @Inject(forwardRef(() => UserService))
@@ -137,16 +142,17 @@ export class AttendanceService {
     userUlid: string,
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
-    const did = await this.resolveUserDid(userUlid);
+    const session = await this.getSessionAgent(userUlid);
 
     const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
       resolved.uri!,
       status,
-      did,
+      session.did,
       this.request.tenantId,
+      session.agent,
     );
 
-    this.emitAttendanceChanged(resolved, userUlid, did, status);
+    this.emitAttendanceChanged(resolved, userUlid, session.did, status);
 
     return {
       status,
@@ -191,15 +197,16 @@ export class AttendanceService {
     userUlid: string,
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
-    const did = await this.resolveUserDid(userUlid);
+    const session = await this.getSessionAgent(userUlid);
 
     let rsvpUri: string | null = null;
     try {
       const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
         resolved.uri!,
         status,
-        did,
+        session.did,
         this.request.tenantId,
+        session.agent,
       );
       rsvpUri = pdsResult.rsvpUri;
     } catch (error) {
@@ -218,7 +225,7 @@ export class AttendanceService {
       this.emitAttendanceChanged(
         resolved,
         userUlid,
-        did,
+        session.did,
         status,
         previousStatus,
       );
@@ -344,13 +351,14 @@ export class AttendanceService {
     const resolved = await this.resolveEvent(slug);
 
     if (resolved.isPublic) {
-      const did = await this.resolveUserDid(userUlid);
+      const session = await this.getSessionAgent(userUlid);
 
       const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
         resolved.uri!,
         'notgoing',
-        did,
+        session.did,
         this.request.tenantId,
+        session.agent,
       );
 
       // If a local record exists (role/approval overlay), cancel it too
@@ -366,7 +374,13 @@ export class AttendanceService {
         }
       }
 
-      this.emitAttendanceChanged(resolved, userUlid, did, 'notgoing', 'going');
+      this.emitAttendanceChanged(
+        resolved,
+        userUlid,
+        session.did,
+        'notgoing',
+        'going',
+      );
 
       return {
         status: 'notgoing',
@@ -509,6 +523,33 @@ export class AttendanceService {
       throw new NotFoundException(`User with ULID ${userUlid} not found`);
     }
     return user;
+  }
+
+  private async getSessionAgent(
+    userUlid: string,
+  ): Promise<{ did: string; agent: Agent }> {
+    let session;
+    try {
+      session = await this.pdsSessionService.getSessionForUser(
+        this.request.tenantId,
+        userUlid,
+      );
+    } catch (error) {
+      if (error instanceof SessionUnavailableError) {
+        throw new BadRequestException(
+          'Your AT Protocol session has expired. Please link your AT Protocol account again to continue publishing.',
+        );
+      }
+      throw error;
+    }
+
+    if (!session) {
+      throw new BadRequestException(
+        'User has no AT Protocol identity. Link an AT Protocol account to RSVP to public events.',
+      );
+    }
+
+    return { did: session.did, agent: session.agent };
   }
 
   private async resolveUserDid(userUlid: string): Promise<string> {

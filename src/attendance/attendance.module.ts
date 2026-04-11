@@ -9,6 +9,7 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { UserModule } from '../user/user.module';
 import { EventRoleModule } from '../event-role/event-role.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
+import { PdsModule } from '../pds/pds.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { GroupMemberModule } from '../group-member/group-member.module';
     AtprotoEnrichmentModule,
     forwardRef(() => BlueskyModule),
     UserAtprotoIdentityModule,
+    forwardRef(() => PdsModule),
     forwardRef(() => EventAttendeeModule),
     forwardRef(() => UserModule),
     EventRoleModule,
