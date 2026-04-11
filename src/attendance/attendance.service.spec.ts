@@ -11,7 +11,6 @@ import { ContrailQueryService } from '../contrail/contrail-query.service';
 import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
-import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { UserService } from '../user/user.service';
@@ -27,7 +26,6 @@ describe('AttendanceService', () => {
     Partial<AtprotoEnrichmentService>
   >;
   let mockBlueskyRsvpService: jest.Mocked<Partial<BlueskyRsvpService>>;
-  let mockIdentityService: jest.Mocked<Partial<UserAtprotoIdentityService>>;
   let mockEventEmitter: jest.Mocked<Partial<EventEmitter2>>;
   let mockEventAttendeeService: jest.Mocked<Partial<EventAttendeeService>>;
   let mockUserService: jest.Mocked<Partial<UserService>>;
@@ -55,9 +53,6 @@ describe('AttendanceService', () => {
     };
     mockBlueskyRsvpService = {
       createRsvpByUri: jest.fn(),
-    };
-    mockIdentityService = {
-      findByUserUlid: jest.fn(),
     };
     mockEventEmitter = {
       emit: jest.fn(),
@@ -98,10 +93,6 @@ describe('AttendanceService', () => {
           useValue: mockAtprotoEnrichmentService,
         },
         { provide: BlueskyRsvpService, useValue: mockBlueskyRsvpService },
-        {
-          provide: UserAtprotoIdentityService,
-          useValue: mockIdentityService,
-        },
         { provide: EventEmitter2, useValue: mockEventEmitter },
         {
           provide: EventAttendeeService,
@@ -600,7 +591,7 @@ describe('AttendanceService', () => {
       );
     });
 
-    it('should emit attendance.changed on cancellation', async () => {
+    it('should emit attendance.changed on cancellation of foreign event with null previousStatus', async () => {
       jest.spyOn(service, 'resolveEvent').mockResolvedValue({
         tenantEvent: null,
         uri: 'at://did:plc:foreign/community.lexicon.calendar.event/evt1',
@@ -624,13 +615,91 @@ describe('AttendanceService', () => {
 
       await service.cancelAttendance('did:plc:foreign~evt1', testUserUlid);
 
+      // Foreign events have no local record, so previousStatus is null
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
         'attendance.changed',
         expect.objectContaining({
           status: 'notgoing',
-          previousStatus: 'going',
+          previousStatus: null,
         }),
       );
+    });
+
+    it('should emit actual previousStatus when cancelling public tenant event', async () => {
+      const mockEvent = { id: 5, slug: 'public-meetup' };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: 'at://did:plc:host/community.lexicon.calendar.event/evt1',
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      const mockAgent = { did: 'did:plc:user1' } as any;
+      mockPdsSessionService.getSessionForUser!.mockResolvedValue({
+        did: 'did:plc:user1',
+        agent: mockAgent,
+        isCustodial: true,
+        source: 'fresh',
+      });
+      mockBlueskyRsvpService.createRsvpByUri!.mockResolvedValue({
+        success: true,
+        rsvpUri: 'at://did:plc:user1/community.lexicon.calendar.rsvp/abc',
+      });
+      mockUserService.findByUlid!.mockResolvedValue({
+        slug: 'user-slug',
+      } as any);
+      // The attendee was on waitlist before cancellation
+      mockEventAttendeeService.findEventAttendeeByUserSlug!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Waitlist,
+      } as any);
+      mockEventAttendeeService.cancelEventAttendanceBySlug!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Cancelled,
+      } as any);
+
+      await service.cancelAttendance('public-meetup', testUserUlid);
+
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        'attendance.changed',
+        expect.objectContaining({
+          status: 'notgoing',
+          previousStatus: EventAttendeeStatus.Waitlist,
+        }),
+      );
+    });
+
+    it('should gracefully handle PDS failure during cancel for public tenant event without atprotoUri', async () => {
+      const mockEvent = { id: 5, slug: 'new-event' };
+      jest.spyOn(service, 'resolveEvent').mockResolvedValue({
+        tenantEvent: mockEvent as any,
+        uri: null,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      });
+      mockUserService.findByUlid!.mockResolvedValue({
+        slug: 'user-slug',
+      } as any);
+      mockEventAttendeeService.findEventAttendeeByUserSlug!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Confirmed,
+      } as any);
+      mockEventAttendeeService.cancelEventAttendanceBySlug!.mockResolvedValue({
+        id: 42,
+        status: EventAttendeeStatus.Cancelled,
+      } as any);
+
+      // Should NOT crash — PDS call is skipped when uri is null
+      const result = await service.cancelAttendance('new-event', testUserUlid);
+
+      expect(mockBlueskyRsvpService.createRsvpByUri).not.toHaveBeenCalled();
+      expect(result.attendeeId).toBe(42);
+      expect(result.status).toBe('notgoing');
     });
   });
 

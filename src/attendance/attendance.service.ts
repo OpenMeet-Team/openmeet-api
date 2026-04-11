@@ -23,7 +23,6 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { ContrailQueryService } from '../contrail/contrail-query.service';
 import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
-import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { PdsSessionService } from '../pds/pds-session.service';
 import { SessionUnavailableError } from '../pds/pds.errors';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -49,7 +48,6 @@ export class AttendanceService {
     private readonly contrailQueryService: ContrailQueryService,
     private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
     private readonly blueskyRsvpService: BlueskyRsvpService,
-    private readonly identityService: UserAtprotoIdentityService,
     @Inject(forwardRef(() => PdsSessionService))
     private readonly pdsSessionService: PdsSessionService,
     @Inject(forwardRef(() => EventAttendeeService))
@@ -362,21 +360,41 @@ export class AttendanceService {
     const resolved = await this.resolveEvent(slug);
 
     if (resolved.isPublic) {
-      const session = await this.getSessionAgent(userUlid);
+      // PDS cancel is best-effort — users without ATProto identity
+      // (e.g. quick-rsvp guests) still get their local record cancelled.
+      let rsvpUri: string | null = null;
+      let userDid: string | null = null;
+      if (resolved.uri) {
+        try {
+          const session = await this.getSessionAgent(userUlid);
+          userDid = session.did;
+          const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
+            resolved.uri,
+            'notgoing',
+            session.did,
+            this.request.tenantId,
+            session.agent,
+          );
+          rsvpUri = pdsResult.rsvpUri;
+        } catch (error) {
+          this.logger.warn(
+            `PDS cancel failed, continuing with local record: ${error.message}`,
+          );
+        }
+      }
 
-      const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
-        resolved.uri!,
-        'notgoing',
-        session.did,
-        this.request.tenantId,
-        session.agent,
-      );
-
-      // If a local record exists, cancel it too
+      // If a local record exists, cancel it and capture actual previous status
       let cancelledAttendeeId: number | null = null;
+      let previousStatus: string | null = null;
       if (resolved.tenantEvent) {
         const user = await this.resolveUser(userUlid);
         try {
+          const existing =
+            await this.eventAttendeeService.findEventAttendeeByUserSlug(
+              resolved.tenantEvent.slug,
+              user.slug,
+            );
+          previousStatus = existing?.status ?? null;
           const cancelled =
             await this.eventAttendeeService.cancelEventAttendanceBySlug(
               resolved.tenantEvent.slug,
@@ -391,14 +409,14 @@ export class AttendanceService {
       this.emitAttendanceChanged(
         resolved,
         userUlid,
-        session.did,
+        userDid,
         'notgoing',
-        'going',
+        previousStatus,
       );
 
       return {
         status: 'notgoing',
-        rsvpUri: pdsResult.rsvpUri,
+        rsvpUri,
         attendeeId: cancelledAttendeeId,
         eventUri: resolved.uri,
       };
@@ -564,19 +582,6 @@ export class AttendanceService {
     }
 
     return { did: session.did, agent: session.agent };
-  }
-
-  private async resolveUserDid(userUlid: string): Promise<string> {
-    const identity = await this.identityService.findByUserUlid(
-      this.request.tenantId,
-      userUlid,
-    );
-    if (!identity) {
-      throw new BadRequestException(
-        'User has no AT Protocol identity. Link an AT Protocol account to RSVP to public events.',
-      );
-    }
-    return identity.did;
   }
 
   private emitAttendanceChanged(
