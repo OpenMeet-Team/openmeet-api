@@ -24,6 +24,7 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 describe('AuthService - Event Date Validation for RSVP', () => {
   let service: AuthService;
@@ -128,6 +129,10 @@ describe('AuthService - Event Date Validation for RSVP', () => {
         {
           provide: ElastiCacheService,
           useValue: {},
+        },
+        {
+          provide: AttendanceService,
+          useValue: { recordAttendance: jest.fn() },
         },
         {
           provide: REQUEST,

@@ -107,7 +107,9 @@ export class AttendanceService {
     return {
       tenantEvent: event,
       uri: event.atprotoUri || null,
-      isPublic: event.visibility === EventVisibility.Public,
+      // Public and Unlisted events allow any authenticated user to RSVP;
+      // only Private events require an invitation or group membership.
+      isPublic: event.visibility !== EventVisibility.Private,
       requiresApproval: event.requireApproval || false,
       allowWaitlist: event.allowWaitlist || false,
       maxAttendees: event.maxAttendees || 0,
@@ -130,10 +132,12 @@ export class AttendanceService {
       return this.recordPrivateAttendance(resolved, user, status);
     }
 
-    if (resolved.requiresApproval) {
+    // Tenant events always need a local attendee record (for queries, roles, etc.)
+    if (resolved.tenantEvent) {
       return this.recordPublicWithOverlay(resolved, user, userUlid, status);
     }
 
+    // Contrail-only events (no local DB row) — PDS write only
     return this.recordPublicSimple(resolved, userUlid, status);
   }
 
@@ -197,10 +201,13 @@ export class AttendanceService {
     userUlid: string,
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
-    const session = await this.getSessionAgent(userUlid);
-
+    // PDS publish is best-effort — users without AT Protocol identity
+    // (e.g. quick-rsvp guests) still get a local attendee record.
     let rsvpUri: string | null = null;
+    let userDid: string | null = null;
     try {
+      const session = await this.getSessionAgent(userUlid);
+      userDid = session.did;
       const pdsResult = await this.blueskyRsvpService.createRsvpByUri(
         resolved.uri!,
         status,
@@ -221,19 +228,23 @@ export class AttendanceService {
       status,
     );
 
+    // Emit the actual attendee status (may differ from requested —
+    // e.g. 'going' becomes 'pending' when event requires approval).
+    const actualStatus =
+      attendee.status === EventAttendeeStatus.Pending ? 'pending' : status;
+
     if (changed) {
       this.emitAttendanceChanged(
         resolved,
         userUlid,
-        session.did,
-        status,
+        userDid,
+        actualStatus,
         previousStatus,
       );
     }
 
     return {
-      status:
-        attendee.status === EventAttendeeStatus.Pending ? 'pending' : status,
+      status: actualStatus,
       rsvpUri,
       attendeeId: attendee.id,
       eventUri: resolved.uri,
@@ -361,16 +372,19 @@ export class AttendanceService {
         session.agent,
       );
 
-      // If a local record exists (role/approval overlay), cancel it too
+      // If a local record exists, cancel it too
+      let cancelledAttendeeId: number | null = null;
       if (resolved.tenantEvent) {
         const user = await this.resolveUser(userUlid);
         try {
-          await this.eventAttendeeService.cancelEventAttendanceBySlug(
-            resolved.tenantEvent.slug,
-            user.slug,
-          );
+          const cancelled =
+            await this.eventAttendeeService.cancelEventAttendanceBySlug(
+              resolved.tenantEvent.slug,
+              user.slug,
+            );
+          cancelledAttendeeId = cancelled?.id ?? null;
         } catch {
-          // No local record to cancel — that's fine for simple public RSVPs
+          // No local record to cancel — that's fine for Contrail-only RSVPs
         }
       }
 
@@ -385,7 +399,7 @@ export class AttendanceService {
       return {
         status: 'notgoing',
         rsvpUri: pdsResult.rsvpUri,
-        attendeeId: null,
+        attendeeId: cancelledAttendeeId,
         eventUri: resolved.uri,
       };
     }

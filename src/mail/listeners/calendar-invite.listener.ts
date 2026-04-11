@@ -65,9 +65,9 @@ export class CalendarInviteListener {
       return;
     }
 
-    // Skip "notgoing" RSVPs
-    if (event.status === 'notgoing') {
-      this.logger.debug('Skipping calendar invite for notgoing status');
+    // Only send calendar invites for confirmed RSVPs
+    if (event.status === 'notgoing' || event.status === 'pending') {
+      this.logger.debug(`Skipping calendar invite for ${event.status} status`);
       return;
     }
 

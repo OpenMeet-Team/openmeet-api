@@ -26,6 +26,7 @@ import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { PdsApiError } from '../pds/pds.errors';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 // Mock bcryptjs for password validation tests
 jest.mock('bcryptjs', () => ({
@@ -185,6 +186,10 @@ describe('AuthService', () => {
           useValue: mockBlueskyService,
         },
         { provide: ElastiCacheService, useValue: mockElastiCacheService },
+        {
+          provide: AttendanceService,
+          useValue: { recordAttendance: jest.fn() },
+        },
         { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();
