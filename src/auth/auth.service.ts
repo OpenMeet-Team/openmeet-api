@@ -1188,7 +1188,8 @@ export class AuthService {
     const email = dto.email.toLowerCase().trim();
 
     // 1. Find the event (resolveForAttendance handles AT Protocol slugs too)
-    const resolved = await this.eventQueryService.resolveForAttendance(eventSlug);
+    const resolved =
+      await this.eventQueryService.resolveForAttendance(eventSlug);
     const event = resolved.tenantEvent;
     if (!event) {
       throw new NotFoundException('Event not found');
