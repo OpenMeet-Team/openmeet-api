@@ -1952,4 +1952,150 @@ describe('EventQueryService', () => {
       );
     });
   });
+
+  describe('resolveForAttendance', () => {
+    it('should resolve a regular slug to a tenant event', async () => {
+      const event = {
+        ...mockEventEntity,
+        visibility: EventVisibility.Public,
+        requireApproval: false,
+        allowWaitlist: true,
+        maxAttendees: 100,
+        requireGroupMembership: false,
+        atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/123',
+      } as EventEntity;
+
+      eventRepository.findOne.mockResolvedValue(event);
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
+
+      const result = await service.resolveForAttendance('test-event-slug');
+
+      expect(result.tenantEvent).toBe(event);
+      expect(result.uri).toBe(
+        'at://did:plc:abc/community.lexicon.calendar.event/123',
+      );
+      expect(result.isPublic).toBe(true);
+      expect(result.requiresApproval).toBe(false);
+      expect(result.allowWaitlist).toBe(true);
+      expect(result.maxAttendees).toBe(100);
+      expect(result.requireGroupMembership).toBe(false);
+    });
+
+    it('should resolve an AT Protocol slug to a tenant event when found by atprotoUri', async () => {
+      const event = {
+        ...mockEventEntity,
+        visibility: EventVisibility.Public,
+        requireApproval: true,
+        allowWaitlist: false,
+        maxAttendees: 50,
+        requireGroupMembership: true,
+        atprotoUri: 'at://did:plc:xyz/community.lexicon.calendar.event/abc123',
+      } as EventEntity;
+
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue({
+        did: 'did:plc:xyz',
+        rkey: 'abc123',
+      });
+      eventRepository.findOne.mockResolvedValue(event);
+
+      const result = await service.resolveForAttendance('did:plc:xyz~abc123');
+
+      expect(result.tenantEvent).toBe(event);
+      expect(result.uri).toBe(
+        'at://did:plc:xyz/community.lexicon.calendar.event/abc123',
+      );
+      expect(result.isPublic).toBe(true);
+      expect(result.requiresApproval).toBe(true);
+      expect(result.requireGroupMembership).toBe(true);
+    });
+
+    it('should resolve an AT Protocol slug to a foreign event when not in tenant DB but in Contrail', async () => {
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue({
+        did: 'did:plc:foreign',
+        rkey: 'rkey456',
+      });
+      eventRepository.findOne.mockResolvedValue(null);
+
+      jest
+        .spyOn(service['contrailQueryService'], 'findByUri')
+        .mockResolvedValue({ uri: 'at://...', value: {} } as any);
+
+      const result = await service.resolveForAttendance(
+        'did:plc:foreign~rkey456',
+      );
+
+      expect(result.tenantEvent).toBeNull();
+      expect(result.uri).toBe(
+        'at://did:plc:foreign/community.lexicon.calendar.event/rkey456',
+      );
+      expect(result.isPublic).toBe(true);
+      expect(result.requiresApproval).toBe(false);
+      expect(result.allowWaitlist).toBe(false);
+      expect(result.maxAttendees).toBe(0);
+      expect(result.requireGroupMembership).toBe(false);
+    });
+
+    it('should throw NotFoundException for a regular slug not found', async () => {
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
+      eventRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.resolveForAttendance('nonexistent-slug'),
+      ).rejects.toThrow('Event with slug nonexistent-slug not found');
+    });
+
+    it('should throw NotFoundException for AT Protocol slug not in tenant DB or Contrail', async () => {
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue({
+        did: 'did:plc:gone',
+        rkey: 'missing',
+      });
+      eventRepository.findOne.mockResolvedValue(null);
+
+      jest
+        .spyOn(service['contrailQueryService'], 'findByUri')
+        .mockResolvedValue(null);
+
+      await expect(
+        service.resolveForAttendance('did:plc:gone~missing'),
+      ).rejects.toThrow('not found in Contrail');
+    });
+
+    it('should return isPublic false for a private event', async () => {
+      const privateEvent = {
+        ...mockEventEntity,
+        visibility: EventVisibility.Private,
+        requireApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+        atprotoUri: null,
+      } as EventEntity;
+
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
+      eventRepository.findOne.mockResolvedValue(privateEvent);
+
+      const result = await service.resolveForAttendance('private-event');
+
+      expect(result.isPublic).toBe(false);
+    });
+
+    it('should return isPublic true for an unlisted event', async () => {
+      const unlistedEvent = {
+        ...mockEventEntity,
+        visibility: EventVisibility.Unlisted,
+        requireApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+        atprotoUri: null,
+      } as EventEntity;
+
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
+      eventRepository.findOne.mockResolvedValue(unlistedEvent);
+
+      const result = await service.resolveForAttendance('unlisted-event');
+
+      expect(result.isPublic).toBe(true);
+    });
+  });
 });

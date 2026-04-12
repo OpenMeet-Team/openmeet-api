@@ -19,6 +19,8 @@ import {
 import { instanceToPlain } from 'class-transformer';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { ResolvedEvent } from '../../attendance/types';
+import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
 import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { QueryEventDto } from '../dto/query-events.dto';
@@ -2121,5 +2123,71 @@ export class EventQueryService {
       page,
       totalPages: Math.ceil(total / limit),
     } as PaginationResult<Partial<EventEntity>>;
+  }
+
+  @Trace('event-query.resolveForAttendance')
+  async resolveForAttendance(slug: string): Promise<ResolvedEvent> {
+    await this.initializeRepository();
+
+    const atprotoSlug = this.atprotoEnrichmentService.parseAtprotoSlug(slug);
+    if (atprotoSlug) {
+      const uri = `at://${atprotoSlug.did}/${BLUESKY_COLLECTIONS.EVENT}/${atprotoSlug.rkey}`;
+
+      // Check if a local tenant event exists with this atprotoUri.
+      // Users navigate to events via AT Protocol slug even when the
+      // event is hosted by this tenant — use the tenant path for
+      // local attendee records, authorization, and activity metadata.
+      const tenantEvent = await this.eventRepository.findOne({
+        where: { atprotoUri: uri },
+        relations: ['group', 'user'],
+      });
+      if (tenantEvent) {
+        return this.buildResolvedEvent(tenantEvent, uri);
+      }
+
+      // Truly foreign event — exists only in Contrail
+      const record = await this.contrailQueryService.findByUri(
+        BLUESKY_COLLECTIONS.EVENT,
+        uri,
+      );
+      if (!record) {
+        throw new NotFoundException(`Event ${slug} not found in Contrail`);
+      }
+      return {
+        tenantEvent: null,
+        uri,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      };
+    }
+
+    // Regular slug — look up in tenant DB
+    const event = await this.eventRepository.findOne({
+      where: { slug },
+      relations: ['group', 'user'],
+    });
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    return this.buildResolvedEvent(event, event.atprotoUri || null);
+  }
+
+  private buildResolvedEvent(
+    event: EventEntity,
+    uri: string | null,
+  ): ResolvedEvent {
+    return {
+      tenantEvent: event,
+      uri,
+      isPublic: event.visibility !== EventVisibility.Private,
+      requiresApproval: event.requireApproval || false,
+      allowWaitlist: event.allowWaitlist || false,
+      maxAttendees: event.maxAttendees || 0,
+      requireGroupMembership: event.requireGroupMembership || false,
+    };
   }
 }
