@@ -178,6 +178,15 @@ describe('EventManagementService', () => {
         .fn()
         .mockResolvedValue([[fullMockEvent1, fullMockEvent2], 2]),
       findEventsBySeriesId: jest.fn(),
+      resolveForAttendance: jest.fn().mockResolvedValue({
+        tenantEvent: { id: 123, slug: 'test-series-event-123' },
+        uri: null,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      }),
     } as any;
 
     mockGroupMemberQueryService = {
@@ -623,7 +632,7 @@ describe('EventManagementService', () => {
       );
 
       expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
-        findOneMockEventEntity.slug,
+        expect.objectContaining({ tenantEvent: expect.any(Object) }),
         mockUser.ulid,
         'going',
       );
@@ -657,7 +666,7 @@ describe('EventManagementService', () => {
       });
 
       expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
-        findOneMockEventEntity.slug,
+        expect.objectContaining({ tenantEvent: expect.any(Object) }),
         mockUser.ulid,
         'notgoing',
       );
@@ -689,7 +698,7 @@ describe('EventManagementService', () => {
       });
 
       expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
-        findOneMockEventEntity.slug,
+        expect.objectContaining({ tenantEvent: expect.any(Object) }),
         mockUser.ulid,
         'interested',
       );
@@ -775,7 +784,7 @@ describe('EventManagementService', () => {
       );
 
       expect(mockAttendanceService.cancelAttendance).toHaveBeenCalledWith(
-        findOneMockEventEntity.slug,
+        expect.objectContaining({ tenantEvent: expect.any(Object) }),
         mockUser.ulid,
       );
       expect(result).toBeDefined();
@@ -2550,7 +2559,7 @@ describe('EventManagementService', () => {
       } as any);
 
       expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
-        atprotoSlug,
+        expect.objectContaining({ tenantEvent: expect.any(Object) }),
         '01TESTULID',
         'going',
       );
@@ -2595,7 +2604,7 @@ describe('EventManagementService', () => {
       } as any);
 
       expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
-        regularSlug,
+        expect.objectContaining({ tenantEvent: expect.any(Object) }),
         mockUser.ulid,
         'going',
       );
@@ -2634,7 +2643,7 @@ describe('EventManagementService', () => {
       );
 
       expect(mockAttendanceService.cancelAttendance).toHaveBeenCalledWith(
-        atprotoSlug,
+        expect.objectContaining({ tenantEvent: expect.any(Object) }),
         '01TESTULID',
       );
       expect(result).toEqual({
@@ -2679,7 +2688,7 @@ describe('EventManagementService', () => {
       );
 
       expect(mockAttendanceService.cancelAttendance).toHaveBeenCalledWith(
-        regularSlug,
+        expect.objectContaining({ tenantEvent: expect.any(Object) }),
         mockUser.ulid,
       );
       expect(result).toBeDefined();

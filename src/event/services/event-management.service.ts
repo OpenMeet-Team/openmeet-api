@@ -1557,8 +1557,10 @@ export class EventManagementService {
           ? 'interested'
           : 'going';
 
+    const resolved = await this.eventQueryService.resolveForAttendance(slug);
+
     const result = await this.attendanceService.recordAttendance(
-      slug,
+      resolved,
       user.ulid,
       status,
     );
@@ -1593,8 +1595,10 @@ export class EventManagementService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
+    const resolved = await this.eventQueryService.resolveForAttendance(slug);
+
     const result = await this.attendanceService.cancelAttendance(
-      slug,
+      resolved,
       user.ulid,
     );
 

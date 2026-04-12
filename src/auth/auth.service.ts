@@ -1187,8 +1187,9 @@ export class AuthService {
     // Normalize email to lowercase for consistency
     const email = dto.email.toLowerCase().trim();
 
-    // 1. Find the event
-    const event = await this.eventQueryService.findEventBySlug(eventSlug);
+    // 1. Find the event (resolveForAttendance handles AT Protocol slugs too)
+    const resolved = await this.eventQueryService.resolveForAttendance(eventSlug);
+    const event = resolved.tenantEvent;
     if (!event) {
       throw new NotFoundException('Event not found');
     }
@@ -1276,7 +1277,7 @@ export class AuthService {
       status === EventAttendeeStatus.Cancelled ? 'notgoing' : 'going';
 
     const result = await this.attendanceService.recordAttendance(
-      eventSlug,
+      resolved,
       user.ulid,
       rsvpStatus as any,
     );

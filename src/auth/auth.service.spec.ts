@@ -2017,4 +2017,67 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('quickRsvp', () => {
+    const mockCreatedUser = {
+      id: 1,
+      ulid: 'test-ulid',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+    };
+
+    const mockResolvedEvent = {
+      tenantEvent: {
+        id: 1,
+        slug: 'test-event',
+        name: 'Test Event',
+        status: 'published',
+        startDate: new Date(Date.now() + 86400000).toISOString(),
+        endDate: null,
+        group: null,
+        requireGroupMembership: false,
+      },
+      uri: null,
+      isPublic: true,
+      requiresApproval: false,
+      allowWaitlist: false,
+      maxAttendees: 0,
+      requireGroupMembership: false,
+    };
+
+    it('should call resolveForAttendance and pass resolved event to recordAttendance', async () => {
+      mockEventQueryService.resolveForAttendance = jest
+        .fn()
+        .mockResolvedValue(mockResolvedEvent);
+      mockUserService.findByEmail.mockResolvedValue(null);
+      mockRoleService.findByName.mockResolvedValue({ id: 1 });
+      (mockUserService as any).create = jest
+        .fn()
+        .mockResolvedValue(mockCreatedUser);
+
+      const mockAttendanceService = (authService as any).attendanceService;
+      mockAttendanceService.recordAttendance = jest
+        .fn()
+        .mockResolvedValue({ status: 'confirmed' });
+
+      await authService.quickRsvp(
+        {
+          name: 'Test User',
+          email: 'test@example.com',
+          eventSlug: 'test-event',
+        } as any,
+        'test-tenant',
+      );
+
+      expect(mockEventQueryService.resolveForAttendance).toHaveBeenCalledWith(
+        'test-event',
+      );
+      expect(mockAttendanceService.recordAttendance).toHaveBeenCalledWith(
+        mockResolvedEvent,
+        'test-ulid',
+        'going',
+      );
+    });
+  });
 });
