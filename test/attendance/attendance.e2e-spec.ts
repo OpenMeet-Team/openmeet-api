@@ -419,4 +419,67 @@ describe('Attendance Service (e2e)', () => {
       }
     });
   });
+
+  describe('RSVP via AT Protocol slug to tenant event', () => {
+    let publicEvent: any;
+
+    beforeEach(async () => {
+      publicEvent = await createTestEvent(adminToken, {
+        visibility: EventVisibility.Public,
+      });
+    });
+
+    afterEach(async () => {
+      if (publicEvent?.slug) {
+        await deleteTestEvent(adminToken, publicEvent.slug);
+      }
+    });
+
+    it('should create local attendee record when RSVPing via atprotoUri-derived slug', async () => {
+      // Wait for AT Protocol publishing (best-effort, may not be available in CI)
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Re-fetch to get atprotoUri
+      const eventRes = await request(TESTING_APP_URL)
+        .get(`/api/events/${publicEvent.slug}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      const atprotoUri = eventRes.body.atprotoUri;
+
+      if (!atprotoUri) {
+        // PDS not available in this test environment — skip gracefully
+        console.log(
+          'Skipping AT Protocol slug test — event has no atprotoUri (PDS unavailable)',
+        );
+        return;
+      }
+
+      // Parse atprotoUri into slug format: did:plc:xxx~rkey
+      const uriMatch = atprotoUri.match(/^at:\/\/(did:[^/]+)\/[^/]+\/(.+)$/);
+      expect(uriMatch).not.toBeNull();
+      const atprotoSlug = `${uriMatch![1]}~${uriMatch![2]}`;
+
+      // RSVP using the AT Protocol slug
+      const rsvpRes = await request(TESTING_APP_URL)
+        .post(`/api/events/${atprotoSlug}/attend`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({});
+
+      expect(rsvpRes.status).toBe(201);
+      // Should have a local attendee record (not just PDS-only)
+      expect(rsvpRes.body.id).toBeDefined();
+      expect(rsvpRes.body.status).toBe(EventAttendeeStatus.Confirmed);
+
+      // Verify user appears in attendees list via the regular slug
+      const attendeesRes = await request(TESTING_APP_URL)
+        .get(`/api/events/${publicEvent.slug}/attendees`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(attendeesRes.status).toBe(200);
+      expect(attendeesRes.body.data.length).toBeGreaterThan(0);
+    });
+  });
 });
