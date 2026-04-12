@@ -315,6 +315,42 @@ export class EventQueryService {
                 [record],
                 this.request.tenantId,
               );
+
+            // Check user's RSVP status via Contrail for foreign events
+            if (userId) {
+              const userDid = await this.resolveUserDid(userId);
+              if (userDid) {
+                const rsvpRecords = await this.contrailQueryService.find(
+                  BLUESKY_COLLECTIONS.RSVP,
+                  {
+                    conditions: [
+                      {
+                        sql: "record->'subject'->>'uri' = $1",
+                        params: [uri],
+                      },
+                      { sql: 'did = $1', params: [userDid] },
+                    ],
+                    limit: 1,
+                  },
+                );
+                if (rsvpRecords.records.length > 0) {
+                  const rsvpRecord = rsvpRecords.records[0].record as any;
+                  const fullStatus = rsvpRecord.status as string;
+                  const shortStatus = fullStatus.includes('#')
+                    ? fullStatus.split('#')[1]
+                    : fullStatus;
+                  (enriched as any).attendee = {
+                    status:
+                      shortStatus === 'going'
+                        ? 'confirmed'
+                        : shortStatus === 'notgoing'
+                          ? 'cancelled'
+                          : shortStatus,
+                  };
+                }
+              }
+            }
+
             // TODO(om-vsq9): AtprotoSourcedEvent is not EventEntity — adopt
             // ATProto-shaped API response types to remove this cast
             return enriched as any;

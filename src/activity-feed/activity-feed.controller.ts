@@ -182,11 +182,14 @@ export class EventActivityFeedController {
     this.logger.debug(`Query params: ${JSON.stringify(query)}`);
 
     try {
-      // Verify event exists
-      const event = await this.eventQueryService.findEventBySlug(slug);
+      // Resolve event — handles both regular slugs and AT Protocol slugs
+      const resolved = await this.eventQueryService.resolveForAttendance(slug);
+      const event = resolved.tenantEvent;
+
+      // Foreign events have no local activity feed
       if (!event) {
-        this.logger.warn(`Event not found for slug: ${slug}`);
-        throw new NotFoundException(`Event with slug ${slug} not found`);
+        this.logger.debug(`Foreign event ${slug} — returning empty feed`);
+        return [];
       }
 
       this.logger.debug(`Event found: ${event.id} - ${event.name}`);
