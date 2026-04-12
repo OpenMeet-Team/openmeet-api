@@ -540,9 +540,10 @@ export class UserService {
     const getContrailAttendingCount = async (): Promise<number> => {
       if (!userDid) return 0;
       try {
+        const schema = this.dataSource?.options?.name || 'public';
         const result = await this.usersRepository.manager.query(
           `SELECT COUNT(DISTINCT e.id) as count
-           FROM "event" e
+           FROM "${schema}"."events" e
            INNER JOIN public.records_community_lexicon_calendar_rsvp r
              ON e."atprotoUri" = r.record->'subject'->>'uri'
            WHERE r.did = $1
@@ -550,7 +551,7 @@ export class UserService {
              AND e.visibility = 'public'
              AND e.status IN ('published', 'cancelled')
              AND NOT EXISTS (
-               SELECT 1 FROM "eventAttendees" ea
+               SELECT 1 FROM "${schema}"."eventAttendees" ea
                WHERE ea."eventId" = e.id AND ea."userId" = $2
              )`,
           [userDid, user.id],
@@ -580,7 +581,7 @@ export class UserService {
             statuses: ['published', 'cancelled'],
           })
           .andWhere(
-            `NOT EXISTS (SELECT 1 FROM "eventAttendees" ea WHERE ea."eventId" = event.id AND ea."userId" = :userId)`,
+            `NOT EXISTS (SELECT 1 FROM "${this.dataSource?.options?.name || 'public'}"."eventAttendees" ea WHERE ea."eventId" = event.id AND ea."userId" = :userId)`,
             { userId: user.id },
           )
           .orderBy('event.startDate', 'ASC')
