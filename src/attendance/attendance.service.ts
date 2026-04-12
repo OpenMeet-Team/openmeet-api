@@ -9,19 +9,14 @@ import {
   Scope,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Repository } from 'typeorm';
 import { Agent } from '@atproto/api';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
-  EventVisibility,
   GroupRole,
 } from '../core/constants/constant';
-import { TenantConnectionService } from '../tenant/tenant.service';
 import { ContrailQueryService } from '../contrail/contrail-query.service';
-import { AtprotoEnrichmentService } from '../atproto-enrichment/atproto-enrichment.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
 import { PdsSessionService } from '../pds/pds-session.service';
 import { SessionUnavailableError } from '../pds/pds.errors';
@@ -40,13 +35,10 @@ import { Trace } from '../utils/trace.decorator';
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AttendanceService {
   private readonly logger = new Logger(AttendanceService.name);
-  private eventRepository: Repository<EventEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
-    private readonly tenantConnectionService: TenantConnectionService,
     private readonly contrailQueryService: ContrailQueryService,
-    private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
     private readonly blueskyRsvpService: BlueskyRsvpService,
     @Inject(forwardRef(() => PdsSessionService))
     private readonly pdsSessionService: PdsSessionService,
@@ -60,68 +52,12 @@ export class AttendanceService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  private async initializeRepository(): Promise<void> {
-    if (!this.eventRepository) {
-      const dataSource = await this.tenantConnectionService.getTenantConnection(
-        this.request.tenantId,
-      );
-      this.eventRepository = dataSource.getRepository(EventEntity);
-    }
-  }
-
-  @Trace('attendance.resolveEvent')
-  async resolveEvent(slug: string): Promise<ResolvedEvent> {
-    await this.initializeRepository();
-
-    const atprotoSlug = this.atprotoEnrichmentService.parseAtprotoSlug(slug);
-    if (atprotoSlug) {
-      const uri = `at://${atprotoSlug.did}/${BLUESKY_COLLECTIONS.EVENT}/${atprotoSlug.rkey}`;
-      const record = await this.contrailQueryService.findByUri(
-        BLUESKY_COLLECTIONS.EVENT,
-        uri,
-      );
-      if (!record) {
-        throw new NotFoundException(`Event ${slug} not found in Contrail`);
-      }
-      return {
-        tenantEvent: null,
-        uri,
-        isPublic: true,
-        requiresApproval: false,
-        allowWaitlist: false,
-        maxAttendees: 0,
-        requireGroupMembership: false,
-      };
-    }
-
-    const event = await this.eventRepository.findOne({
-      where: { slug },
-      relations: ['group', 'user'],
-    });
-    if (!event) {
-      throw new NotFoundException(`Event with slug ${slug} not found`);
-    }
-
-    return {
-      tenantEvent: event,
-      uri: event.atprotoUri || null,
-      // Public and Unlisted events allow any authenticated user to RSVP;
-      // only Private events require an invitation or group membership.
-      isPublic: event.visibility !== EventVisibility.Private,
-      requiresApproval: event.requireApproval || false,
-      allowWaitlist: event.allowWaitlist || false,
-      maxAttendees: event.maxAttendees || 0,
-      requireGroupMembership: event.requireGroupMembership || false,
-    };
-  }
-
   @Trace('attendance.recordAttendance')
   async recordAttendance(
-    slug: string,
+    resolved: ResolvedEvent,
     userUlid: string,
     status: RsvpStatusShort,
   ): Promise<AttendanceResult> {
-    const resolved = await this.resolveEvent(slug);
     const user = await this.resolveUser(userUlid);
 
     await this.authorizeAttendance(resolved, user.id);
@@ -354,11 +290,9 @@ export class AttendanceService {
 
   @Trace('attendance.cancelAttendance')
   async cancelAttendance(
-    slug: string,
+    resolved: ResolvedEvent,
     userUlid: string,
   ): Promise<AttendanceResult> {
-    const resolved = await this.resolveEvent(slug);
-
     if (resolved.isPublic) {
       // PDS cancel is best-effort — users without ATProto identity
       // (e.g. quick-rsvp guests) still get their local record cancelled.

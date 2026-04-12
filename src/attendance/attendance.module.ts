@@ -1,8 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { TenantModule } from '../tenant/tenant.module';
 import { ContrailModule } from '../contrail/contrail.module';
-import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichment.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { UserModule } from '../user/user.module';
@@ -12,9 +10,7 @@ import { PdsModule } from '../pds/pds.module';
 
 @Module({
   imports: [
-    TenantModule,
     ContrailModule,
-    AtprotoEnrichmentModule,
     forwardRef(() => BlueskyModule),
     forwardRef(() => PdsModule),
     forwardRef(() => EventAttendeeModule),
