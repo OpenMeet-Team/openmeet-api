@@ -827,10 +827,15 @@ export class EventQueryService {
   @Trace('event-query.getAttendingEvents')
   async getAttendingEvents(
     userId: number,
-    options: { limit?: number; upcomingOnly?: boolean } = {},
+    options: {
+      limit?: number;
+      upcomingOnly?: boolean;
+      startDate?: Date;
+      endDate?: Date;
+    } = {},
   ): Promise<{ events: (AtprotoSourcedEvent | EventEntity)[]; total: number }> {
     await this.initializeRepository();
-    const { limit = 10, upcomingOnly = false } = options;
+    const { limit = 10, upcomingOnly = false, startDate, endDate } = options;
     const userDid = await this.resolveUserDid(userId);
 
     // Q1: Contrail RSVP → event records → enrichment
@@ -913,11 +918,16 @@ export class EventQueryService {
       },
     );
 
-    // Apply upcomingOnly filter
+    // Apply date filters
     const now = new Date();
-    const filtered = upcomingOnly
-      ? allEvents.filter((e) => e.startDate && new Date(e.startDate) >= now)
-      : allEvents;
+    const filtered = allEvents.filter((e) => {
+      if (!e.startDate) return !upcomingOnly; // Keep dateless events unless upcomingOnly
+      const eventDate = new Date(e.startDate);
+      if (upcomingOnly && eventDate < now) return false;
+      if (startDate && eventDate < startDate) return false;
+      if (endDate && eventDate > endDate) return false;
+      return true;
+    });
 
     const limited = filtered.slice(0, limit);
 
@@ -1851,71 +1861,18 @@ export class EventQueryService {
     userId: number,
     query: MyEventsQueryDto,
   ): Promise<EventEntity[]> {
-    await this.initializeRepository();
-
     const startDate = query.startDate ? new Date(query.startDate) : new Date();
     const endDate = query.endDate
       ? new Date(query.endDate)
       : new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    const events = await this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoinAndSelect('event.user', 'user')
-      .leftJoinAndSelect('event.group', 'group')
-      .leftJoinAndSelect('event.image', 'image')
-      .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoin(
-        'event.attendees',
-        'myAttendee',
-        'myAttendee.userId = :userId',
-        { userId },
-      )
-      .addSelect(['myAttendee.status', 'myAttendee.id'])
-      .where(
-        new Brackets((qb) => {
-          qb.where('event.userId = :userId', { userId }).orWhere(
-            'myAttendee.userId = :userId',
-            { userId },
-          );
-        }),
-      )
-      .andWhere('event.startDate >= :startDate', { startDate })
-      .andWhere('event.startDate <= :endDate', { endDate })
-      .andWhere('event.status IN (:...statuses)', {
-        statuses: [EventStatus.Published, EventStatus.Cancelled],
-      })
-      .orderBy('event.startDate', 'ASC')
-      .take(500)
-      .getMany();
-
-    if (events.length === 0) return [];
-
-    // Batch-fetch user's attendee records to enrich with relationship info
-    const eventIds = events.map((e) => e.id);
-    const attendeeRecords = await this.eventAttendeesRepository
-      .createQueryBuilder('att')
-      .leftJoinAndSelect('att.role', 'role')
-      .leftJoin('att.event', 'event')
-      .addSelect('event.id')
-      .where('att.eventId IN (:...eventIds)', { eventIds })
-      .andWhere('att.userId = :userId', { userId })
-      .getMany();
-
-    const attendeeMap = new Map(attendeeRecords.map((a) => [a.event?.id, a]));
-
-    return events.map((event) => {
-      const attendee = attendeeMap.get(event.id);
-      return {
-        ...event,
-        isOrganizer: event.user?.id === userId,
-        attendeeStatus: attendee?.status ?? null,
-        attendeeRole: attendee?.role ?? null,
-      } as EventEntity & {
-        isOrganizer: boolean;
-        attendeeStatus: EventAttendeeStatus | null;
-        attendeeRole: any;
-      };
+    const result = await this.getAttendingEvents(userId, {
+      limit: 500,
+      startDate,
+      endDate,
     });
+
+    return result.events as EventEntity[];
   }
 
   private async showAllEventsWithContrail(
