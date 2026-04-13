@@ -605,7 +605,7 @@ export class AtprotoPublisherService {
     }
 
     const result = await this.blueskyRsvpService.createRsvp(
-      event,
+      event!,
       rsvpStatus,
       session.did,
       tenantId,

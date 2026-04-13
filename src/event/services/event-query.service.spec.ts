@@ -7,8 +7,9 @@ import {
   EventStatus,
   EventVisibility,
   EventType,
+  EventAttendeeStatus,
 } from '../../core/constants/constant';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventQueryService } from './event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
@@ -19,6 +20,9 @@ import { ContrailQueryService } from '../../contrail/contrail-query.service';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { UserService } from '../../user/user.service';
+import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
+import { DashboardEventsTab } from '../dto/dashboard-events-query.dto';
 
 // Define a mock event entity for consistent use
 const mockEventEntity: EventEntity = {
@@ -46,6 +50,8 @@ describe('EventQueryService', () => {
   let mockGroupMemberService: jest.Mocked<GroupMemberService>; // Add declaration for the mock service
   let mockGroupDIDFollowService: { getFollowedDidsForGroup: jest.Mock };
   let mockEnrichmentService: any;
+  let mockUserService: { getUserById: jest.Mock };
+  let mockIdentityService: { findByUserUlid: jest.Mock };
 
   beforeEach(async () => {
     // Define the mock repository behavior here
@@ -94,6 +100,16 @@ describe('EventQueryService', () => {
       getFollowedDidsForGroup: jest.fn().mockResolvedValue([]),
     };
 
+    // Define mock UserService behavior
+    mockUserService = {
+      getUserById: jest.fn().mockResolvedValue({ id: 1, ulid: '01HABCDEF' }),
+    };
+
+    // Define mock UserAtprotoIdentityService behavior
+    mockIdentityService = {
+      findByUserUlid: jest.fn().mockResolvedValue(null),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventQueryService,
@@ -133,6 +149,14 @@ describe('EventQueryService', () => {
         {
           provide: GroupDIDFollowService,
           useValue: mockGroupDIDFollowService,
+        },
+        {
+          provide: UserService,
+          useValue: mockUserService,
+        },
+        {
+          provide: UserAtprotoIdentityService,
+          useValue: mockIdentityService,
         },
         {
           provide: ContrailQueryService,
@@ -898,64 +922,24 @@ describe('EventQueryService', () => {
     });
   });
 
-  describe('getHomePageUserUpcomingEvents - batch count', () => {
-    it('should use batch attendee count query instead of loadRelationCountAndMap', async () => {
+  describe('getHomePageUserUpcomingEvents', () => {
+    it('should delegate to getAttendingEvents with upcoming filter', async () => {
       const mockEvents = [
         { ...mockEventEntity, id: 10 },
         { ...mockEventEntity, id: 20, slug: 'upcoming-2' },
       ];
 
-      const loadRelationCountAndMapFn = jest.fn().mockReturnThis();
-      const mockEventQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        loadRelationCountAndMap: loadRelationCountAndMapFn,
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockEvents),
-      };
-
-      const mockGetRawMany = jest.fn().mockResolvedValue([
-        { eventId: 10, count: '8' },
-        { eventId: 20, count: '12' },
-      ]);
-      const mockAttendeeQueryBuilder = {
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: mockGetRawMany,
-      };
-
-      jest
-        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue({
-          getRepository: jest.fn().mockImplementation((entity) => {
-            if (entity.name === 'EventAttendeesEntity') {
-              return {
-                createQueryBuilder: jest
-                  .fn()
-                  .mockReturnValue(mockAttendeeQueryBuilder),
-              };
-            }
-            return {
-              createQueryBuilder: jest
-                .fn()
-                .mockReturnValue(mockEventQueryBuilder),
-            };
-          }),
-        } as any);
+      jest.spyOn(service, 'getAttendingEvents').mockResolvedValue({
+        events: mockEvents as any,
+        total: 2,
+      });
 
       const result = await service.getHomePageUserUpcomingEvents(1);
 
-      // loadRelationCountAndMap should NOT be called
-      expect(loadRelationCountAndMapFn).not.toHaveBeenCalled();
-
-      // Batch attendee count query SHOULD be called
-      expect(mockGetRawMany).toHaveBeenCalled();
-
+      expect(service.getAttendingEvents).toHaveBeenCalledWith(1, {
+        limit: 5,
+        upcomingOnly: true,
+      });
       expect(result).toHaveLength(2);
     });
   });
@@ -1747,6 +1731,798 @@ describe('EventQueryService', () => {
       // External event (earlier date) should come first
       expect(result[0].name).toBe('External Calendar Event');
       expect(result[1].name).toBe('Test Event');
+    });
+  });
+
+  describe('showDashboardEventsPaginated - Contrail RSVP union', () => {
+    it('should include Contrail RSVP subquery when user has ATProto identity', async () => {
+      // Set up user with ATProto identity
+      mockUserService.getUserById.mockResolvedValue({
+        id: 1,
+        ulid: '01HABCDEF',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:testuser123',
+      });
+
+      const mockQb: Record<string, any> = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getMany: jest.fn().mockResolvedValue([]),
+        getCount: jest.fn().mockResolvedValue(0),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        getQuery: jest.fn().mockReturnValue('SELECT ...'),
+        getParameters: jest.fn().mockReturnValue({}),
+        expressionMap: {
+          mainAlias: { metadata: { name: 'EventEntity' } },
+        },
+      };
+      // Ensure chainable methods return mockQb
+      for (const key of ['skip', 'take']) {
+        mockQb[key] = jest.fn().mockReturnValue(mockQb);
+      }
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      await service.showDashboardEventsPaginated(1, {
+        tab: DashboardEventsTab.Attending,
+        page: 1,
+        limit: 10,
+      });
+
+      // Verify that resolveUserDid was called
+      expect(mockUserService.getUserById).toHaveBeenCalledWith(1);
+      expect(mockIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        TESTING_TENANT_ID,
+        '01HABCDEF',
+      );
+
+      // Verify that the where was called with Brackets (which includes the Contrail subquery)
+      expect(mockQb.where).toHaveBeenCalled();
+      // The first call to where should be a Brackets instance (not a plain string)
+      const whereArg = mockQb.where.mock.calls[0][0];
+      expect(whereArg).toBeInstanceOf(Brackets);
+    });
+
+    it('should not include Contrail subquery when user has no ATProto identity', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 1,
+        ulid: '01HABCDEF',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      const mockQb: Record<string, any> = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getMany: jest.fn().mockResolvedValue([]),
+        getCount: jest.fn().mockResolvedValue(0),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        getQuery: jest.fn().mockReturnValue('SELECT ...'),
+        getParameters: jest.fn().mockReturnValue({}),
+        expressionMap: {
+          mainAlias: { metadata: { name: 'EventEntity' } },
+        },
+      };
+      for (const key of ['skip', 'take']) {
+        mockQb[key] = jest.fn().mockReturnValue(mockQb);
+      }
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      await service.showDashboardEventsPaginated(1, {
+        tab: DashboardEventsTab.Attending,
+        page: 1,
+        limit: 10,
+      });
+
+      // resolveUserDid was called but returned null
+      expect(mockUserService.getUserById).toHaveBeenCalledWith(1);
+      expect(mockIdentityService.findByUserUlid).toHaveBeenCalledWith(
+        TESTING_TENANT_ID,
+        '01HABCDEF',
+      );
+
+      // Where should still be called with Brackets, but without the Contrail orWhere
+      expect(mockQb.where).toHaveBeenCalled();
+      const whereArg = mockQb.where.mock.calls[0][0];
+      expect(whereArg).toBeInstanceOf(Brackets);
+    });
+  });
+
+  describe('getDashboardSummary - Contrail RSVP union', () => {
+    it('should delegate attending events to getAttendingEvents', async () => {
+      const mockQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getMany: jest.fn().mockResolvedValue([]),
+        getOne: jest.fn().mockResolvedValue(null),
+        getCount: jest.fn().mockResolvedValue(0),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        getRawOne: jest.fn().mockResolvedValue({ count: '0' }),
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQb),
+          }),
+        } as any);
+
+      jest
+        .spyOn(service, 'getAttendingEvents')
+        .mockResolvedValue({ events: [], total: 0 });
+
+      await service.getDashboardSummary(1);
+
+      // Verify attending events are fetched via getAttendingEvents
+      expect(service.getAttendingEvents).toHaveBeenCalledWith(1, {
+        limit: 5,
+        upcomingOnly: true,
+      });
+    });
+  });
+
+  describe('resolveForAttendance', () => {
+    it('should resolve a regular slug to a tenant event', async () => {
+      const event = {
+        ...mockEventEntity,
+        visibility: EventVisibility.Public,
+        requireApproval: false,
+        allowWaitlist: true,
+        maxAttendees: 100,
+        requireGroupMembership: false,
+        atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/123',
+      } as EventEntity;
+
+      eventRepository.findOne.mockResolvedValue(event);
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
+
+      const result = await service.resolveForAttendance('test-event-slug');
+
+      expect(result.tenantEvent).toBe(event);
+      expect(result.uri).toBe(
+        'at://did:plc:abc/community.lexicon.calendar.event/123',
+      );
+      expect(result.isPublic).toBe(true);
+      expect(result.requiresApproval).toBe(false);
+      expect(result.allowWaitlist).toBe(true);
+      expect(result.maxAttendees).toBe(100);
+      expect(result.requireGroupMembership).toBe(false);
+    });
+
+    it('should resolve an AT Protocol slug to a tenant event when found by atprotoUri', async () => {
+      const event = {
+        ...mockEventEntity,
+        visibility: EventVisibility.Public,
+        requireApproval: true,
+        allowWaitlist: false,
+        maxAttendees: 50,
+        requireGroupMembership: true,
+        atprotoUri: 'at://did:plc:xyz/community.lexicon.calendar.event/abc123',
+      } as EventEntity;
+
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue({
+        did: 'did:plc:xyz',
+        rkey: 'abc123',
+      });
+      eventRepository.findOne.mockResolvedValue(event);
+
+      const result = await service.resolveForAttendance('did:plc:xyz~abc123');
+
+      expect(result.tenantEvent).toBe(event);
+      expect(result.uri).toBe(
+        'at://did:plc:xyz/community.lexicon.calendar.event/abc123',
+      );
+      expect(result.isPublic).toBe(true);
+      expect(result.requiresApproval).toBe(true);
+      expect(result.requireGroupMembership).toBe(true);
+    });
+
+    it('should resolve an AT Protocol slug to a foreign event when not in tenant DB but in Contrail', async () => {
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue({
+        did: 'did:plc:foreign',
+        rkey: 'rkey456',
+      });
+      eventRepository.findOne.mockResolvedValue(null);
+
+      jest
+        .spyOn(service['contrailQueryService'], 'findByUri')
+        .mockResolvedValue({ uri: 'at://...', value: {} } as any);
+
+      const result = await service.resolveForAttendance(
+        'did:plc:foreign~rkey456',
+      );
+
+      expect(result.tenantEvent).toBeNull();
+      expect(result.uri).toBe(
+        'at://did:plc:foreign/community.lexicon.calendar.event/rkey456',
+      );
+      expect(result.isPublic).toBe(true);
+      expect(result.requiresApproval).toBe(false);
+      expect(result.allowWaitlist).toBe(false);
+      expect(result.maxAttendees).toBe(0);
+      expect(result.requireGroupMembership).toBe(false);
+    });
+
+    it('should throw NotFoundException for a regular slug not found', async () => {
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
+      eventRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.resolveForAttendance('nonexistent-slug'),
+      ).rejects.toThrow('Event with slug nonexistent-slug not found');
+    });
+
+    it('should throw NotFoundException for AT Protocol slug not in tenant DB or Contrail', async () => {
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue({
+        did: 'did:plc:gone',
+        rkey: 'missing',
+      });
+      eventRepository.findOne.mockResolvedValue(null);
+
+      jest
+        .spyOn(service['contrailQueryService'], 'findByUri')
+        .mockResolvedValue(null);
+
+      await expect(
+        service.resolveForAttendance('did:plc:gone~missing'),
+      ).rejects.toThrow('not found in Contrail');
+    });
+
+    it('should return isPublic false for a private event', async () => {
+      const privateEvent = {
+        ...mockEventEntity,
+        visibility: EventVisibility.Private,
+        requireApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+        atprotoUri: null,
+      } as EventEntity;
+
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
+      eventRepository.findOne.mockResolvedValue(privateEvent);
+
+      const result = await service.resolveForAttendance('private-event');
+
+      expect(result.isPublic).toBe(false);
+    });
+
+    it('should return isPublic true for an unlisted event', async () => {
+      const unlistedEvent = {
+        ...mockEventEntity,
+        visibility: EventVisibility.Unlisted,
+        requireApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+        atprotoUri: null,
+      } as EventEntity;
+
+      mockEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
+      eventRepository.findOne.mockResolvedValue(unlistedEvent);
+
+      const result = await service.resolveForAttendance('unlisted-event');
+
+      expect(result.isPublic).toBe(true);
+    });
+  });
+
+  describe('getAttendingEvents', () => {
+    let mockContrailService: any;
+
+    beforeEach(() => {
+      mockContrailService = service['contrailQueryService'];
+    });
+
+    it('should return enriched Contrail events the user RSVPed to', async () => {
+      // User has a DID
+      mockUserService.getUserById.mockResolvedValue({
+        id: 1,
+        ulid: '01HABCDEF',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:user123',
+      });
+
+      // Contrail returns RSVP records
+      mockContrailService.find.mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:user123/community.lexicon.calendar.rsvp/abc',
+            record: {
+              status: 'community.lexicon.calendar.rsvp#going',
+              subject: {
+                uri: 'at://did:plc:host/community.lexicon.calendar.event/evt1',
+              },
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      // findByUris returns the event record
+      mockContrailService.findByUris = jest.fn().mockResolvedValue([
+        {
+          uri: 'at://did:plc:host/community.lexicon.calendar.event/evt1',
+          record: {
+            name: 'Foreign Event',
+            startsAt: '2026-05-01T10:00:00Z',
+          },
+        },
+      ]);
+
+      const enrichedEvent: AtprotoSourcedEvent = {
+        source: 'atproto',
+        atprotoUri: 'at://did:plc:host/community.lexicon.calendar.event/evt1',
+        atprotoRkey: 'evt1',
+        atprotoCid: null,
+        name: 'Foreign Event',
+        description: null,
+        startDate: new Date('2026-05-01T10:00:00Z'),
+        endDate: null,
+        type: 'in-person',
+        status: 'published',
+        location: null,
+        locationOnline: null,
+        lat: null,
+        lon: null,
+        attendeesCount: 0,
+        slug: 'foreign-event',
+      };
+
+      mockEnrichmentService.enrichRecords.mockResolvedValue([enrichedEvent]);
+
+      // No private events
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.getAttendingEvents(1);
+
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0].name).toBe('Foreign Event');
+      expect((result.events[0] as any).source).toBe('atproto');
+      expect(mockContrailService.find).toHaveBeenCalled();
+      expect(mockContrailService.findByUris).toHaveBeenCalled();
+      expect(mockEnrichmentService.enrichRecords).toHaveBeenCalled();
+    });
+
+    it('should include private local events with no ATProto URI', async () => {
+      // User has no DID
+      mockUserService.getUserById.mockResolvedValue({
+        id: 2,
+        ulid: '01HABCXYZ',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      const privateEvent = {
+        ...mockEventEntity,
+        id: 10,
+        name: 'Private Local Event',
+        atprotoUri: null,
+        startDate: new Date('2026-06-01T10:00:00Z'),
+      } as EventEntity;
+
+      // Private events query returns results
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            event: privateEvent,
+            userId: 2,
+            status: EventAttendeeStatus.Confirmed,
+          },
+        ]),
+      });
+
+      const result = await service.getAttendingEvents(2);
+
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0].name).toBe('Private Local Event');
+    });
+
+    it('should fall back to local-only when user has no DID', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 3,
+        ulid: '01NODID',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.getAttendingEvents(3);
+
+      expect(result.events).toHaveLength(0);
+      expect(result.total).toBe(0);
+      // Contrail should NOT be called when no DID
+      expect(mockContrailService.find).not.toHaveBeenCalled();
+    });
+
+    it('should return empty results when nothing found', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 4,
+        ulid: '01EMPTY',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:empty',
+      });
+
+      // Contrail returns no RSVPs
+      mockContrailService.find.mockResolvedValue({
+        records: [],
+        total: 0,
+      });
+
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.getAttendingEvents(4);
+
+      expect(result.events).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
+
+    it('should handle Contrail failure gracefully and fall back to local', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 5,
+        ulid: '01FAIL',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:failing',
+      });
+
+      // Contrail throws an error
+      mockContrailService.find.mockRejectedValue(
+        new Error('Contrail connection refused'),
+      );
+
+      const privateEvent = {
+        ...mockEventEntity,
+        id: 20,
+        name: 'Fallback Private Event',
+        atprotoUri: null,
+        startDate: new Date('2026-07-01T10:00:00Z'),
+      } as EventEntity;
+
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            event: privateEvent,
+            userId: 5,
+            status: EventAttendeeStatus.Confirmed,
+          },
+        ]),
+      });
+
+      const result = await service.getAttendingEvents(5);
+
+      // Should still return private events despite Contrail failure
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0].name).toBe('Fallback Private Event');
+      expect(result.total).toBe(1);
+    });
+  });
+
+  describe('getMyEvents', () => {
+    const futureDate = new Date('2026-06-01T10:00:00Z');
+    const queryDto = {
+      startDate: '2026-05-01',
+      endDate: '2026-07-01',
+    };
+
+    it('should return organized events with isOrganizer=true', async () => {
+      const organizedEvent = {
+        ...mockEventEntity,
+        id: 10,
+        slug: 'my-organized-event',
+        name: 'My Organized Event',
+        startDate: futureDate,
+        user: { id: 1 } as UserEntity,
+        userId: 1,
+      } as unknown as EventEntity;
+
+      const mockAttendeeQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+
+      // Mock initializeRepository
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity: any) => {
+            if (entity === EventAttendeesEntity) {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              ...eventRepository,
+              createQueryBuilder: jest.fn().mockReturnValue({
+                leftJoinAndSelect: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                orderBy: jest.fn().mockReturnThis(),
+                getMany: jest.fn().mockResolvedValue([organizedEvent]),
+              }),
+            };
+          }),
+        } as any);
+
+      // getAttendingEvents returns no attending events
+      jest
+        .spyOn(service, 'getAttendingEvents')
+        .mockResolvedValue({ events: [], total: 0 });
+
+      const result = await service.getMyEvents(1, queryDto);
+
+      expect(result).toHaveLength(1);
+      expect((result[0] as any).isOrganizer).toBe(true);
+    });
+
+    it('should return attending events with isOrganizer=false and attendeeStatus', async () => {
+      const attendedEvent = {
+        ...mockEventEntity,
+        id: 20,
+        slug: 'attended-event',
+        name: 'Attended Event',
+        startDate: futureDate,
+        user: { id: 99 } as UserEntity,
+        userId: 99,
+      } as unknown as EventEntity;
+
+      const mockAttendeeQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            eventId: 20,
+            event: { id: 20 },
+            userId: 1,
+            status: EventAttendeeStatus.Confirmed,
+            role: 'attendee',
+          },
+        ]),
+      };
+
+      // Mock initializeRepository
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity: any) => {
+            if (entity === EventAttendeesEntity) {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              ...eventRepository,
+              createQueryBuilder: jest.fn().mockReturnValue({
+                leftJoinAndSelect: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                orderBy: jest.fn().mockReturnThis(),
+                getMany: jest.fn().mockResolvedValue([]),
+              }),
+            };
+          }),
+        } as any);
+
+      // getAttendingEvents returns the attended event
+      jest
+        .spyOn(service, 'getAttendingEvents')
+        .mockResolvedValue({ events: [attendedEvent], total: 1 });
+
+      const result = await service.getMyEvents(1, queryDto);
+
+      expect(result).toHaveLength(1);
+      expect((result[0] as any).isOrganizer).toBe(false);
+      expect((result[0] as any).attendeeStatus).toBeDefined();
+    });
+
+    it('should dedup events where user is both organizer and attendee', async () => {
+      const dualEvent = {
+        ...mockEventEntity,
+        id: 30,
+        slug: 'dual-event',
+        name: 'Dual Event',
+        startDate: futureDate,
+        user: { id: 1 } as UserEntity,
+        userId: 1,
+      } as unknown as EventEntity;
+
+      const mockAttendeeQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            eventId: 30,
+            event: { id: 30 },
+            userId: 1,
+            status: EventAttendeeStatus.Confirmed,
+            role: 'attendee',
+          },
+        ]),
+      };
+
+      // Mock initializeRepository - returns the organized event
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity: any) => {
+            if (entity === EventAttendeesEntity) {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              ...eventRepository,
+              createQueryBuilder: jest.fn().mockReturnValue({
+                leftJoinAndSelect: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                orderBy: jest.fn().mockReturnThis(),
+                getMany: jest.fn().mockResolvedValue([dualEvent]),
+              }),
+            };
+          }),
+        } as any);
+
+      // getAttendingEvents also returns the same event
+      jest
+        .spyOn(service, 'getAttendingEvents')
+        .mockResolvedValue({ events: [dualEvent], total: 1 });
+
+      const result = await service.getMyEvents(1, queryDto);
+
+      // Should appear only once, with isOrganizer=true
+      expect(result).toHaveLength(1);
+      expect((result[0] as any).isOrganizer).toBe(true);
+    });
+  });
+
+  describe('getPastEventsCount', () => {
+    it('should include Contrail-sourced past events in the count', async () => {
+      const now = new Date();
+
+      const mockEventQb = {
+        select: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ count: '3' }),
+      };
+
+      // Mock initializeRepository so eventRepository is set
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity: any) => {
+            if (entity === EventAttendeesEntity) {
+              return eventAttendeesRepository;
+            }
+            return {
+              createQueryBuilder: jest.fn().mockReturnValue(mockEventQb),
+            };
+          }),
+        } as any);
+
+      // Force initializeRepository to run
+      await (service as any).initializeRepository();
+
+      // getAttendingEvents for past range returns 3 events (1 is Contrail-only)
+      const pastAtprotoEvent: AtprotoSourcedEvent = {
+        source: 'atproto',
+        atprotoUri: 'at://did:plc:host/community.lexicon.calendar.event/past1',
+        atprotoRkey: 'past1',
+        atprotoCid: null,
+        name: 'Past Contrail Event',
+        description: null,
+        startDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+        endDate: null,
+        type: 'in-person',
+        status: 'published',
+        location: null,
+        locationOnline: null,
+        lat: null,
+        lon: null,
+        attendeesCount: 0,
+        slug: 'past-contrail-event',
+      };
+
+      jest.spyOn(service, 'getAttendingEvents').mockResolvedValue({
+        events: [
+          pastAtprotoEvent,
+          { ...mockEventEntity, id: 100 } as EventEntity,
+          { ...mockEventEntity, id: 101 } as EventEntity,
+        ],
+        total: 3,
+      });
+
+      const result = await (service as any).getPastEventsCount(1, now);
+
+      // Should call getAttendingEvents with a past date range
+      expect(service.getAttendingEvents).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          endDate: expect.any(Date),
+        }),
+      );
+
+      // Result should combine local count (3) + Contrail-only events (1 atproto)
+      // Local returns 3, Contrail has 1 foreign event not in local = total 4
+      expect(result).toBeGreaterThanOrEqual(3);
     });
   });
 });

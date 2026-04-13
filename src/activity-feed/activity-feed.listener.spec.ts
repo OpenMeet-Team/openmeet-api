@@ -10,6 +10,8 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EVENT_LISTENER_METADATA } from '@nestjs/event-emitter/dist/constants';
+import { AttendanceChangedEvent } from '../attendance/types';
+import { ContrailQueryService } from '../contrail/contrail-query.service';
 
 describe('ActivityFeedListener', () => {
   let listener: ActivityFeedListener;
@@ -17,6 +19,7 @@ describe('ActivityFeedListener', () => {
   let groupService: jest.Mocked<GroupService>;
   let userService: jest.Mocked<UserService>;
   let eventQueryService: jest.Mocked<EventQueryService>;
+  let mockContrailQueryService: any;
   let mockModuleRef: jest.Mocked<ModuleRef>;
 
   const mockPublicGroup: Partial<GroupEntity> = {
@@ -60,6 +63,9 @@ describe('ActivityFeedListener', () => {
     groupService = { getGroupBySlug: jest.fn() } as any;
     userService = { getUserBySlug: jest.fn(), getUserById: jest.fn() } as any;
     eventQueryService = { findEventBySlug: jest.fn() } as any;
+    mockContrailQueryService = {
+      findByUri: jest.fn().mockResolvedValue(null),
+    };
 
     mockModuleRef = {
       registerRequestByContextId: jest.fn(),
@@ -68,6 +74,8 @@ describe('ActivityFeedListener', () => {
         if (serviceClass === GroupService) return groupService;
         if (serviceClass === UserService) return userService;
         if (serviceClass === EventQueryService) return eventQueryService;
+        if (serviceClass === ContrailQueryService)
+          return mockContrailQueryService;
         throw new Error(`Unexpected service: ${serviceClass}`);
       }),
     } as any;
@@ -588,210 +596,6 @@ describe('ActivityFeedListener', () => {
     });
   });
 
-  describe('handleEventRsvpAdded', () => {
-    it('should create group-scoped activity for group events', async () => {
-      // Arrange
-      const params = {
-        eventSlug: 'typescript-workshop',
-        userId: 100,
-        status: 'confirmed',
-        tenantId: 'test-tenant',
-      };
-
-      eventQueryService.findEventBySlug.mockResolvedValue(
-        mockEvent as EventEntity,
-      );
-      userService.getUserById.mockResolvedValue(mockUser as UserEntity);
-      groupService.getGroupBySlug.mockResolvedValue(
-        mockPublicGroup as GroupEntity,
-      );
-
-      // Act
-      await listener.handleEventRsvpAdded(params);
-
-      // Assert
-      expect(activityFeedService.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          activityType: 'event.rsvp',
-          feedScope: 'group',
-          groupId: mockPublicGroup.id,
-          groupSlug: mockPublicGroup.slug,
-          groupName: mockPublicGroup.name,
-          eventId: mockEvent.id,
-          eventSlug: mockEvent.slug,
-          eventName: mockEvent.name,
-          actorId: mockUser.id,
-          actorSlug: mockUser.slug,
-          actorName: 'Sarah Chen',
-          groupVisibility: mockPublicGroup.visibility,
-          aggregationStrategy: 'time_window',
-          aggregationWindow: 30,
-        }),
-      );
-    });
-
-    it('should create event-scoped activity for standalone events', async () => {
-      // Arrange
-      const params = {
-        eventSlug: 'standalone-workshop',
-        userId: 100,
-        status: 'confirmed',
-        tenantId: 'test-tenant',
-      };
-
-      const standaloneEvent: Partial<EventEntity> = {
-        id: 201,
-        slug: 'standalone-workshop',
-        name: 'Standalone Workshop',
-        visibility: EventVisibility.Public,
-        group: null, // No group - standalone event
-      };
-
-      eventQueryService.findEventBySlug.mockResolvedValue(
-        standaloneEvent as EventEntity,
-      );
-      userService.getUserById.mockResolvedValue(mockUser as UserEntity);
-
-      // Act
-      await listener.handleEventRsvpAdded(params);
-
-      // Assert
-      expect(activityFeedService.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          activityType: 'event.rsvp',
-          feedScope: 'event',
-          eventId: standaloneEvent.id,
-          eventSlug: standaloneEvent.slug,
-          eventName: standaloneEvent.name,
-          actorId: mockUser.id,
-          actorSlug: mockUser.slug,
-          actorName: 'Sarah Chen',
-          aggregationStrategy: 'time_window',
-          aggregationWindow: 30,
-        }),
-      );
-
-      // Should NOT have group fields
-      expect(activityFeedService.create).toHaveBeenCalledWith(
-        expect.not.objectContaining({
-          groupId: expect.anything(),
-          groupSlug: expect.anything(),
-          groupName: expect.anything(),
-          groupVisibility: expect.anything(),
-        }),
-      );
-    });
-
-    it('should use 30-minute aggregation window for RSVP activities', async () => {
-      // Arrange
-      const params = {
-        eventSlug: 'typescript-workshop',
-        userId: 100,
-        status: 'confirmed',
-        tenantId: 'test-tenant',
-      };
-
-      eventQueryService.findEventBySlug.mockResolvedValue(
-        mockEvent as EventEntity,
-      );
-      userService.getUserById.mockResolvedValue(mockUser as UserEntity);
-      groupService.getGroupBySlug.mockResolvedValue(
-        mockPublicGroup as GroupEntity,
-      );
-
-      // Act
-      await listener.handleEventRsvpAdded(params);
-
-      // Assert
-      expect(activityFeedService.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          aggregationStrategy: 'time_window',
-          aggregationWindow: 30,
-        }),
-      );
-    });
-
-    it('should not create activity when event is not found', async () => {
-      // Arrange
-      const params = {
-        eventSlug: 'non-existent-event',
-        userId: 100,
-        status: 'confirmed',
-        tenantId: 'test-tenant',
-      };
-
-      eventQueryService.findEventBySlug.mockResolvedValue(null);
-
-      // Act
-      await listener.handleEventRsvpAdded(params);
-
-      // Assert
-      expect(activityFeedService.create).not.toHaveBeenCalled();
-    });
-
-    it('should not create activity when user is not found', async () => {
-      // Arrange
-      const params = {
-        eventSlug: 'typescript-workshop',
-        userId: 999,
-        status: 'confirmed',
-        tenantId: 'test-tenant',
-      };
-
-      eventQueryService.findEventBySlug.mockResolvedValue(
-        mockEvent as EventEntity,
-      );
-      userService.getUserById.mockResolvedValue(null);
-
-      // Act
-      await listener.handleEventRsvpAdded(params);
-
-      // Assert
-      expect(activityFeedService.create).not.toHaveBeenCalled();
-    });
-
-    it('should not create activity when group is not found for group events', async () => {
-      // Arrange
-      const params = {
-        eventSlug: 'typescript-workshop',
-        userId: 100,
-        status: 'confirmed',
-        tenantId: 'test-tenant',
-      };
-
-      eventQueryService.findEventBySlug.mockResolvedValue(
-        mockEvent as EventEntity,
-      );
-      userService.getUserById.mockResolvedValue(mockUser as UserEntity);
-      groupService.getGroupBySlug.mockResolvedValue(null);
-
-      // Act
-      await listener.handleEventRsvpAdded(params);
-
-      // Assert
-      expect(activityFeedService.create).not.toHaveBeenCalled();
-    });
-
-    it('should handle errors gracefully and log them', async () => {
-      // Arrange
-      const params = {
-        eventSlug: 'typescript-workshop',
-        userId: 100,
-        status: 'confirmed',
-        tenantId: 'test-tenant',
-      };
-
-      const error = new Error('Database connection failed');
-      eventQueryService.findEventBySlug.mockRejectedValue(error);
-
-      // Act & Assert - Should not throw
-      await expect(
-        listener.handleEventRsvpAdded(params),
-      ).resolves.not.toThrow();
-      expect(activityFeedService.create).not.toHaveBeenCalled();
-    });
-  });
-
   describe('Firehose ingested event subscriptions', () => {
     function getEventNames(methodName: string): string[] {
       const metadata: Array<{ event: string }> = Reflect.getMetadata(
@@ -805,12 +609,6 @@ describe('ActivityFeedListener', () => {
       const eventNames = getEventNames('handleEventCreated');
       expect(eventNames).toContain('event.created');
       expect(eventNames).toContain('event.ingested');
-    });
-
-    it('should handle event.rsvp.ingested events for activity feed', () => {
-      const eventNames = getEventNames('handleEventRsvpAdded');
-      expect(eventNames).toContain('event.rsvp.added');
-      expect(eventNames).toContain('event.rsvp.ingested');
     });
 
     it('should handle event.ingested.updated events for activity feed', () => {
@@ -842,6 +640,143 @@ describe('ActivityFeedListener', () => {
         },
         expect.anything(),
       );
+    });
+  });
+
+  describe('handleAttendanceChanged', () => {
+    const baseEvent: AttendanceChangedEvent = {
+      status: 'going',
+      previousStatus: null,
+      eventUri: 'at://did:plc:abc/community.openmeet.event/123',
+      eventId: 200,
+      eventSlug: 'typescript-workshop',
+      userUlid: 'user-ulid-123',
+      userDid: 'did:plc:abc',
+      tenantId: 'test-tenant',
+    };
+
+    it('should create activity for tenant event attendance change', async () => {
+      eventQueryService.findEventBySlug.mockResolvedValue(
+        mockEvent as EventEntity,
+      );
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser as UserEntity);
+      groupService.getGroupBySlug.mockResolvedValue(
+        mockPublicGroup as GroupEntity,
+      );
+
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activityType: 'event.rsvp',
+          eventSlug: 'typescript-workshop',
+          actorSlug: 'sarah-chen',
+        }),
+      );
+    });
+
+    it('should create activity for foreign event (eventId null) with eventUri', async () => {
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser as UserEntity);
+
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        eventId: null,
+        eventSlug: null,
+      });
+
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activityType: 'event.rsvp',
+          feedScope: 'sitewide',
+          actorSlug: 'sarah-chen',
+        }),
+      );
+    });
+
+    it('should include eventName in metadata for foreign event when Contrail lookup succeeds', async () => {
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser as UserEntity);
+
+      mockContrailQueryService.findByUri.mockResolvedValue({
+        uri: 'at://did:plc:abc/community.openmeet.event/123',
+        record: {
+          name: 'ATProto Community Meetup',
+          startsAt: '2026-05-01T10:00:00Z',
+        },
+      });
+
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        eventId: null,
+        eventSlug: null,
+      });
+
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activityType: 'event.rsvp',
+          feedScope: 'sitewide',
+          metadata: expect.objectContaining({
+            eventName: 'ATProto Community Meetup',
+            eventUri: baseEvent.eventUri,
+          }),
+        }),
+      );
+    });
+
+    it('should gracefully handle Contrail lookup failure for foreign event', async () => {
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser as UserEntity);
+
+      mockContrailQueryService.findByUri.mockRejectedValue(
+        new Error('Contrail unavailable'),
+      );
+
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        eventId: null,
+        eventSlug: null,
+      });
+
+      // Should still create the activity, just without eventName
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activityType: 'event.rsvp',
+          feedScope: 'sitewide',
+        }),
+      );
+    });
+
+    it('should not create activity when user is not found', async () => {
+      (userService as any).findByUlid = jest.fn().mockResolvedValue(null);
+
+      await listener.handleAttendanceChanged(baseEvent);
+
+      expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockRejectedValue(new Error('DB error'));
+
+      await expect(
+        listener.handleAttendanceChanged(baseEvent),
+      ).resolves.not.toThrow();
+    });
+
+    it('should have @OnEvent(attendance.changed) decorator', () => {
+      const metadata: Array<{ event: string }> = Reflect.getMetadata(
+        EVENT_LISTENER_METADATA,
+        ActivityFeedListener.prototype['handleAttendanceChanged'],
+      );
+      expect(metadata).toBeDefined();
+      expect(metadata.map((m) => m.event)).toContain('attendance.changed');
     });
   });
 });

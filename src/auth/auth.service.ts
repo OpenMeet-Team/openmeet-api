@@ -46,10 +46,7 @@ import { EmailVerificationCodeService } from './services/email-verification-code
 import { QuickRsvpDto } from './dto/quick-rsvp.dto';
 import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 import { ForbiddenException } from '@nestjs/common';
-import {
-  EventAttendeeStatus,
-  EventAttendeeRole,
-} from '../core/constants/constant';
+import { EventAttendeeStatus } from '../core/constants/constant';
 import { EventRoleService } from '../event-role/event-role.service';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
@@ -60,6 +57,7 @@ import { PdsApiError } from '../pds/pds.errors';
 import { MeResponse } from './dto/me-response.dto';
 import { AtprotoIdentityDto } from '../atproto-identity/dto/atproto-identity.dto';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { AttendanceService } from '../attendance/attendance.service';
 import { getTenantConfig } from '../utils/tenant-config';
 import { checkScopeMismatch } from '../utils/check-scope-mismatch';
 import { getAtprotoConfiguredScopes } from '../utils/bluesky';
@@ -89,6 +87,7 @@ export class AuthService {
     private blueskyIdentityService: BlueskyIdentityService,
     private blueskyService: BlueskyService,
     private elastiCacheService: ElastiCacheService,
+    private attendanceService: AttendanceService,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
@@ -1188,8 +1187,10 @@ export class AuthService {
     // Normalize email to lowercase for consistency
     const email = dto.email.toLowerCase().trim();
 
-    // 1. Find the event
-    const event = await this.eventQueryService.findEventBySlug(eventSlug);
+    // 1. Find the event (resolveForAttendance handles AT Protocol slugs too)
+    const resolved =
+      await this.eventQueryService.resolveForAttendance(eventSlug);
+    const event = resolved.tenantEvent;
     if (!event) {
       throw new NotFoundException('Event not found');
     }
@@ -1270,66 +1271,22 @@ export class AuthService {
       throw new NotFoundException('Failed to create user');
     }
 
-    // 6. Create or find RSVP (idempotent)
-    const existingRsvp = await this.eventAttendeeService.findOne({
-      where: {
-        event: { id: event.id },
-        user: { id: user.id },
-      },
-    });
+    // 6. RSVP via AttendanceService — handles capacity, approval, roles,
+    //    PDS publish (best-effort), and emits attendance.changed for
+    //    calendar invites, activity feed, and Matrix room updates.
+    const rsvpStatus =
+      status === EventAttendeeStatus.Cancelled ? 'notgoing' : 'going';
 
-    if (!existingRsvp) {
-      // Check event capacity before creating new RSVP (only for confirmed status)
-      if (status === EventAttendeeStatus.Confirmed && event.maxAttendees) {
-        const confirmedCount =
-          await this.eventAttendeeService.showEventAttendeesCount(
-            event.id,
-            EventAttendeeStatus.Confirmed,
-          );
+    const result = await this.attendanceService.recordAttendance(
+      resolved,
+      user.ulid,
+      rsvpStatus as any,
+    );
 
-        if (confirmedCount >= event.maxAttendees) {
-          // Event is full - check if waitlist is supported
-          // Note: Currently no waitlistEnabled field, so we reject
-          throw new ForbiddenException(
-            `This event is full (${event.maxAttendees} attendees). No waitlist available.`,
-          );
-        }
-      }
+    this.logger.log(
+      `Quick RSVP recorded for user ${user.id} to event ${eventSlug}: ${result.status}`,
+    );
 
-      // Get the participant role for the event attendee
-      const participantRole = await this.eventRoleService.findByName(
-        EventAttendeeRole.Participant,
-      );
-
-      // Determine final status based on event settings
-      let finalStatus = status; // From DTO: Confirmed or Cancelled
-
-      // If user is trying to confirm attendance AND event requires approval,
-      // set status to Pending instead of Confirmed
-      if (status === EventAttendeeStatus.Confirmed && event.requireApproval) {
-        finalStatus = EventAttendeeStatus.Pending;
-        this.logger.log(
-          `Event ${event.id} requires approval - setting RSVP status to Pending`,
-        );
-      }
-
-      await this.eventAttendeeService.create({
-        event,
-        user: user as any, // User domain type to UserEntity - safe cast
-        role: participantRole,
-        status: finalStatus,
-      });
-      this.logger.log(
-        `Created RSVP with status ${finalStatus} for user ${user.id} to event ${event.id}`,
-      );
-    } else {
-      this.logger.log(
-        `RSVP already exists for user ${user.id} to event ${event.id}`,
-      );
-    }
-
-    // 7. Return success - calendar invite will be sent via CalendarInviteListener
-    // which listens for the 'event.rsvp.added' event emitted by eventAttendeeService
     return {
       success: true,
       message:

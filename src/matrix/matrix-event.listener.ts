@@ -8,8 +8,8 @@ import { EventQueryService } from '../event/services/event-query.service';
 import { GroupService } from '../group/group.service';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { EventAttendeeQueryService } from '../event-attendee/event-attendee-query.service';
-import { EventAttendeeStatus } from '../core/constants/constant';
 import { getTenantConfig } from '../utils/tenant-config';
+import { AttendanceChangedEvent } from '../attendance/types';
 
 interface ChatMemberEvent {
   eventSlug?: string;
@@ -28,16 +28,6 @@ interface SlugChangedEvent {
 
 interface MatrixSyncEvent {
   eventSlug: string;
-  tenantId: string;
-}
-
-interface AttendeeStatusChangedEvent {
-  eventId: number;
-  eventSlug: string;
-  userId: number;
-  userSlug: string;
-  oldStatus: EventAttendeeStatus;
-  newStatus: EventAttendeeStatus;
   tenantId: string;
 }
 
@@ -631,102 +621,114 @@ export class MatrixEventListener {
     }
   }
 
-  @OnEvent('event.attendee.status.changed')
-  async handleAttendeeStatusChanged(payload: AttendeeStatusChangedEvent) {
+  /**
+   * Handle attendance.changed events emitted by AttendanceService for ATProto slug RSVPs.
+   * Manages Matrix room membership transitions for tenant events.
+   */
+  @OnEvent('attendance.changed')
+  async handleAttendanceChanged(event: AttendanceChangedEvent): Promise<void> {
+    // Skip foreign events - no Matrix room to manage
+    if (event.eventId === null) {
+      this.logger.debug(
+        'Skipping attendance.changed for Matrix - foreign event (no eventId)',
+      );
+      return;
+    }
+
     try {
       this.logger.log(
-        `Handling event.attendee.status.changed for user ${payload.userSlug} in event ${payload.eventSlug}: ${payload.oldStatus} → ${payload.newStatus}`,
+        `Handling attendance.changed for Matrix: user ${event.userUlid} in event ${event.eventSlug}, status: ${event.previousStatus} -> ${event.status}`,
       );
 
-      // Check if the new status allows chatting (confirmed, cancelled, or rejected)
-      const allowedChatStatuses = [
-        EventAttendeeStatus.Confirmed,
-        EventAttendeeStatus.Cancelled,
-        EventAttendeeStatus.Rejected,
-      ];
+      const { userService, eventQueryService, matrixRoomService } =
+        await this.resolveServices(event.tenantId);
 
-      if (!allowedChatStatuses.includes(payload.newStatus)) {
-        this.logger.debug(
-          `New status ${payload.newStatus} does not allow chat access, skipping invitation`,
+      // Look up user by ULID
+      const user = await userService.findByUlid(event.userUlid);
+      if (!user) {
+        this.logger.warn(
+          `User not found for ULID ${event.userUlid}, skipping Matrix update`,
         );
         return;
       }
-
-      // Check if the user already had chat access with the old status
-      const hadChatAccess = allowedChatStatuses.includes(payload.oldStatus);
-      if (hadChatAccess) {
-        this.logger.debug(
-          `User ${payload.userSlug} already had chat access with status ${payload.oldStatus}, no invitation needed`,
-        );
-        return;
-      }
-
-      // User now has chat access and didn't before - send proactive invitation
-      this.logger.log(
-        `User ${payload.userSlug} gained chat access, sending proactive invitation`,
-      );
 
       // Get user's Matrix handle
       const matrixHandleRegistration =
         await this.globalMatrixValidationService.getMatrixHandleForUser(
-          payload.userId,
-          payload.tenantId,
+          user.id,
+          event.tenantId,
         );
       if (!matrixHandleRegistration) {
         this.logger.warn(
-          `User ${payload.userSlug} has no Matrix handle, skipping proactive invitation`,
+          `User ${user.slug} has no Matrix handle, skipping Matrix update`,
         );
         return;
       }
 
-      // Validate handle is a string
       if (typeof matrixHandleRegistration.handle !== 'string') {
         this.logger.error(
-          `Invalid Matrix handle data type for user ${payload.userSlug}: expected string, got ${typeof matrixHandleRegistration.handle}`,
+          `Invalid Matrix handle data type for user ${user.slug}`,
         );
         return;
       }
 
-      // Generate room alias for the event
-      const roomAlias = this.roomAliasUtils.generateEventRoomAlias(
-        payload.eventSlug,
-        payload.tenantId,
-      );
-
-      // Get user's Matrix ID from their handle
-      const serverName = this.getMatrixServerName(payload.tenantId);
+      const serverName = this.getMatrixServerName(event.tenantId);
       const userMatrixId = `@${matrixHandleRegistration.handle}:${serverName}`;
 
-      this.logger.log(
-        `Proactively inviting user ${userMatrixId} to event room ${roomAlias}`,
-      );
-
-      const { eventQueryService: eqs2, matrixRoomService } =
-        await this.resolveServices(payload.tenantId);
-
-      // Get event details and ensure the Matrix room exists before trying to invite users
-      const event = await eqs2.showEventBySlugWithTenant(
-        payload.eventSlug,
-        payload.tenantId,
-      );
-      if (event) {
-        await this.ensureRoomExists(
-          event,
-          roomAlias,
-          payload.tenantId,
-          matrixRoomService,
+      if (!event.eventSlug) {
+        this.logger.warn(
+          `attendance.changed event has no eventSlug, skipping Matrix update`,
         );
+        return;
       }
 
-      // Send invitation via MatrixRoomService
-      await matrixRoomService.inviteUser(roomAlias, userMatrixId);
-
-      this.logger.log(
-        `Successfully sent proactive invitation to ${userMatrixId} for event room ${roomAlias}`,
+      const roomAlias = this.roomAliasUtils.generateEventRoomAlias(
+        event.eventSlug,
+        event.tenantId,
       );
+
+      // Determine if user should be added or removed
+      const goingStatuses = ['going', 'maybe'];
+      const wasGoing = goingStatuses.includes(event.previousStatus || '');
+      const isGoing = goingStatuses.includes(event.status);
+
+      if (isGoing && !wasGoing) {
+        // User is newly going - invite to room
+        const tenantEvent = await eventQueryService.showEventBySlugWithTenant(
+          event.eventSlug,
+          event.tenantId,
+        );
+        if (tenantEvent) {
+          await this.ensureRoomExists(
+            tenantEvent,
+            roomAlias,
+            event.tenantId,
+            matrixRoomService,
+          );
+        }
+
+        await matrixRoomService.inviteUser(roomAlias, userMatrixId);
+        this.logger.log(
+          `Invited ${userMatrixId} to event room ${roomAlias} via attendance.changed`,
+        );
+      } else if (!isGoing && wasGoing) {
+        // User is no longer going - remove from room
+        await matrixRoomService.removeUserFromRoom(roomAlias, userMatrixId);
+        this.logger.log(
+          `Removed ${userMatrixId} from event room ${roomAlias} via attendance.changed`,
+        );
+      } else if (isGoing && wasGoing) {
+        this.logger.debug(
+          `User ${user.slug} status changed but still going, no Matrix action needed`,
+        );
+      } else {
+        this.logger.debug(
+          `User ${user.slug} was not going and is still not going, no Matrix action needed`,
+        );
+      }
     } catch (error) {
       this.logger.error(
-        `Failed to handle attendee status change for Matrix invitation: ${error.message}`,
+        `Failed to handle attendance.changed for Matrix: ${error.message}`,
         error.stack,
       );
     }

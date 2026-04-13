@@ -39,11 +39,19 @@ export class EventAttendeesEntity implements SourceFields {
   @ManyToOne(() => EventRoleEntity, (eventRole) => eventRole.attendees)
   role: EventRoleEntity;
 
-  @ManyToOne(() => EventEntity, (event) => event.attendees)
-  event: EventEntity;
+  @ManyToOne(() => EventEntity, (event) => event.attendees, { nullable: true })
+  event: EventEntity | null;
 
   @ManyToOne(() => UserEntity, (user) => user.attendedEvents)
   user: UserEntity;
+
+  /**
+   * AT Protocol URI of the event this attendance is for.
+   * Enables cross-referencing with Contrail for foreign events
+   * that have no tenant EventEntity.
+   */
+  @Column({ type: 'text', nullable: true })
+  eventUri: string | null;
 
   @Column({ type: 'text', nullable: true })
   approvalAnswer?: string;

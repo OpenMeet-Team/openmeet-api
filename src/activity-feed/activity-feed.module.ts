@@ -15,12 +15,14 @@ import { EventModule } from '../event/event.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
+import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichment.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ActivityFeedEntity]),
     TenantModule,
     BlueskyModule,
+    AtprotoEnrichmentModule,
     forwardRef(() => UserModule),
     forwardRef(() => GroupModule),
     forwardRef(() => EventModule),

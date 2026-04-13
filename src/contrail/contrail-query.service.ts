@@ -213,6 +213,25 @@ export class ContrailQueryService {
   }
 
   /**
+   * Batch-fetch records by multiple URIs in a single query.
+   * Uses PK index on uri column.
+   */
+  async findByUris<T = Record<string, unknown>>(
+    collection: string,
+    uris: string[],
+  ): Promise<ContrailRecord<T>[]> {
+    if (uris.length === 0) return [];
+    const table = contrailTableName(collection);
+    const ds = await this.getPublicDataSource();
+    const placeholders = uris.map((_, i) => `$${i + 1}`).join(', ');
+    const rows = await ds.query(
+      `SELECT * FROM ${table} WHERE uri IN (${placeholders})`,
+      uris,
+    );
+    return rows as ContrailRecord<T>[];
+  }
+
+  /**
    * Batch DID → handle resolution from the identities table.
    */
   async resolveHandles(dids: string[]): Promise<Map<string, string>> {

@@ -25,13 +25,13 @@ import { EventSeriesModule } from '../event-series/event-series.module';
 import { ConfigModule } from '@nestjs/config';
 import { EventIntegrationController } from './event-integration.controller';
 import { EventIntegrationService } from './services/event-integration.service';
-import { RsvpIntegrationController } from './rsvp-integration.controller';
-import { RsvpIntegrationService } from './services/rsvp-integration.service';
 import { MetricsModule } from '../metrics/metrics.module';
 import { AtprotoPublisherModule } from '../atproto-publisher/atproto-publisher.module';
 import { GroupDIDFollowModule } from '../group-did-follow/group-did-follow.module';
 import { ContrailModule } from '../contrail/contrail.module';
 import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichment.module';
+import { AttendanceModule } from '../attendance/attendance.module';
+import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 
 @Module({
   imports: [
@@ -55,12 +55,10 @@ import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichmen
     forwardRef(() => GroupDIDFollowModule),
     ContrailModule,
     AtprotoEnrichmentModule,
+    AttendanceModule,
+    UserAtprotoIdentityModule,
   ],
-  controllers: [
-    EventController,
-    EventIntegrationController,
-    RsvpIntegrationController,
-  ],
+  controllers: [EventController, EventIntegrationController],
   providers: [
     EventManagementService,
     EventQueryService,
@@ -70,7 +68,6 @@ import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichmen
     EventRoleService,
     ICalendarService,
     EventIntegrationService,
-    RsvpIntegrationService,
     // Removed EventAttendeeService as it's already imported from EventAttendeeModule
   ],
   exports: [
@@ -78,7 +75,6 @@ import { AtprotoEnrichmentModule } from '../atproto-enrichment/atproto-enrichmen
     EventQueryService,
     EventRecommendationService,
     EventIntegrationService,
-    RsvpIntegrationService,
     ICalendarService,
   ],
 })

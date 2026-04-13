@@ -24,7 +24,6 @@ import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
 
 import { EventAttendeeQueryService } from './event-attendee-query.service';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AtprotoPublisherService } from '../atproto-publisher/atproto-publisher.service';
 import { markAtprotoSynced } from '../atproto-publisher/atproto-sync.utils';
 
@@ -40,7 +39,6 @@ export class EventAttendeeService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventRoleService: EventRoleService,
     private readonly eventAttendeeQueryService: EventAttendeeQueryService,
-    private readonly eventEmitter: EventEmitter2,
     private readonly atprotoPublisherService: AtprotoPublisherService,
   ) {
     this.logger.log('EventAttendeeService Constructed');
@@ -129,20 +127,6 @@ export class EventAttendeeService {
           await this.syncRsvpToAtproto(attendeeWithEvent);
         }
 
-        // Emit event for activity feed
-        const eventPayload = {
-          eventId: saved.event.id,
-          eventSlug: createEventAttendeeDto.event.slug,
-          userId: saved.user.id,
-          userSlug: createEventAttendeeDto.user.slug,
-          status: saved.status,
-          tenantId: this.request.tenantId,
-        };
-        this.logger.log(
-          `📣 Emitting event.rsvp.added: ${JSON.stringify(eventPayload)}`,
-        );
-        this.eventEmitter.emit('event.rsvp.added', eventPayload);
-
         return saved;
       } catch (error) {
         // Pass through any errors from the inner try block
@@ -161,71 +145,6 @@ export class EventAttendeeService {
       }
 
       // Rethrow the error with additional context
-      throw new Error(
-        'EventAttendeeService: Failed to save attendee: ' + error.message,
-      );
-    }
-  }
-
-  /**
-   * Create an attendee record from firehose ingestion.
-   * Unlike create(), this method:
-   * - Emits 'event.rsvp.ingested' instead of 'event.rsvp.added' (so email listeners ignore it)
-   * - Skips all AT Protocol sync to prevent feedback loops (firehose content
-   *   already exists on the network — syncing back would be redundant/circular)
-   */
-  @Trace('event-attendee.createFromIngestion')
-  async createFromIngestion(
-    createEventAttendeeDto: CreateEventAttendeeDto,
-  ): Promise<EventAttendeesEntity> {
-    await this.getTenantSpecificEventRepository();
-
-    this.logger.debug(
-      `[createFromIngestion] Creating attendee from firehose for event ${createEventAttendeeDto.event.slug || createEventAttendeeDto.event.id}, user ${createEventAttendeeDto.user.slug || createEventAttendeeDto.user.id}`,
-    );
-
-    try {
-      const attendee = this.eventAttendeesRepository.create(
-        createEventAttendeeDto,
-      );
-
-      const saved = await this.eventAttendeesRepository.save(attendee);
-
-      this.logger.debug(
-        `[createFromIngestion] Successfully created attendee record ID=${saved.id}`,
-      );
-
-      this.auditLogger.log('event attendee created (ingestion)', {
-        saved,
-      });
-
-      // Emit event.rsvp.ingested (NOT event.rsvp.added)
-      // This ensures email listeners (CalendarInviteListener) are not triggered
-      // while activity feed listeners still pick it up
-      const eventPayload = {
-        eventId: saved.event.id,
-        eventSlug: createEventAttendeeDto.event.slug,
-        userId: saved.user.id,
-        userSlug: createEventAttendeeDto.user.slug,
-        status: saved.status,
-        tenantId: this.request.tenantId,
-      };
-      this.logger.log(
-        `📣 Emitting event.rsvp.ingested: ${JSON.stringify(eventPayload)}`,
-      );
-      this.eventEmitter.emit('event.rsvp.ingested', eventPayload);
-
-      return saved;
-    } catch (error) {
-      if (
-        error.message.includes('duplicate key') ||
-        error.message.includes('unique constraint')
-      ) {
-        this.logger.warn(
-          `[createFromIngestion] Duplicate key error for event ${createEventAttendeeDto.event.slug || createEventAttendeeDto.event.id}, user ${createEventAttendeeDto.user.slug || createEventAttendeeDto.user.id}: ${error.message}`,
-        );
-      }
-
       throw new Error(
         'EventAttendeeService: Failed to save attendee: ' + error.message,
       );
@@ -438,7 +357,7 @@ export class EventAttendeeService {
 
     // Update with actual attendees where found
     attendees.forEach((attendee) => {
-      result.set(attendee.event.id, attendee);
+      result.set(attendee.event!.id, attendee);
     });
 
     return result;
@@ -479,7 +398,7 @@ export class EventAttendeeService {
 
     // Update with actual attendees where found
     attendees.forEach((attendee) => {
-      result.set(attendee.event.slug, attendee);
+      result.set(attendee.event!.slug, attendee);
     });
 
     return result;

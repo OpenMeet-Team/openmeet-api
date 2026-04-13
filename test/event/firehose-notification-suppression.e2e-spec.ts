@@ -6,7 +6,7 @@ import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
  * do NOT trigger email notifications but DO create activity feed entries.
  *
  * Bug: om-hhbh — cross-app notification leak from firehose
- * Fix: firehose services emit event.ingested / event.rsvp.ingested
+ * Fix: firehose services emit event.ingested instead of event.created
  *      instead of event.created / event.rsvp.added
  */
 
@@ -104,111 +104,6 @@ describe('Firehose notification suppression (e2e)', () => {
       );
 
       expect(announcementEmails).toHaveLength(0);
-    });
-  });
-
-  describe('Firehose RSVP ingestion should NOT send calendar invite emails', () => {
-    let eventSourceId: string;
-
-    beforeAll(async () => {
-      // Create a test event first (via firehose)
-      const timestamp = Date.now();
-      const base32Timestamp = timestamp
-        .toString()
-        .replace(/[018]/g, '2')
-        .replace(/9/g, '7');
-      const testDidIdentifier = `rsvpemailtest${base32Timestamp}`
-        .substring(0, 24)
-        .padEnd(24, 'a');
-      const testDid = `did:plc:${testDidIdentifier}`;
-      const testRkey = `testrkey${timestamp}`;
-      eventSourceId = `at://${testDid}/community.lexicon.calendar.event/${testRkey}`;
-
-      const eventPayload = {
-        name: `RSVP Email Test Event ${timestamp}`,
-        description: 'Event for testing RSVP email suppression',
-        startDate: new Date(Date.now() + 86400000).toISOString(),
-        endDate: new Date(Date.now() + 90000000).toISOString(),
-        type: 'in-person',
-        status: 'published',
-        visibility: 'public',
-        source: {
-          id: eventSourceId,
-          type: 'bluesky',
-          handle: 'rsvpemailtest.bsky.social',
-          metadata: {
-            cid: `bafyreitestcid${timestamp}`,
-            rkey: testRkey,
-            collection: 'community.lexicon.calendar.event',
-            time_us: timestamp * 1000,
-            rev: '3m2z5loyhea23',
-            did: testDid,
-          },
-        },
-        location: { description: 'Test Location' },
-      };
-
-      const response = await request(TESTING_APP_URL)
-        .post('/api/integration/events')
-        .set('Content-Type', 'application/json')
-        .set('Authorization', `Bearer ${SERVICE_API_KEY}`)
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send(eventPayload);
-
-      expect(response.status).toBe(202);
-
-      // Wait for event to be fully processed
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    });
-
-    it('should ingest RSVP without sending any calendar invite emails', async () => {
-      // 1. Clear MailDev
-      await clearMaildev();
-
-      // 2. Ingest an RSVP via the firehose integration endpoint
-      const timestamp = Date.now();
-      const rsvpUserDid = `did:plc:rsvpemailusr${timestamp}`.substring(0, 32);
-      const rsvpRkey = `rsvprkey${timestamp}`;
-
-      const rsvpPayload = {
-        eventSourceId,
-        eventSourceType: 'bluesky',
-        userDid: rsvpUserDid,
-        userHandle: 'rsvp-email-test.bsky.social',
-        status: 'going',
-        timestamp: new Date().toISOString(),
-        sourceId: `at://${rsvpUserDid}/community.lexicon.calendar.rsvp/${rsvpRkey}`,
-        metadata: {
-          cid: `bafyreirsvpcid${timestamp}`,
-          rkey: rsvpRkey,
-          collection: 'community.lexicon.calendar.rsvp',
-        },
-      };
-
-      const response = await request(TESTING_APP_URL)
-        .post('/api/integration/rsvps')
-        .set('Content-Type', 'application/json')
-        .set('Authorization', `Bearer ${SERVICE_API_KEY}`)
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send(rsvpPayload);
-
-      expect(response.status).toBe(202);
-      expect(response.body.success).toBe(true);
-
-      // 3. Wait for async event processing
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      // 4. Check MailDev - should have NO emails
-      const emails = await getEmails();
-      const calendarEmails = emails.filter(
-        (email: any) =>
-          email.subject?.includes('Calendar') ||
-          email.subject?.includes('Invite') ||
-          email.subject?.includes('RSVP') ||
-          email.subject?.includes('calendar'),
-      );
-
-      expect(calendarEmails).toHaveLength(0);
     });
   });
 

@@ -24,6 +24,7 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 describe('AuthService - Event Date Validation for RSVP', () => {
   let service: AuthService;
@@ -39,6 +40,7 @@ describe('AuthService - Event Date Validation for RSVP', () => {
           provide: EventQueryService,
           useValue: {
             findEventBySlug: jest.fn(),
+            resolveForAttendance: jest.fn(),
           },
         },
         {
@@ -130,6 +132,10 @@ describe('AuthService - Event Date Validation for RSVP', () => {
           useValue: {},
         },
         {
+          provide: AttendanceService,
+          useValue: { recordAttendance: jest.fn() },
+        },
+        {
           provide: REQUEST,
           useValue: {},
         },
@@ -168,7 +174,15 @@ describe('AuthService - Event Date Validation for RSVP', () => {
         group: null,
         requireGroupMembership: false,
       };
-      jest.spyOn(eventQueryService, 'findEventBySlug').mockResolvedValue(event);
+      jest.spyOn(eventQueryService, 'resolveForAttendance').mockResolvedValue({
+        tenantEvent: event,
+        uri: null,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      } as any);
 
       // Act & Assert: Should not throw
       // Note: This will fail because we need more mocks, but it tests the date logic
@@ -196,7 +210,15 @@ describe('AuthService - Event Date Validation for RSVP', () => {
         group: null,
         requireGroupMembership: false,
       };
-      jest.spyOn(eventQueryService, 'findEventBySlug').mockResolvedValue(event);
+      jest.spyOn(eventQueryService, 'resolveForAttendance').mockResolvedValue({
+        tenantEvent: event,
+        uri: null,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      } as any);
 
       // Act & Assert
       await expect(
@@ -234,7 +256,15 @@ describe('AuthService - Event Date Validation for RSVP', () => {
         group: null,
         requireGroupMembership: false,
       };
-      jest.spyOn(eventQueryService, 'findEventBySlug').mockResolvedValue(event);
+      jest.spyOn(eventQueryService, 'resolveForAttendance').mockResolvedValue({
+        tenantEvent: event,
+        uri: null,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      } as any);
 
       // Act & Assert: Should block RSVP because startDate is in past
       await expect(
@@ -272,7 +302,15 @@ describe('AuthService - Event Date Validation for RSVP', () => {
         group: null,
         requireGroupMembership: false,
       };
-      jest.spyOn(eventQueryService, 'findEventBySlug').mockResolvedValue(event);
+      jest.spyOn(eventQueryService, 'resolveForAttendance').mockResolvedValue({
+        tenantEvent: event,
+        uri: null,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      } as any);
 
       // Act & Assert: Should not throw date validation error
       await expect(
@@ -299,7 +337,15 @@ describe('AuthService - Event Date Validation for RSVP', () => {
         group: null,
         requireGroupMembership: false,
       };
-      jest.spyOn(eventQueryService, 'findEventBySlug').mockResolvedValue(event);
+      jest.spyOn(eventQueryService, 'resolveForAttendance').mockResolvedValue({
+        tenantEvent: event,
+        uri: null,
+        isPublic: true,
+        requiresApproval: false,
+        allowWaitlist: false,
+        maxAttendees: 0,
+        requireGroupMembership: false,
+      } as any);
 
       // Act & Assert
       await expect(
@@ -326,8 +372,10 @@ describe('AuthService - Event Date Validation for RSVP', () => {
     });
 
     it('should block RSVP for non-existent event', async () => {
-      // Arrange: Event not found
-      jest.spyOn(eventQueryService, 'findEventBySlug').mockResolvedValue(null);
+      // Arrange: Event not found — resolveForAttendance throws NotFoundException
+      jest
+        .spyOn(eventQueryService, 'resolveForAttendance')
+        .mockRejectedValue(new NotFoundException('Event not found'));
 
       // Act & Assert
       await expect(
