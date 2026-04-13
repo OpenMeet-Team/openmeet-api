@@ -947,88 +947,44 @@ export class EventQueryService {
         .leftJoinAndSelect('event.image', 'image')
         .where('event.userId = :userId', { userId });
 
-    // Resolve user DID for Contrail RSVP union
-    const userDid = await this.resolveUserDid(userId);
+    // Fetch attending events via unified getAttendingEvents (handles Contrail + local)
+    const attendingResult = await this.getAttendingEvents(userId, {
+      limit: 5,
+      upcomingOnly: true,
+    });
 
-    // Base query builder for events user is attending (not cancelled, not host)
-    // Union: local event_attendees OR Contrail RSVP records for public events
-    const createAttendingQuery = () => {
-      const qb = this.eventRepository
-        .createQueryBuilder('event')
-        .leftJoinAndSelect('event.user', 'user')
-        .leftJoinAndSelect('user.photo', 'userPhoto')
-        .leftJoinAndSelect('event.group', 'group')
-        .leftJoinAndSelect('group.image', 'groupImage')
-        .leftJoinAndSelect('event.categories', 'categories')
-        .leftJoinAndSelect('event.image', 'image')
-        .leftJoin(
-          'event.attendees',
-          'attendee',
-          'attendee.userId = :userId AND attendee.status != :cancelledStatus',
-          { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
-        )
-        .where(
-          new Brackets((wb) => {
-            wb.where('attendee.id IS NOT NULL');
-            if (userDid) {
-              wb.orWhere(
-                `event."atprotoUri" IN (SELECT record->'subject'->>'uri' FROM public.records_community_lexicon_calendar_rsvp WHERE did = :userDid AND record->>'status' LIKE '%#going')`,
-                { userDid },
-              );
-            }
-          }),
-        )
-        .andWhere('event.userId != :userId', { userId }); // Exclude events they're hosting
+    // Execute hosting queries in parallel
+    const [hostingUpcomingCount, pastCount, hostingThisWeek, hostingLater] =
+      await Promise.all([
+        // Count: hosting upcoming
+        createHostingQuery()
+          .andWhere('event.startDate >= :now', { now })
+          .getCount(),
 
-      return qb;
-    };
+        // Count: past events (both hosting and attending, deduplicated via union approach)
+        this.getPastEventsCount(userId, now),
 
-    // Execute all queries in parallel
-    const [
-      hostingUpcomingCount,
-      attendingUpcomingCount,
-      pastCount,
-      hostingThisWeek,
-      hostingLater,
-      attendingSoon,
-    ] = await Promise.all([
-      // Count: hosting upcoming
-      createHostingQuery()
-        .andWhere('event.startDate >= :now', { now })
-        .getCount(),
+        // Hosting this week (full list, typically small)
+        createHostingQuery()
+          .andWhere('event.startDate >= :now', { now })
+          .andWhere('event.startDate <= :endOfWeek', { endOfWeek })
+          .orderBy('event.startDate', 'ASC')
+          .getMany(),
 
-      // Count: attending upcoming (not hosting)
-      createAttendingQuery()
-        .andWhere('event.startDate >= :now', { now })
-        .getCount(),
+        // Hosting later (limited preview)
+        createHostingQuery()
+          .andWhere('event.startDate > :endOfWeek', { endOfWeek })
+          .orderBy('event.startDate', 'ASC')
+          .limit(5)
+          .getMany(),
+      ]);
 
-      // Count: past events (both hosting and attending, deduplicated via union approach)
-      this.getPastEventsCount(userId, now),
+    const attendingUpcomingCount = attendingResult.total;
+    const attendingSoon = attendingResult.events;
 
-      // Hosting this week (full list, typically small)
-      createHostingQuery()
-        .andWhere('event.startDate >= :now', { now })
-        .andWhere('event.startDate <= :endOfWeek', { endOfWeek })
-        .orderBy('event.startDate', 'ASC')
-        .getMany(),
-
-      // Hosting later (limited preview)
-      createHostingQuery()
-        .andWhere('event.startDate > :endOfWeek', { endOfWeek })
-        .orderBy('event.startDate', 'ASC')
-        .limit(5)
-        .getMany(),
-
-      // Attending soon (limited preview)
-      createAttendingQuery()
-        .andWhere('event.startDate >= :now', { now })
-        .orderBy('event.startDate', 'ASC')
-        .limit(5)
-        .getMany(),
-    ]);
-
-    // Batch fetch attendee counts for all events
-    const allEvents = [...hostingThisWeek, ...hostingLater, ...attendingSoon];
+    // Batch fetch attendee counts for hosting events
+    // (attendingSoon events from getAttendingEvents already have enrichment data)
+    const allEvents = [...hostingThisWeek, ...hostingLater];
     if (allEvents.length > 0) {
       const eventIds = allEvents.map((e) => e.id);
 
@@ -1079,7 +1035,7 @@ export class EventQueryService {
       },
       hostingThisWeek: processEvents(hostingThisWeek),
       hostingLater: processEvents(hostingLater),
-      attendingSoon: processEvents(attendingSoon),
+      attendingSoon: attendingSoon as EventEntity[],
     };
   }
 

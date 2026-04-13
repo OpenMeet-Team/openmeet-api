@@ -1904,15 +1904,7 @@ describe('EventQueryService', () => {
   });
 
   describe('getDashboardSummary - Contrail RSVP union', () => {
-    it('should resolve user DID for attending count query', async () => {
-      mockUserService.getUserById.mockResolvedValue({
-        id: 1,
-        ulid: '01HABCDEF',
-      });
-      mockIdentityService.findByUserUlid.mockResolvedValue({
-        did: 'did:plc:testuser123',
-      });
-
+    it('should delegate attending events to getAttendingEvents', async () => {
       const mockQb = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         leftJoin: jest.fn().mockReturnThis(),
@@ -1943,14 +1935,17 @@ describe('EventQueryService', () => {
           }),
         } as any);
 
+      jest
+        .spyOn(service, 'getAttendingEvents')
+        .mockResolvedValue({ events: [], total: 0 });
+
       await service.getDashboardSummary(1);
 
-      // Verify DID resolution was attempted
-      expect(mockUserService.getUserById).toHaveBeenCalledWith(1);
-      expect(mockIdentityService.findByUserUlid).toHaveBeenCalledWith(
-        TESTING_TENANT_ID,
-        '01HABCDEF',
-      );
+      // Verify attending events are fetched via getAttendingEvents
+      expect(service.getAttendingEvents).toHaveBeenCalledWith(1, {
+        limit: 5,
+        upcomingOnly: true,
+      });
     });
   });
 
