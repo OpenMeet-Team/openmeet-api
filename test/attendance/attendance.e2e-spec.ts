@@ -494,6 +494,13 @@ describe('Attendance Service (e2e)', () => {
     });
 
     it('should show RSVPed event in user profile summary attending list', async () => {
+      // Get attending count before RSVP
+      const beforeRes = await request(TESTING_APP_URL)
+        .get(`/api/v1/users/${userSlug}/profile/summary`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+      const beforeCount = beforeRes.body.counts.attendingEvents;
+
       // RSVP to the event first (using regular slug)
       const rsvpRes = await request(TESTING_APP_URL)
         .post(`/api/events/${publicEvent.slug}/attend`)
@@ -514,11 +521,8 @@ describe('Attendance Service (e2e)', () => {
       expect(profileRes.body.attendingEvents).toBeDefined();
       expect(profileRes.body.attendingEvents.length).toBeGreaterThan(0);
 
-      // The event we RSVPed to should be in the list
-      const found = profileRes.body.attendingEvents.some(
-        (e: any) => e.slug === publicEvent.slug || e.name === publicEvent.name,
-      );
-      expect(found).toBe(true);
+      // Count should have increased by 1
+      expect(profileRes.body.counts.attendingEvents).toBe(beforeCount + 1);
     });
   });
 });

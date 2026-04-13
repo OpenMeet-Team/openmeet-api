@@ -877,7 +877,9 @@ export class EventQueryService {
       }
     }
 
-    // Q2: Private local events (no ATProto presence)
+    // Q2: All local attendees (private events + public events where Contrail RSVP
+    // may not exist yet — PDS write is best-effort, sync is async).
+    // deduplicatePrivateEvents handles overlap with Q1 results.
     const attendeeRecords = await this.eventAttendeesRepository
       .createQueryBuilder('att')
       .leftJoinAndSelect('att.event', 'event')
@@ -886,7 +888,6 @@ export class EventQueryService {
       .andWhere('att.status != :cancelledStatus', {
         cancelledStatus: EventAttendeeStatus.Cancelled,
       })
-      .andWhere('event."atprotoUri" IS NULL')
       .orderBy('event.startDate', 'ASC')
       .getMany();
 
