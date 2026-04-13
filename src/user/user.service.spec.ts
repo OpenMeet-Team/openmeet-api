@@ -29,6 +29,7 @@ import { StatusEnum } from '../status/status.enum';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupService } from '../group/group.service';
 import { PdsAccountService } from '../pds/pds-account.service';
+import { EventQueryService } from '../event/services/event-query.service';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -127,6 +128,14 @@ describe('UserService', () => {
           provide: GroupService,
           useValue: {
             removeGroupForUserDeletion: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: EventQueryService,
+          useValue: {
+            getAttendingEvents: jest
+              .fn()
+              .mockResolvedValue({ events: [], total: 0 }),
           },
         },
       ],
@@ -3025,8 +3034,8 @@ describe('UserService', () => {
     });
   });
 
-  describe('getProfileSummary - Contrail RSVP union', () => {
-    it('should attempt to resolve user DID for attending count', async () => {
+  describe('getProfileSummary - attending events via EventQueryService', () => {
+    it('should delegate attending events to EventQueryService.getAttendingEvents', async () => {
       const mockUserEntity = {
         ...mockUser,
         id: 1,
@@ -3051,7 +3060,7 @@ describe('UserService', () => {
 
       const mockManager = {
         createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
-        query: jest.fn().mockResolvedValue([{ count: '2' }]),
+        query: jest.fn().mockResolvedValue([]),
       };
 
       // Mock the repository to return our user
@@ -3070,29 +3079,24 @@ describe('UserService', () => {
         manager: mockManager,
       };
 
-      // Mock identity service to return a DID
-      const identityService = (userService as any).userAtprotoIdentityService;
-      identityService.findByUserUlid = jest
-        .fn()
-        .mockResolvedValue({ did: 'did:plc:testuser123' });
+      // Mock EventQueryService to return attending events
+      const eventQueryService = (userService as any).eventQueryService;
+      eventQueryService.getAttendingEvents = jest.fn().mockResolvedValue({
+        events: [{ id: 10, name: 'Test Event' }],
+        total: 3,
+      });
 
       const result = await userService.getProfileSummary('test-user');
 
-      // Verify DID resolution was attempted
-      expect(identityService.findByUserUlid).toHaveBeenCalledWith(
-        TESTING_TENANT_ID,
-        '01HABCDEF',
-      );
+      // Verify EventQueryService.getAttendingEvents was called with user ID and limit
+      expect(eventQueryService.getAttendingEvents).toHaveBeenCalledWith(1, {
+        limit: 5,
+      });
 
-      // Verify Contrail count query was executed
-      expect(mockManager.query).toHaveBeenCalledWith(
-        expect.stringContaining('records_community_lexicon_calendar_rsvp'),
-        expect.arrayContaining(['did:plc:testuser123']),
-      );
-
-      // Result should include Contrail count
+      // Result should use EventQueryService results
       expect(result).toBeDefined();
-      expect(result!.counts.attendingEvents).toBe(2); // 0 local + 2 Contrail
+      expect(result!.counts.attendingEvents).toBe(3);
+      expect(result!.attendingEvents).toEqual([{ id: 10, name: 'Test Event' }]);
     });
   });
 });

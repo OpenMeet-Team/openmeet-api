@@ -24,6 +24,7 @@ import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupService } from '../group/group.service';
 import { PdsAccountService } from '../pds/pds-account.service';
+import { EventQueryService } from '../event/services/event-query.service';
 
 describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () => {
   let userService: UserService;
@@ -132,6 +133,14 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
             getConfiguredPdsUrl: jest
               .fn()
               .mockReturnValue('https://pds-dev.openmeet.net'),
+          },
+        },
+        {
+          provide: EventQueryService,
+          useValue: {
+            getAttendingEvents: jest
+              .fn()
+              .mockResolvedValue({ events: [], total: 0 }),
           },
         },
       ],

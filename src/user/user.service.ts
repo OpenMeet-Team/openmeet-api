@@ -43,6 +43,7 @@ import { ProfileSummaryDto } from './dto/profile-summary.dto';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupService } from '../group/group.service';
 import { PdsAccountService } from '../pds/pds-account.service';
+import { EventQueryService } from '../event/services/event-query.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -69,6 +70,8 @@ export class UserService {
     @Inject(forwardRef(() => GroupService))
     private readonly groupService: GroupService,
     private readonly pdsAccountService: PdsAccountService,
+    @Inject(forwardRef(() => EventQueryService))
+    private readonly eventQueryService: EventQueryService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -498,21 +501,11 @@ export class UserService {
       return null;
     }
 
-    // Resolve user DID for Contrail RSVP union in attending count
-    let userDid: string | null = null;
-    if (user.ulid) {
-      try {
-        const identity = await this.userAtprotoIdentityService.findByUserUlid(
-          tenantId || this.request?.tenantId,
-          user.ulid,
-        );
-        userDid = identity?.did || null;
-      } catch (error) {
-        this.logger.warn(
-          `Failed to resolve DID for profile summary: ${error.message}`,
-        );
-      }
-    }
+    // Get attending events from shared method (covers local, Contrail, and foreign events)
+    const attendingResult = await this.eventQueryService.getAttendingEvents(
+      user.id,
+      { limit: PREVIEW_LIMIT },
+    );
 
     // Create query builders for counts and limited data
     const createEventQuery = () =>
@@ -524,77 +517,6 @@ export class UserService {
         .andWhere('event.status IN (:...statuses)', {
           statuses: ['published', 'cancelled'],
         });
-
-    const createAttendingQuery = () =>
-      this.usersRepository.manager
-        .createQueryBuilder(EventAttendeesEntity, 'eventAttendee')
-        .leftJoinAndSelect('eventAttendee.event', 'event')
-        .leftJoinAndSelect('event.image', 'eventImage')
-        .where('eventAttendee.userId = :userId', { userId: user.id })
-        .andWhere('event.visibility = :visibility', { visibility: 'public' })
-        .andWhere('event.status IN (:...statuses)', {
-          statuses: ['published', 'cancelled'],
-        });
-
-    // Query for Contrail RSVP count (public events where user RSVPed via PDS but has no local record)
-    const getContrailAttendingCount = async (): Promise<number> => {
-      if (!userDid) return 0;
-      try {
-        const schema = this.dataSource?.options?.name || 'public';
-        const result = await this.usersRepository.manager.query(
-          `SELECT COUNT(DISTINCT e.id) as count
-           FROM "${schema}"."events" e
-           INNER JOIN public.records_community_lexicon_calendar_rsvp r
-             ON e."atprotoUri" = r.record->'subject'->>'uri'
-           WHERE r.did = $1
-             AND r.record->>'status' LIKE '%#going'
-             AND e.visibility = 'public'
-             AND e.status IN ('published', 'cancelled')
-             AND NOT EXISTS (
-               SELECT 1 FROM "${schema}"."eventAttendees" ea
-               WHERE ea."eventId" = e.id AND ea."userId" = $2
-             )`,
-          [userDid, user.id],
-        );
-        return parseInt(result?.[0]?.count || '0', 10);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to query Contrail attending count: ${error.message}`,
-        );
-        return 0;
-      }
-    };
-
-    // Query for Contrail RSVP events preview (public events from Contrail not in local records)
-    const getContrailAttendingEvents = async (): Promise<EventEntity[]> => {
-      if (!userDid) return [];
-      try {
-        const events = await this.usersRepository.manager
-          .createQueryBuilder(EventEntity, 'event')
-          .leftJoinAndSelect('event.image', 'eventImage')
-          .where(
-            `event."atprotoUri" IN (SELECT record->'subject'->>'uri' FROM public.records_community_lexicon_calendar_rsvp WHERE did = :userDid AND record->>'status' LIKE '%#going')`,
-            { userDid },
-          )
-          .andWhere('event.visibility = :visibility', { visibility: 'public' })
-          .andWhere('event.status IN (:...statuses)', {
-            statuses: ['published', 'cancelled'],
-          })
-          .andWhere(
-            `NOT EXISTS (SELECT 1 FROM "${this.dataSource?.options?.name || 'public'}"."eventAttendees" ea WHERE ea."eventId" = event.id AND ea."userId" = :userId)`,
-            { userId: user.id },
-          )
-          .orderBy('event.startDate', 'ASC')
-          .take(PREVIEW_LIMIT)
-          .getMany();
-        return events;
-      } catch (error) {
-        this.logger.warn(
-          `Failed to query Contrail attending events: ${error.message}`,
-        );
-        return [];
-      }
-    };
 
     const createGroupQuery = () =>
       this.usersRepository.manager
@@ -619,24 +541,14 @@ export class UserService {
     const [
       organizedEventsCount,
       organizedEvents,
-      localAttendingCount,
-      attendingRecords,
       ownedGroupsCount,
       ownedGroups,
       groupMembershipsCount,
       groupMemberships,
-      contrailAttendingCount,
-      contrailAttendingEvents,
     ] = await Promise.all([
-      // Counts
       createEventQuery().getCount(),
       createEventQuery()
         .orderBy('event.startDate', 'DESC')
-        .take(PREVIEW_LIMIT)
-        .getMany(),
-      createAttendingQuery().getCount(),
-      createAttendingQuery()
-        .orderBy('event.startDate', 'ASC')
         .take(PREVIEW_LIMIT)
         .getMany(),
       createGroupQuery().getCount(),
@@ -649,39 +561,7 @@ export class UserService {
         .orderBy('group.name', 'ASC')
         .take(PREVIEW_LIMIT)
         .getMany(),
-      getContrailAttendingCount(),
-      getContrailAttendingEvents(),
     ]);
-
-    // Combine local + Contrail attending counts (no overlap due to NOT EXISTS filter)
-    const attendingEventsCount = localAttendingCount + contrailAttendingCount;
-
-    // Map attending records to events with attendee status, then merge with Contrail events
-    const localAttendingEvents = attendingRecords.map((record) => ({
-      ...record.event,
-      attendeeStatus: record.status,
-    }));
-
-    // Merge and sort by startDate, take only PREVIEW_LIMIT
-    const attendingEvents = [
-      ...localAttendingEvents,
-      ...contrailAttendingEvents.map((e) => ({
-        ...e,
-        attendeeStatus: 'confirmed', // Contrail RSVPs are going = confirmed
-      })),
-    ]
-      .sort((a, b) => {
-        const dateA =
-          a.startDate instanceof Date
-            ? a.startDate.getTime()
-            : new Date(String(a.startDate)).getTime();
-        const dateB =
-          b.startDate instanceof Date
-            ? b.startDate.getTime()
-            : new Date(String(b.startDate)).getTime();
-        return dateA - dateB;
-      })
-      .slice(0, PREVIEW_LIMIT);
 
     // Build the summary response
     const summary: ProfileSummaryDto = {
@@ -697,13 +577,13 @@ export class UserService {
       preferences: user.preferences,
       counts: {
         organizedEvents: organizedEventsCount,
-        attendingEvents: attendingEventsCount,
+        attendingEvents: attendingResult.total,
         ownedGroups: ownedGroupsCount,
         groupMemberships: groupMembershipsCount,
       },
       interests: user.interests || [],
       organizedEvents,
-      attendingEvents: attendingEvents as unknown as EventEntity[],
+      attendingEvents: attendingResult.events as unknown as EventEntity[],
       ownedGroups,
       groupMemberships,
     };
