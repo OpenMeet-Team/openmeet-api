@@ -7,6 +7,7 @@ import {
   EventStatus,
   EventVisibility,
   EventType,
+  EventAttendeeStatus,
 } from '../../core/constants/constant';
 import { Brackets, Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -2096,6 +2097,224 @@ describe('EventQueryService', () => {
       const result = await service.resolveForAttendance('unlisted-event');
 
       expect(result.isPublic).toBe(true);
+    });
+  });
+
+  describe('getAttendingEvents', () => {
+    let mockContrailService: any;
+
+    beforeEach(() => {
+      mockContrailService = service['contrailQueryService'];
+    });
+
+    it('should return enriched Contrail events the user RSVPed to', async () => {
+      // User has a DID
+      mockUserService.getUserById.mockResolvedValue({
+        id: 1,
+        ulid: '01HABCDEF',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:user123',
+      });
+
+      // Contrail returns RSVP records
+      mockContrailService.find.mockResolvedValue({
+        records: [
+          {
+            uri: 'at://did:plc:user123/community.lexicon.calendar.rsvp/abc',
+            record: {
+              status: 'community.lexicon.calendar.rsvp#going',
+              subject: {
+                uri: 'at://did:plc:host/community.lexicon.calendar.event/evt1',
+              },
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      // findByUris returns the event record
+      mockContrailService.findByUris = jest.fn().mockResolvedValue([
+        {
+          uri: 'at://did:plc:host/community.lexicon.calendar.event/evt1',
+          record: {
+            name: 'Foreign Event',
+            startsAt: '2026-05-01T10:00:00Z',
+          },
+        },
+      ]);
+
+      const enrichedEvent: AtprotoSourcedEvent = {
+        source: 'atproto',
+        atprotoUri: 'at://did:plc:host/community.lexicon.calendar.event/evt1',
+        atprotoRkey: 'evt1',
+        atprotoCid: null,
+        name: 'Foreign Event',
+        description: null,
+        startDate: new Date('2026-05-01T10:00:00Z'),
+        endDate: null,
+        type: 'in-person',
+        status: 'published',
+        location: null,
+        locationOnline: null,
+        lat: null,
+        lon: null,
+        attendeesCount: 0,
+        slug: 'foreign-event',
+      };
+
+      mockEnrichmentService.enrichRecords.mockResolvedValue([enrichedEvent]);
+
+      // No private events
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.getAttendingEvents(1);
+
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0].name).toBe('Foreign Event');
+      expect(result.events[0].source).toBe('atproto');
+      expect(mockContrailService.find).toHaveBeenCalled();
+      expect(mockContrailService.findByUris).toHaveBeenCalled();
+      expect(mockEnrichmentService.enrichRecords).toHaveBeenCalled();
+    });
+
+    it('should include private local events with no ATProto URI', async () => {
+      // User has no DID
+      mockUserService.getUserById.mockResolvedValue({
+        id: 2,
+        ulid: '01HABCXYZ',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      const privateEvent = {
+        ...mockEventEntity,
+        id: 10,
+        name: 'Private Local Event',
+        atprotoUri: null,
+        startDate: new Date('2026-06-01T10:00:00Z'),
+      } as EventEntity;
+
+      // Private events query returns results
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            event: privateEvent,
+            userId: 2,
+            status: EventAttendeeStatus.Confirmed,
+          },
+        ]),
+      });
+
+      const result = await service.getAttendingEvents(2);
+
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0].name).toBe('Private Local Event');
+    });
+
+    it('should fall back to local-only when user has no DID', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 3,
+        ulid: '01NODID',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue(null);
+
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.getAttendingEvents(3);
+
+      expect(result.events).toHaveLength(0);
+      expect(result.total).toBe(0);
+      // Contrail should NOT be called when no DID
+      expect(mockContrailService.find).not.toHaveBeenCalled();
+    });
+
+    it('should return empty results when nothing found', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 4,
+        ulid: '01EMPTY',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:empty',
+      });
+
+      // Contrail returns no RSVPs
+      mockContrailService.find.mockResolvedValue({
+        records: [],
+        total: 0,
+      });
+
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      const result = await service.getAttendingEvents(4);
+
+      expect(result.events).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
+
+    it('should handle Contrail failure gracefully and fall back to local', async () => {
+      mockUserService.getUserById.mockResolvedValue({
+        id: 5,
+        ulid: '01FAIL',
+      });
+      mockIdentityService.findByUserUlid.mockResolvedValue({
+        did: 'did:plc:failing',
+      });
+
+      // Contrail throws an error
+      mockContrailService.find.mockRejectedValue(
+        new Error('Contrail connection refused'),
+      );
+
+      const privateEvent = {
+        ...mockEventEntity,
+        id: 20,
+        name: 'Fallback Private Event',
+        atprotoUri: null,
+        startDate: new Date('2026-07-01T10:00:00Z'),
+      } as EventEntity;
+
+      eventAttendeesRepository.createQueryBuilder.mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            event: privateEvent,
+            userId: 5,
+            status: EventAttendeeStatus.Confirmed,
+          },
+        ]),
+      });
+
+      const result = await service.getAttendingEvents(5);
+
+      // Should still return private events despite Contrail failure
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0].name).toBe('Fallback Private Event');
+      expect(result.total).toBe(1);
     });
   });
 });

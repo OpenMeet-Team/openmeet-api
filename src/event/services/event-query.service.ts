@@ -53,7 +53,10 @@ import type {
 } from '../../contrail/contrail-record.types';
 import type { Main as CalendarEvent } from '../../generated-lexicon-types/types/community/lexicon/calendar/event';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
-import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
+import type {
+  AtprotoSourcedEvent,
+  EnrichedEvent,
+} from '../../atproto-enrichment/types/enriched-event.types';
 import { UserService } from '../../user/user.service';
 import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 
@@ -813,6 +816,116 @@ export class EventQueryService {
 
     // Add recurrence descriptions
     return events.map((event) => this.addRecurrenceInformation(event));
+  }
+
+  /**
+   * Get all events a user is attending, from any source.
+   *
+   * Two parallel queries:
+   * 1. Contrail RSVPs → batch-fetch event records → enrichRecords() (handles foreign + local-with-ATProto)
+   * 2. Local private eventAttendees (atprotoUri IS NULL — never published to ATProto)
+   *
+   * Follows same pattern as searchAllEvents: enrich → dedup → merge → sort.
+   */
+  @Trace('event-query.getAttendingEvents')
+  async getAttendingEvents(
+    userId: number,
+    options: { limit?: number; upcomingOnly?: boolean } = {},
+  ): Promise<{ events: EnrichedEvent[]; total: number }> {
+    await this.initializeRepository();
+    const { limit = 10, upcomingOnly = false } = options;
+    const userDid = await this.resolveUserDid(userId);
+
+    // Q1: Contrail RSVP → event records → enrichment
+    let enrichedAtprotoEvents: AtprotoSourcedEvent[] = [];
+    if (userDid) {
+      try {
+        // Get user's RSVP event URIs
+        const rsvpResult = await this.contrailQueryService.find(
+          BLUESKY_COLLECTIONS.RSVP,
+          {
+            conditions: [
+              { sql: 'did = $1', params: [userDid] },
+              { sql: "record->>'status' LIKE $1", params: ['%#going'] },
+            ],
+          },
+        );
+
+        const eventUris = (
+          rsvpResult.records.map((r: any) => r.record?.subject?.uri) as (
+            | string
+            | undefined
+          )[]
+        ).filter(Boolean) as string[];
+
+        if (eventUris.length > 0) {
+          // Batch-fetch event records from Contrail
+          const eventRecords =
+            await this.contrailQueryService.findByUris<CalendarEvent>(
+              BLUESKY_COLLECTIONS.EVENT,
+              eventUris,
+            );
+
+          // Enrich: adds tenant metadata for local events, resolves handles for foreign
+          enrichedAtprotoEvents =
+            await this.atprotoEnrichmentService.enrichRecords(
+              eventRecords,
+              this.request.tenantId,
+            );
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch Contrail attending events for userId ${userId}: ${error.message}`,
+        );
+      }
+    }
+
+    // Q2: Private local events (no ATProto presence)
+    const attendeeRecords = await this.eventAttendeesRepository
+      .createQueryBuilder('att')
+      .leftJoinAndSelect('att.event', 'event')
+      .leftJoinAndSelect('event.image', 'eventImage')
+      .where('att.userId = :userId', { userId })
+      .andWhere('att.status != :cancelledStatus', {
+        cancelledStatus: EventAttendeeStatus.Cancelled,
+      })
+      .andWhere('event."atprotoUri" IS NULL')
+      .orderBy('event.startDate', 'ASC')
+      .getMany();
+
+    const privateEvents = attendeeRecords.map((att) => att.event);
+
+    // Dedup and merge (same pattern as searchAllEvents)
+    const publicUriSet = new Set(
+      enrichedAtprotoEvents.map((e) => e.atprotoUri).filter(Boolean),
+    );
+    const dedupedPrivate =
+      this.atprotoEnrichmentService.deduplicatePrivateEvents(
+        privateEvents,
+        publicUriSet,
+      );
+
+    const allEvents: EnrichedEvent[] = [
+      ...enrichedAtprotoEvents,
+      ...dedupedPrivate,
+    ].sort((a, b) => {
+      const aDate = a.startDate ? new Date(a.startDate).getTime() : 0;
+      const bDate = b.startDate ? new Date(b.startDate).getTime() : 0;
+      return aDate - bDate;
+    });
+
+    // Apply upcomingOnly filter
+    const now = new Date();
+    const filtered = upcomingOnly
+      ? allEvents.filter((e) => e.startDate && new Date(e.startDate) >= now)
+      : allEvents;
+
+    const limited = filtered.slice(0, limit);
+
+    return {
+      events: limited,
+      total: filtered.length,
+    };
   }
 
   @Trace('event-query.getDashboardSummary')
