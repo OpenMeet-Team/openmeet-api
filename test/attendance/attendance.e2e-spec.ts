@@ -422,6 +422,17 @@ describe('Attendance Service (e2e)', () => {
 
   describe('RSVP via AT Protocol slug to tenant event', () => {
     let publicEvent: any;
+    let userSlug: string;
+
+    beforeAll(async () => {
+      const meRes = await request(TESTING_APP_URL)
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${userToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(meRes.status).toBe(200);
+      userSlug = meRes.body.slug;
+    });
 
     beforeEach(async () => {
       publicEvent = await createTestEvent(adminToken, {
@@ -480,6 +491,34 @@ describe('Attendance Service (e2e)', () => {
 
       expect(attendeesRes.status).toBe(200);
       expect(attendeesRes.body.data.length).toBeGreaterThan(0);
+    });
+
+    it('should show RSVPed event in user profile summary attending list', async () => {
+      // RSVP to the event first (using regular slug)
+      const rsvpRes = await request(TESTING_APP_URL)
+        .post(`/api/events/${publicEvent.slug}/attend`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({});
+
+      expect(rsvpRes.status).toBe(201);
+
+      // Fetch user's profile summary
+      const profileRes = await request(TESTING_APP_URL)
+        .get(`/api/v1/users/${userSlug}/profile/summary`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(profileRes.status).toBe(200);
+      expect(profileRes.body.counts.attendingEvents).toBeGreaterThan(0);
+      expect(profileRes.body.attendingEvents).toBeDefined();
+      expect(profileRes.body.attendingEvents.length).toBeGreaterThan(0);
+
+      // The event we RSVPed to should be in the list
+      const found = profileRes.body.attendingEvents.some(
+        (e: any) => e.slug === publicEvent.slug || e.name === publicEvent.name,
+      );
+      expect(found).toBe(true);
     });
   });
 });
