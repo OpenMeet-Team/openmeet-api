@@ -2178,7 +2178,7 @@ describe('EventQueryService', () => {
 
       expect(result.events).toHaveLength(1);
       expect(result.events[0].name).toBe('Foreign Event');
-      expect(result.events[0].source).toBe('atproto');
+      expect((result.events[0] as any).source).toBe('atproto');
       expect(mockContrailService.find).toHaveBeenCalled();
       expect(mockContrailService.findByUris).toHaveBeenCalled();
       expect(mockEnrichmentService.enrichRecords).toHaveBeenCalled();

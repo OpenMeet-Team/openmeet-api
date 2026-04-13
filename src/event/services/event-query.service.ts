@@ -53,10 +53,7 @@ import type {
 } from '../../contrail/contrail-record.types';
 import type { Main as CalendarEvent } from '../../generated-lexicon-types/types/community/lexicon/calendar/event';
 import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
-import type {
-  AtprotoSourcedEvent,
-  EnrichedEvent,
-} from '../../atproto-enrichment/types/enriched-event.types';
+import type { AtprotoSourcedEvent } from '../../atproto-enrichment/types/enriched-event.types';
 import { UserService } from '../../user/user.service';
 import { UserAtprotoIdentityService } from '../../user-atproto-identity/user-atproto-identity.service';
 
@@ -831,7 +828,7 @@ export class EventQueryService {
   async getAttendingEvents(
     userId: number,
     options: { limit?: number; upcomingOnly?: boolean } = {},
-  ): Promise<{ events: EnrichedEvent[]; total: number }> {
+  ): Promise<{ events: (AtprotoSourcedEvent | EventEntity)[]; total: number }> {
     await this.initializeRepository();
     const { limit = 10, upcomingOnly = false } = options;
     const userDid = await this.resolveUserDid(userId);
@@ -893,7 +890,9 @@ export class EventQueryService {
       .orderBy('event.startDate', 'ASC')
       .getMany();
 
-    const privateEvents = attendeeRecords.map((att) => att.event);
+    const privateEvents = attendeeRecords
+      .map((att) => att.event)
+      .filter((e): e is EventEntity => e != null);
 
     // Dedup and merge (same pattern as searchAllEvents)
     const publicUriSet = new Set(
@@ -905,14 +904,13 @@ export class EventQueryService {
         publicUriSet,
       );
 
-    const allEvents: EnrichedEvent[] = [
-      ...enrichedAtprotoEvents,
-      ...dedupedPrivate,
-    ].sort((a, b) => {
-      const aDate = a.startDate ? new Date(a.startDate).getTime() : 0;
-      const bDate = b.startDate ? new Date(b.startDate).getTime() : 0;
-      return aDate - bDate;
-    });
+    const allEvents = [...enrichedAtprotoEvents, ...dedupedPrivate].sort(
+      (a, b) => {
+        const aDate = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const bDate = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return aDate - bDate;
+      },
+    );
 
     // Apply upcomingOnly filter
     const now = new Date();
