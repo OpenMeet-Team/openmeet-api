@@ -922,64 +922,24 @@ describe('EventQueryService', () => {
     });
   });
 
-  describe('getHomePageUserUpcomingEvents - batch count', () => {
-    it('should use batch attendee count query instead of loadRelationCountAndMap', async () => {
+  describe('getHomePageUserUpcomingEvents', () => {
+    it('should delegate to getAttendingEvents with upcoming filter', async () => {
       const mockEvents = [
         { ...mockEventEntity, id: 10 },
         { ...mockEventEntity, id: 20, slug: 'upcoming-2' },
       ];
 
-      const loadRelationCountAndMapFn = jest.fn().mockReturnThis();
-      const mockEventQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        loadRelationCountAndMap: loadRelationCountAndMapFn,
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockEvents),
-      };
-
-      const mockGetRawMany = jest.fn().mockResolvedValue([
-        { eventId: 10, count: '8' },
-        { eventId: 20, count: '12' },
-      ]);
-      const mockAttendeeQueryBuilder = {
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: mockGetRawMany,
-      };
-
-      jest
-        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue({
-          getRepository: jest.fn().mockImplementation((entity) => {
-            if (entity.name === 'EventAttendeesEntity') {
-              return {
-                createQueryBuilder: jest
-                  .fn()
-                  .mockReturnValue(mockAttendeeQueryBuilder),
-              };
-            }
-            return {
-              createQueryBuilder: jest
-                .fn()
-                .mockReturnValue(mockEventQueryBuilder),
-            };
-          }),
-        } as any);
+      jest.spyOn(service, 'getAttendingEvents').mockResolvedValue({
+        events: mockEvents as any,
+        total: 2,
+      });
 
       const result = await service.getHomePageUserUpcomingEvents(1);
 
-      // loadRelationCountAndMap should NOT be called
-      expect(loadRelationCountAndMapFn).not.toHaveBeenCalled();
-
-      // Batch attendee count query SHOULD be called
-      expect(mockGetRawMany).toHaveBeenCalled();
-
+      expect(service.getAttendingEvents).toHaveBeenCalledWith(1, {
+        limit: 5,
+        upcomingOnly: true,
+      });
       expect(result).toHaveLength(2);
     });
   });

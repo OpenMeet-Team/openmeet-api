@@ -1283,103 +1283,16 @@ export class EventQueryService {
 
   @Trace('event-query.getHomePageUserUpcomingEvents')
   async getHomePageUserUpcomingEvents(userId: number): Promise<EventEntity[]> {
-    await this.initializeRepository();
-    const events = await this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoinAndSelect('event.attendees', 'attendee')
-      .leftJoinAndSelect('event.image', 'image')
-      .leftJoinAndSelect('attendee.user', 'user')
-      .where('attendee.user.id = :userId', { userId })
-      .andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
-        {
-          now: new Date(),
-          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000),
-        },
-      )
-      .andWhere('event.status = :status', { status: EventStatus.Published })
-      .andWhere('attendee.status != :cancelledStatus', {
-        cancelledStatus: EventAttendeeStatus.Cancelled,
-      })
-      .orderBy('event.startDate', 'ASC')
-      .limit(5)
-      .getMany();
-
-    this.logger.debug(
-      `Found ${events.length} upcoming events for user ${userId}`,
-    );
-
-    // Batch fetch attendee counts in a single query (avoids N+1)
-    if (events.length > 0) {
-      const eventIds = events.map((e) => e.id);
-      const counts = await this.eventAttendeesRepository
-        .createQueryBuilder('att')
-        .select('att.eventId', 'eventId')
-        .addSelect('COUNT(att.id)', 'count')
-        .where('att.eventId IN (:...eventIds)', { eventIds })
-        .andWhere('att.status = :status', {
-          status: EventAttendeeStatus.Confirmed,
-        })
-        .groupBy('att.eventId')
-        .getRawMany();
-
-      const countMap = new Map(
-        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
-      );
-      events.forEach((event) => {
-        (event as any).attendeesCount = countMap.get(event.id) || 0;
-      });
-    }
-
-    // Debug first event image
-    if (events.length > 0 && events[0].image) {
-      this.logger.debug(
-        `First event image before processing: id=${events[0].image.id}, path type=${typeof events[0].image.path}`,
-      );
-    }
-
-    const eventsWithCounts = events;
-
-    // Step 2: Serialize events first, then add recurrence info (following Attempt 10)
-    // This is the key to fixing the issue - serialize first, then modify
-    const processedEvents = eventsWithCounts.map((event) => {
-      // First, serialize the entire event (which correctly processes the image path)
-      const plainEvent = instanceToPlain(event);
-
-      // Now, add recurrence information to the already serialized plain object
-      if (!event.seriesSlug) {
-        const eventWithRecurrence = event as any;
-        if (
-          eventWithRecurrence.isRecurring &&
-          eventWithRecurrence.recurrenceRule
-        ) {
-          const rule = eventWithRecurrence.recurrenceRule;
-          const freq = rule.frequency?.toLowerCase() || 'weekly';
-          const interval = rule.interval || 1;
-
-          let recurrenceDescription = `Every ${interval > 1 ? interval : ''} ${freq}`;
-          if (interval > 1) {
-            recurrenceDescription += freq.endsWith('s') ? '' : 's';
-          }
-
-          plainEvent.recurrenceDescription = recurrenceDescription;
-        }
-      }
-
-      return plainEvent as unknown as EventEntity; // Cast back to EventEntity for TypeScript
+    const result = await this.getAttendingEvents(userId, {
+      limit: 5,
+      upcomingOnly: true,
     });
 
-    // Debug final result
-    if (processedEvents.length > 0 && processedEvents[0].image) {
-      this.logger.debug(
-        `First event image after processing: path type=${typeof processedEvents[0].image.path}`,
-      );
-      this.logger.debug(
-        `Image path value: ${JSON.stringify(processedEvents[0].image.path).substring(0, 50)}...`,
-      );
-    }
+    this.logger.debug(
+      `Found ${result.events.length} upcoming events for user ${userId}`,
+    );
 
-    return processedEvents;
+    return result.events as EventEntity[];
   }
 
   @Trace('event-query.findEventTopicsByEventId')
