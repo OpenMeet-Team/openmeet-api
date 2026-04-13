@@ -11,6 +11,7 @@ import { EventQueryService } from '../event/services/event-query.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EVENT_LISTENER_METADATA } from '@nestjs/event-emitter/dist/constants';
 import { AttendanceChangedEvent } from '../attendance/types';
+import { ContrailQueryService } from '../contrail/contrail-query.service';
 
 describe('ActivityFeedListener', () => {
   let listener: ActivityFeedListener;
@@ -18,6 +19,7 @@ describe('ActivityFeedListener', () => {
   let groupService: jest.Mocked<GroupService>;
   let userService: jest.Mocked<UserService>;
   let eventQueryService: jest.Mocked<EventQueryService>;
+  let mockContrailQueryService: any;
   let mockModuleRef: jest.Mocked<ModuleRef>;
 
   const mockPublicGroup: Partial<GroupEntity> = {
@@ -61,6 +63,9 @@ describe('ActivityFeedListener', () => {
     groupService = { getGroupBySlug: jest.fn() } as any;
     userService = { getUserBySlug: jest.fn(), getUserById: jest.fn() } as any;
     eventQueryService = { findEventBySlug: jest.fn() } as any;
+    mockContrailQueryService = {
+      findByUri: jest.fn().mockResolvedValue(null),
+    };
 
     mockModuleRef = {
       registerRequestByContextId: jest.fn(),
@@ -69,6 +74,8 @@ describe('ActivityFeedListener', () => {
         if (serviceClass === GroupService) return groupService;
         if (serviceClass === UserService) return userService;
         if (serviceClass === EventQueryService) return eventQueryService;
+        if (serviceClass === ContrailQueryService)
+          return mockContrailQueryService;
         throw new Error(`Unexpected service: ${serviceClass}`);
       }),
     } as any;
@@ -686,6 +693,61 @@ describe('ActivityFeedListener', () => {
           activityType: 'event.rsvp',
           feedScope: 'sitewide',
           actorSlug: 'sarah-chen',
+        }),
+      );
+    });
+
+    it('should include eventName in metadata for foreign event when Contrail lookup succeeds', async () => {
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser as UserEntity);
+
+      mockContrailQueryService.findByUri.mockResolvedValue({
+        uri: 'at://did:plc:abc/community.openmeet.event/123',
+        record: {
+          name: 'ATProto Community Meetup',
+          startsAt: '2026-05-01T10:00:00Z',
+        },
+      });
+
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        eventId: null,
+        eventSlug: null,
+      });
+
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activityType: 'event.rsvp',
+          feedScope: 'sitewide',
+          metadata: expect.objectContaining({
+            eventName: 'ATProto Community Meetup',
+            eventUri: baseEvent.eventUri,
+          }),
+        }),
+      );
+    });
+
+    it('should gracefully handle Contrail lookup failure for foreign event', async () => {
+      (userService as any).findByUlid = jest
+        .fn()
+        .mockResolvedValue(mockUser as UserEntity);
+
+      mockContrailQueryService.findByUri.mockRejectedValue(
+        new Error('Contrail unavailable'),
+      );
+
+      await listener.handleAttendanceChanged({
+        ...baseEvent,
+        eventId: null,
+        eventSlug: null,
+      });
+
+      // Should still create the activity, just without eventName
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          activityType: 'event.rsvp',
+          feedScope: 'sitewide',
         }),
       );
     });

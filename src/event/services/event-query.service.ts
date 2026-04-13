@@ -1051,8 +1051,8 @@ export class EventQueryService {
   }
 
   private async getPastEventsCount(userId: number, now: Date): Promise<number> {
-    // Count unique past events (hosting OR attending)
-    const result = await this.eventRepository
+    // Count unique past events (hosting OR attending) from local DB
+    const localResult = await this.eventRepository
       .createQueryBuilder('event')
       .select('COUNT(DISTINCT event.id)', 'count')
       .leftJoin('event.attendees', 'attendee')
@@ -1067,7 +1067,28 @@ export class EventQueryService {
       )
       .getRawOne();
 
-    return parseInt(result?.count || '0', 10);
+    const localCount = parseInt(localResult?.count || '0', 10);
+
+    // Also count Contrail-sourced past events (foreign events with no local row)
+    try {
+      const pastAttending = await this.getAttendingEvents(userId, {
+        limit: 1000,
+        startDate: new Date(0),
+        endDate: now,
+      });
+
+      // Count Contrail-only events (those without an id, i.e. AtprotoSourcedEvent)
+      const contrailOnlyCount = pastAttending.events.filter(
+        (e) => !(e as EventEntity).id,
+      ).length;
+
+      return localCount + contrailOnlyCount;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to fetch Contrail past events count for userId ${userId}: ${(error as Error).message}`,
+      );
+      return localCount;
+    }
   }
 
   @Trace('event-query.showDashboardEventsPaginated')
@@ -1861,18 +1882,114 @@ export class EventQueryService {
     userId: number,
     query: MyEventsQueryDto,
   ): Promise<EventEntity[]> {
+    await this.initializeRepository();
+
     const startDate = query.startDate ? new Date(query.startDate) : new Date();
     const endDate = query.endDate
       ? new Date(query.endDate)
       : new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    const result = await this.getAttendingEvents(userId, {
+    // 1. Get events the user organizes (event.userId = userId) within date range
+    const organizedEvents = await this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('event.group', 'group')
+      .where('event.userId = :userId', { userId })
+      .andWhere('event.startDate >= :startDate', { startDate })
+      .andWhere('event.startDate <= :endDate', { endDate })
+      .andWhere('event.status IN (:...statuses)', {
+        statuses: [EventStatus.Published, EventStatus.Cancelled],
+      })
+      .orderBy('event.startDate', 'ASC')
+      .getMany();
+
+    // 2. Get events the user is attending (both ATProto + local attendees)
+    const attendingResult = await this.getAttendingEvents(userId, {
       limit: 500,
       startDate,
       endDate,
     });
 
-    return result.events as EventEntity[];
+    // 3. Build a set of organized event IDs for dedup
+    const organizedIds = new Set(organizedEvents.map((e) => e.id));
+
+    // 4. Merge: organized events first, then attending events not already in organized set
+    const attendingOnly = attendingResult.events.filter((e) => {
+      const eventId = (e as EventEntity).id;
+      return !eventId || !organizedIds.has(eventId);
+    });
+
+    const allEvents = [...organizedEvents, ...attendingOnly];
+
+    // 5. Batch-fetch attendee records for this user to enrich with status/role
+    const localEventIds = allEvents
+      .map((e) => (e as EventEntity).id)
+      .filter(Boolean);
+
+    let attendeeMap = new Map<
+      number,
+      { status: string; role: string | null }
+    >();
+    if (localEventIds.length > 0) {
+      const attendeeRecords = await this.eventAttendeesRepository
+        .createQueryBuilder('att')
+        .where('att.userId = :userId', { userId })
+        .andWhere('att.eventId IN (:...eventIds)', {
+          eventIds: localEventIds,
+        })
+        .getMany();
+
+      attendeeMap = new Map(
+        attendeeRecords.map((att: any) => [
+          att.eventId || att.event?.id,
+          { status: att.status, role: att.role || null },
+        ]),
+      );
+    }
+
+    // 6. Resolve user DID for ATProto event organizer detection
+    const userDid = await this.resolveUserDid(userId);
+
+    // 7. Enrich each event with isOrganizer, attendeeStatus, attendeeRole
+    const enriched = allEvents.map((event) => {
+      const e = event as any;
+      let isOrganizer = false;
+
+      if (e.id && e.user?.id) {
+        // Local EventEntity
+        isOrganizer = e.user.id === userId;
+      } else if (e.atprotoUri && userDid) {
+        // AtprotoSourcedEvent - check if the DID in the URI matches user's DID
+        const match = (e.atprotoUri as string).match(/^at:\/\/(did:[^/]+)\//);
+        isOrganizer = match ? match[1] === userDid : false;
+      }
+
+      const attendee = e.id ? attendeeMap.get(e.id) : undefined;
+      // If event came from attending list and no local attendee record, infer confirmed
+      const isFromAttending = !organizedIds.has(e.id) || !e.id;
+      const attendeeStatus = attendee
+        ? attendee.status
+        : isFromAttending
+          ? EventAttendeeStatus.Confirmed
+          : null;
+      const attendeeRole = attendee ? attendee.role : null;
+
+      return {
+        ...e,
+        isOrganizer,
+        attendeeStatus,
+        attendeeRole,
+      };
+    });
+
+    // 8. Sort by startDate ASC
+    enriched.sort((a, b) => {
+      const aDate = a.startDate ? new Date(a.startDate).getTime() : 0;
+      const bDate = b.startDate ? new Date(b.startDate).getTime() : 0;
+      return aDate - bDate;
+    });
+
+    return enriched as EventEntity[];
   }
 
   private async showAllEventsWithContrail(

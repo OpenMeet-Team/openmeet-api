@@ -8,12 +8,15 @@ import { GroupVisibility, EventVisibility } from '../core/constants/constant';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { AttendanceChangedEvent } from '../attendance/types';
+import { ContrailQueryService } from '../contrail/contrail-query.service';
+import { BLUESKY_COLLECTIONS } from '../bluesky/BlueskyTypes';
 
 interface ResolvedServices {
   activityFeedService: ActivityFeedService;
   groupService: GroupService;
   userService: UserService;
   eventQueryService: EventQueryService;
+  contrailQueryService: ContrailQueryService;
 }
 
 @Injectable()
@@ -38,22 +41,31 @@ export class ActivityFeedListener {
       { tenantId, headers: { 'x-tenant-id': tenantId } },
       contextId,
     );
-    const [activityFeedService, groupService, userService, eventQueryService] =
-      await Promise.all([
-        this.moduleRef.resolve(ActivityFeedService, contextId, {
-          strict: false,
-        }),
-        this.moduleRef.resolve(GroupService, contextId, { strict: false }),
-        this.moduleRef.resolve(UserService, contextId, { strict: false }),
-        this.moduleRef.resolve(EventQueryService, contextId, {
-          strict: false,
-        }),
-      ]);
+    const [
+      activityFeedService,
+      groupService,
+      userService,
+      eventQueryService,
+      contrailQueryService,
+    ] = await Promise.all([
+      this.moduleRef.resolve(ActivityFeedService, contextId, {
+        strict: false,
+      }),
+      this.moduleRef.resolve(GroupService, contextId, { strict: false }),
+      this.moduleRef.resolve(UserService, contextId, { strict: false }),
+      this.moduleRef.resolve(EventQueryService, contextId, {
+        strict: false,
+      }),
+      this.moduleRef.resolve(ContrailQueryService, contextId, {
+        strict: false,
+      }),
+    ]);
     return {
       activityFeedService,
       groupService,
       userService,
       eventQueryService,
+      contrailQueryService,
     };
   }
 
@@ -486,6 +498,7 @@ export class ActivityFeedListener {
         groupService,
         userService,
         eventQueryService,
+        contrailQueryService,
       } = await this.resolveServices(event.tenantId);
 
       this.logger.log('attendance.changed received', {
@@ -561,7 +574,23 @@ export class ActivityFeedListener {
           `Created event.rsvp activity via attendance.changed for ${tenantEvent.slug} by ${user.slug}`,
         );
       } else {
-        // Foreign event (no tenant event) - create sitewide activity
+        // Foreign event (no tenant event) - look up event name from Contrail
+        let eventName: string | undefined;
+        if (event.eventUri) {
+          try {
+            const contrailRecord = await contrailQueryService.findByUri(
+              BLUESKY_COLLECTIONS.EVENT,
+              event.eventUri,
+            );
+            eventName = (contrailRecord?.record as any)?.name;
+          } catch (error) {
+            this.logger.warn(
+              `Failed to look up foreign event name from Contrail for ${event.eventUri}: ${error.message}`,
+            );
+          }
+        }
+
+        // Create sitewide activity
         await activityFeedService.create({
           activityType: 'event.rsvp',
           feedScope: 'sitewide',
@@ -571,6 +600,7 @@ export class ActivityFeedListener {
           metadata: {
             eventUri: event.eventUri,
             status: event.status,
+            ...(eventName ? { eventName } : {}),
           },
           aggregationStrategy: 'none',
         });

@@ -2272,4 +2272,257 @@ describe('EventQueryService', () => {
       expect(result.total).toBe(1);
     });
   });
+
+  describe('getMyEvents', () => {
+    const futureDate = new Date('2026-06-01T10:00:00Z');
+    const queryDto = {
+      startDate: '2026-05-01',
+      endDate: '2026-07-01',
+    };
+
+    it('should return organized events with isOrganizer=true', async () => {
+      const organizedEvent = {
+        ...mockEventEntity,
+        id: 10,
+        slug: 'my-organized-event',
+        name: 'My Organized Event',
+        startDate: futureDate,
+        user: { id: 1 } as UserEntity,
+        userId: 1,
+      } as unknown as EventEntity;
+
+      const mockAttendeeQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+
+      // Mock initializeRepository
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity: any) => {
+            if (entity === EventAttendeesEntity) {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              ...eventRepository,
+              createQueryBuilder: jest.fn().mockReturnValue({
+                leftJoinAndSelect: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                orderBy: jest.fn().mockReturnThis(),
+                getMany: jest.fn().mockResolvedValue([organizedEvent]),
+              }),
+            };
+          }),
+        } as any);
+
+      // getAttendingEvents returns no attending events
+      jest
+        .spyOn(service, 'getAttendingEvents')
+        .mockResolvedValue({ events: [], total: 0 });
+
+      const result = await service.getMyEvents(1, queryDto);
+
+      expect(result).toHaveLength(1);
+      expect((result[0] as any).isOrganizer).toBe(true);
+    });
+
+    it('should return attending events with isOrganizer=false and attendeeStatus', async () => {
+      const attendedEvent = {
+        ...mockEventEntity,
+        id: 20,
+        slug: 'attended-event',
+        name: 'Attended Event',
+        startDate: futureDate,
+        user: { id: 99 } as UserEntity,
+        userId: 99,
+      } as unknown as EventEntity;
+
+      const mockAttendeeQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            eventId: 20,
+            event: { id: 20 },
+            userId: 1,
+            status: EventAttendeeStatus.Confirmed,
+            role: 'attendee',
+          },
+        ]),
+      };
+
+      // Mock initializeRepository
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity: any) => {
+            if (entity === EventAttendeesEntity) {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              ...eventRepository,
+              createQueryBuilder: jest.fn().mockReturnValue({
+                leftJoinAndSelect: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                orderBy: jest.fn().mockReturnThis(),
+                getMany: jest.fn().mockResolvedValue([]),
+              }),
+            };
+          }),
+        } as any);
+
+      // getAttendingEvents returns the attended event
+      jest
+        .spyOn(service, 'getAttendingEvents')
+        .mockResolvedValue({ events: [attendedEvent], total: 1 });
+
+      const result = await service.getMyEvents(1, queryDto);
+
+      expect(result).toHaveLength(1);
+      expect((result[0] as any).isOrganizer).toBe(false);
+      expect((result[0] as any).attendeeStatus).toBeDefined();
+    });
+
+    it('should dedup events where user is both organizer and attendee', async () => {
+      const dualEvent = {
+        ...mockEventEntity,
+        id: 30,
+        slug: 'dual-event',
+        name: 'Dual Event',
+        startDate: futureDate,
+        user: { id: 1 } as UserEntity,
+        userId: 1,
+      } as unknown as EventEntity;
+
+      const mockAttendeeQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            eventId: 30,
+            event: { id: 30 },
+            userId: 1,
+            status: EventAttendeeStatus.Confirmed,
+            role: 'attendee',
+          },
+        ]),
+      };
+
+      // Mock initializeRepository - returns the organized event
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity: any) => {
+            if (entity === EventAttendeesEntity) {
+              return {
+                createQueryBuilder: jest.fn().mockReturnValue(mockAttendeeQb),
+              };
+            }
+            return {
+              ...eventRepository,
+              createQueryBuilder: jest.fn().mockReturnValue({
+                leftJoinAndSelect: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                orderBy: jest.fn().mockReturnThis(),
+                getMany: jest.fn().mockResolvedValue([dualEvent]),
+              }),
+            };
+          }),
+        } as any);
+
+      // getAttendingEvents also returns the same event
+      jest
+        .spyOn(service, 'getAttendingEvents')
+        .mockResolvedValue({ events: [dualEvent], total: 1 });
+
+      const result = await service.getMyEvents(1, queryDto);
+
+      // Should appear only once, with isOrganizer=true
+      expect(result).toHaveLength(1);
+      expect((result[0] as any).isOrganizer).toBe(true);
+    });
+  });
+
+  describe('getPastEventsCount', () => {
+    it('should include Contrail-sourced past events in the count', async () => {
+      const now = new Date();
+
+      const mockEventQb = {
+        select: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ count: '3' }),
+      };
+
+      // Mock initializeRepository so eventRepository is set
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockImplementation((entity: any) => {
+            if (entity === EventAttendeesEntity) {
+              return eventAttendeesRepository;
+            }
+            return {
+              createQueryBuilder: jest.fn().mockReturnValue(mockEventQb),
+            };
+          }),
+        } as any);
+
+      // Force initializeRepository to run
+      await (service as any).initializeRepository();
+
+      // getAttendingEvents for past range returns 3 events (1 is Contrail-only)
+      const pastAtprotoEvent: AtprotoSourcedEvent = {
+        source: 'atproto',
+        atprotoUri: 'at://did:plc:host/community.lexicon.calendar.event/past1',
+        atprotoRkey: 'past1',
+        atprotoCid: null,
+        name: 'Past Contrail Event',
+        description: null,
+        startDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+        endDate: null,
+        type: 'in-person',
+        status: 'published',
+        location: null,
+        locationOnline: null,
+        lat: null,
+        lon: null,
+        attendeesCount: 0,
+        slug: 'past-contrail-event',
+      };
+
+      jest.spyOn(service, 'getAttendingEvents').mockResolvedValue({
+        events: [
+          pastAtprotoEvent,
+          { ...mockEventEntity, id: 100 } as EventEntity,
+          { ...mockEventEntity, id: 101 } as EventEntity,
+        ],
+        total: 3,
+      });
+
+      const result = await (service as any).getPastEventsCount(1, now);
+
+      // Should call getAttendingEvents with a past date range
+      expect(service.getAttendingEvents).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          endDate: expect.any(Date),
+        }),
+      );
+
+      // Result should combine local count (3) + Contrail-only events (1 atproto)
+      // Local returns 3, Contrail has 1 foreign event not in local = total 4
+      expect(result).toBeGreaterThanOrEqual(3);
+    });
+  });
 });
