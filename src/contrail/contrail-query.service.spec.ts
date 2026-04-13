@@ -161,6 +161,53 @@ describe('ContrailQueryService', () => {
     });
   });
 
+  describe('findByUris', () => {
+    it('should return records matching multiple URIs in a single query', async () => {
+      const mockRecords = [
+        {
+          uri: 'at://did:plc:abc/community.lexicon.calendar.event/1',
+          did: 'did:plc:abc',
+          record: { name: 'Event 1' },
+        },
+        {
+          uri: 'at://did:plc:def/community.lexicon.calendar.event/2',
+          did: 'did:plc:def',
+          record: { name: 'Event 2' },
+        },
+      ];
+      mockDataSource.query.mockResolvedValue(mockRecords);
+
+      const result = await service.findByUris(
+        'community.lexicon.calendar.event',
+        [
+          'at://did:plc:abc/community.lexicon.calendar.event/1',
+          'at://did:plc:def/community.lexicon.calendar.event/2',
+        ],
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0].uri).toBe(
+        'at://did:plc:abc/community.lexicon.calendar.event/1',
+      );
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE uri IN'),
+        [
+          'at://did:plc:abc/community.lexicon.calendar.event/1',
+          'at://did:plc:def/community.lexicon.calendar.event/2',
+        ],
+      );
+    });
+
+    it('should return empty array for empty URI list', async () => {
+      const result = await service.findByUris(
+        'community.lexicon.calendar.event',
+        [],
+      );
+      expect(result).toEqual([]);
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+    });
+  });
+
   describe('resolveHandles', () => {
     it('should resolve handles when enabled', async () => {
       mockDataSource.query.mockResolvedValue([
