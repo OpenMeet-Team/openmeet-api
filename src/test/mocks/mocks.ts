@@ -153,6 +153,7 @@ export const mockRepository = {
   merge: jest.fn(),
   leftJoin: jest.fn().mockReturnThis(),
   select: jest.fn().mockReturnThis(),
+  whereInIds: jest.fn().mockReturnThis(),
   getRawMany: jest.fn(),
   softDelete: jest.fn(),
   findAndCount: jest.fn(),

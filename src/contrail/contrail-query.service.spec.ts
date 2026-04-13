@@ -82,6 +82,54 @@ describe('ContrailQueryService', () => {
         }),
       ).resolves.not.toThrow();
     });
+
+    it('should skip the COUNT query when skipCount is true', async () => {
+      const mockRecords = [
+        {
+          uri: 'at://did:plc:a/community.lexicon.calendar.event/1',
+          did: 'did:plc:a',
+        },
+        {
+          uri: 'at://did:plc:b/community.lexicon.calendar.event/2',
+          did: 'did:plc:b',
+        },
+      ];
+      mockDataSource.query.mockResolvedValueOnce(mockRecords);
+
+      const result = await service.find('community.lexicon.calendar.event', {
+        skipCount: true,
+        limit: 50,
+      });
+
+      // Only one query should have been executed (the SELECT, not the COUNT)
+      expect(mockDataSource.query).toHaveBeenCalledTimes(1);
+      expect(result.records).toEqual(mockRecords);
+      expect(result.total).toBe(-1);
+    });
+
+    it('should still run COUNT query when skipCount is false', async () => {
+      mockDataSource.query
+        .mockResolvedValueOnce([{ total: '5' }])
+        .mockResolvedValueOnce([{ uri: 'at://test', did: 'did:plc:a' }]);
+
+      const result = await service.find('community.lexicon.calendar.event', {
+        skipCount: false,
+      });
+
+      expect(mockDataSource.query).toHaveBeenCalledTimes(2);
+      expect(result.total).toBe(5);
+    });
+
+    it('should run COUNT query when skipCount is not specified', async () => {
+      mockDataSource.query
+        .mockResolvedValueOnce([{ total: '3' }])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.find('community.lexicon.calendar.event');
+
+      expect(mockDataSource.query).toHaveBeenCalledTimes(2);
+      expect(result.total).toBe(3);
+    });
   });
 
   describe('findWithGeoFilter', () => {

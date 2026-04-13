@@ -522,21 +522,76 @@ describe('GroupService', () => {
   });
 
   describe('getHomePageFeaturedGroups', () => {
+    beforeEach(() => {
+      // Ensure createQueryBuilder returns the mockRepository (may be corrupted by spies in other tests)
+      mockRepository.createQueryBuilder.mockReturnThis();
+    });
+
     it('should return featured groups', async () => {
-      jest
-        .spyOn(service['groupRepository'], 'find')
-        .mockResolvedValue([mockGroup]);
-      jest.spyOn(mockRepository, 'getMany').mockResolvedValue([mockGroup]);
+      // First getMany returns IDs, second returns full entities
+      mockRepository.getMany
+        .mockResolvedValueOnce([{ id: mockGroup.id }])
+        .mockResolvedValueOnce([mockGroup]);
       const result = await service.getHomePageFeaturedGroups();
       expect(result).toEqual([mockGroup]);
+    });
+
+    it('should not use ORDER BY RANDOM() — should fetch IDs first then load full entities', async () => {
+      // First getMany returns IDs, second returns full entities
+      const mockGroupIds = [
+        { id: 1 },
+        { id: 2 },
+        { id: 3 },
+        { id: 4 },
+        { id: 5 },
+        { id: 6 },
+        { id: 7 },
+        { id: 8 },
+      ];
+      const mockFullGroups = mockGroupIds.slice(0, 5).map((g) => ({
+        ...mockGroup,
+        id: g.id,
+      }));
+
+      mockRepository.getMany
+        .mockResolvedValueOnce(mockGroupIds)
+        .mockResolvedValueOnce(mockFullGroups);
+
+      const result = await service.getHomePageFeaturedGroups();
+
+      // createQueryBuilder should be called twice: once for IDs, once for full entities
+      expect(mockRepository.createQueryBuilder).toHaveBeenCalledTimes(2);
+
+      // First call: ID-only query uses select('group.id')
+      expect(mockRepository.select).toHaveBeenCalledWith('group.id');
+
+      // Second call: full entity query uses whereInIds
+      expect(mockRepository.whereInIds).toHaveBeenCalled();
+
+      // Result should have at most 5 groups
+      expect(result.length).toBeLessThanOrEqual(5);
+    });
+
+    it('should return empty array when no groups match', async () => {
+      // ID query returns empty
+      mockRepository.getMany.mockResolvedValueOnce([]);
+
+      const result = await service.getHomePageFeaturedGroups();
+
+      expect(result).toEqual([]);
+      // Should only call createQueryBuilder once (ID query) — no need for second query
+      expect(mockRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('getHomePageUserCreatedGroups', () => {
+    beforeEach(() => {
+      // Ensure createQueryBuilder returns the mockRepository (may be corrupted by spies in other tests)
+      mockRepository.createQueryBuilder.mockReturnThis();
+    });
+
     it('should return user created groups', async () => {
-      jest
-        .spyOn(service['groupRepository'], 'find')
-        .mockResolvedValue([mockGroup]);
+      mockRepository.getMany.mockResolvedValueOnce([mockGroup]);
       const result = await service.getHomePageUserCreatedGroups(mockUser.id);
       expect(result).toEqual([mockGroup]);
     });
