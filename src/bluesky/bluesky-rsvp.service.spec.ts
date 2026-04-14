@@ -4,6 +4,7 @@ import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
 import { PdsSessionService } from '../pds/pds-session.service';
+import { ContrailQueryService } from '../contrail/contrail-query.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventSourceType } from '../core/constants/source-type.constant';
 import { Counter, Histogram } from 'prom-client';
@@ -15,6 +16,7 @@ describe('BlueskyRsvpService', () => {
   let blueskyIdService: jest.Mocked<BlueskyIdService>;
   let atprotoLexiconService: jest.Mocked<AtprotoLexiconService>;
   let pdsSessionService: jest.Mocked<PdsSessionService>;
+  let contrailQueryService: jest.Mocked<ContrailQueryService>;
   let rsvpOperationsCounter: jest.Mocked<Counter<string>>;
   let processingDuration: jest.Mocked<Histogram<string>>;
 
@@ -36,6 +38,18 @@ describe('BlueskyRsvpService', () => {
     pdsSessionService = {
       getSessionForDid: jest.fn(),
     } as unknown as jest.Mocked<PdsSessionService>;
+
+    contrailQueryService = {
+      findByUri: jest.fn().mockResolvedValue({
+        uri: 'at://mock/community.lexicon.calendar.event/mock',
+        did: 'did:plc:mock',
+        rkey: 'mock',
+        cid: 'bafyreidefaultcid',
+        record: {},
+        time_us: '0',
+        indexed_at: '2025-01-01',
+      }),
+    } as unknown as jest.Mocked<ContrailQueryService>;
 
     rsvpOperationsCounter = {
       inc: jest.fn(),
@@ -63,6 +77,10 @@ describe('BlueskyRsvpService', () => {
         {
           provide: PdsSessionService,
           useValue: pdsSessionService,
+        },
+        {
+          provide: ContrailQueryService,
+          useValue: contrailQueryService,
         },
         {
           provide: 'PROM_METRIC_BLUESKY_RSVP_OPERATIONS_TOTAL',
@@ -339,6 +357,92 @@ describe('BlueskyRsvpService', () => {
             subject: {
               uri: 'at://did:plc:organizer/community.lexicon.calendar.event/tid456',
               cid: 'bafyreifetched789',
+            },
+          }),
+        }),
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should fall back to Contrail when on-demand CID fetch via getRecord fails', async () => {
+      // Event published via AtprotoPublisherService but missing CID,
+      // and the event creator is on a different PDS than the user
+      const event = {
+        id: 4,
+        name: 'Cross-PDS Event',
+        sourceType: null,
+        sourceData: null,
+        atprotoUri:
+          'at://did:plc:foreign/community.lexicon.calendar.event/tid789',
+        atprotoRkey: 'tid789',
+        atprotoCid: null, // CID not stored
+      } as unknown as EventEntity;
+
+      const userDid = 'did:plc:attendee';
+      const tenantId = 'tenant123';
+
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+
+      // Mock parseUri for on-demand CID fetch
+      blueskyIdService.parseUri.mockReturnValueOnce({
+        did: 'did:plc:foreign',
+        collection: 'community.lexicon.calendar.event',
+        rkey: 'tid789',
+      });
+
+      // Agent's getRecord fails (cross-PDS)
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: mockRsvpUri, cid: 'rsvpcid789' },
+              }),
+              getRecord: jest
+                .fn()
+                .mockRejectedValue(new Error('Repo not found on this PDS')),
+            },
+          },
+        },
+      };
+      blueskyService.resumeSession.mockResolvedValue(
+        mockAgent as unknown as Agent,
+      );
+
+      // Contrail has the record
+      contrailQueryService.findByUri.mockResolvedValue({
+        uri: 'at://did:plc:foreign/community.lexicon.calendar.event/tid789',
+        did: 'did:plc:foreign',
+        rkey: 'tid789',
+        cid: 'bafyreicontrailfallback',
+        record: {},
+        time_us: '0',
+        indexed_at: '2025-01-01',
+      });
+
+      const result = await service.createRsvp(
+        event,
+        'going',
+        userDid,
+        tenantId,
+      );
+
+      // Should have tried Contrail after getRecord failed
+      expect(contrailQueryService.findByUri).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        'at://did:plc:foreign/community.lexicon.calendar.event/tid789',
+      );
+
+      // Subject should include the CID from Contrail
+      expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          record: expect.objectContaining({
+            subject: {
+              uri: 'at://did:plc:foreign/community.lexicon.calendar.event/tid789',
+              cid: 'bafyreicontrailfallback',
             },
           }),
         }),
@@ -853,14 +957,14 @@ describe('BlueskyRsvpService', () => {
       );
       expect(blueskyService.resumeSession).not.toHaveBeenCalled();
 
-      // Should build record with uri-only subject (no CID)
+      // Subject should include CID from Contrail fallback
       expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith({
         repo: userDid,
         collection: 'community.lexicon.calendar.rsvp',
         rkey: expect.any(String),
         record: {
           $type: 'community.lexicon.calendar.rsvp',
-          subject: { uri: eventUri },
+          subject: { uri: eventUri, cid: 'bafyreidefaultcid' },
           status: 'community.lexicon.calendar.rsvp#going',
           createdAt: expect.any(String),
         },
@@ -1014,6 +1118,149 @@ describe('BlueskyRsvpService', () => {
 
       expect(firstCallRkey).toBe(secondCallRkey);
       expect(firstCallRkey).toHaveLength(13); // SHA-256 hash substring
+    });
+
+    it('should fetch CID from PDS getRecord when available', async () => {
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+      blueskyIdService.parseUri.mockReturnValueOnce({
+        did: 'did:plc:organizer',
+        collection: 'community.lexicon.calendar.event',
+        rkey: 'tid999',
+      });
+
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              getRecord: jest.fn().mockResolvedValue({
+                data: { cid: 'bafyreipds123' },
+              }),
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: mockRsvpUri, cid: 'rsvpcid' },
+              }),
+            },
+          },
+        },
+      };
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
+
+      await service.createRsvpByUri(eventUri, 'going', userDid, tenantId);
+
+      // Should NOT call Contrail when PDS succeeds
+      expect(contrailQueryService.findByUri).not.toHaveBeenCalled();
+
+      // Subject should include the CID from PDS
+      expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          record: expect.objectContaining({
+            subject: { uri: eventUri, cid: 'bafyreipds123' },
+          }),
+        }),
+      );
+    });
+
+    it('should fall back to Contrail when PDS getRecord fails (cross-PDS event)', async () => {
+      const mockRsvpUri =
+        'at://did:plc:attendee/community.lexicon.calendar.rsvp/rsvphash';
+      blueskyIdService.createUri.mockReturnValueOnce(mockRsvpUri);
+      blueskyIdService.parseUri.mockReturnValueOnce({
+        did: 'did:plc:organizer',
+        collection: 'community.lexicon.calendar.event',
+        rkey: 'tid999',
+      });
+
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              getRecord: jest
+                .fn()
+                .mockRejectedValue(new Error('Record not found on this PDS')),
+              putRecord: jest.fn().mockResolvedValue({
+                data: { uri: mockRsvpUri, cid: 'rsvpcid' },
+              }),
+            },
+          },
+        },
+      };
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
+
+      // Contrail has the record from network ingestion
+      contrailQueryService.findByUri.mockResolvedValue({
+        uri: eventUri,
+        did: 'did:plc:organizer',
+        rkey: 'tid999',
+        cid: 'bafyreicontrail456',
+        record: {},
+        time_us: '0',
+        indexed_at: '2025-01-01',
+      });
+
+      await service.createRsvpByUri(eventUri, 'going', userDid, tenantId);
+
+      // Should have called Contrail as fallback
+      expect(contrailQueryService.findByUri).toHaveBeenCalledWith(
+        'community.lexicon.calendar.event',
+        eventUri,
+      );
+
+      // Subject should include the CID from Contrail
+      expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          record: expect.objectContaining({
+            subject: { uri: eventUri, cid: 'bafyreicontrail456' },
+          }),
+        }),
+      );
+    });
+
+    it('should throw when both PDS and Contrail fail to resolve CID', async () => {
+      blueskyIdService.parseUri.mockReturnValueOnce({
+        did: 'did:plc:organizer',
+        collection: 'community.lexicon.calendar.event',
+        rkey: 'tid999',
+      });
+
+      const mockAgent = {
+        com: {
+          atproto: {
+            repo: {
+              getRecord: jest
+                .fn()
+                .mockRejectedValue(new Error('Record not found')),
+              putRecord: jest.fn(),
+            },
+          },
+        },
+      };
+      pdsSessionService.getSessionForDid.mockResolvedValue({
+        agent: mockAgent as unknown as Agent,
+        did: userDid,
+        isCustodial: false,
+        source: 'oauth',
+      });
+
+      // Contrail also doesn't have the record
+      contrailQueryService.findByUri.mockResolvedValue(null);
+
+      await expect(
+        service.createRsvpByUri(eventUri, 'going', userDid, tenantId),
+      ).rejects.toThrow(/unable to resolve CID/);
+
+      // putRecord should NOT have been called
+      expect(mockAgent.com.atproto.repo.putRecord).not.toHaveBeenCalled();
     });
   });
 

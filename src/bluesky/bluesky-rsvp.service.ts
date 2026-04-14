@@ -15,6 +15,7 @@ import {
   RsvpStatusShort,
 } from './BlueskyTypes';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
+import { ContrailQueryService } from '../contrail/contrail-query.service';
 
 /**
  * Service for managing RSVPs in the ATProtocol ecosystem
@@ -44,6 +45,7 @@ export class BlueskyRsvpService {
     @InjectMetric('bluesky_rsvp_processing_duration_seconds')
     private readonly processingDuration: Histogram<string>,
     private readonly atprotoLexiconService: AtprotoLexiconService,
+    private readonly contrailQueryService: ContrailQueryService,
   ) {}
 
   /**
@@ -171,6 +173,26 @@ export class BlueskyRsvpService {
         } catch (error) {
           this.logger.warn(
             `Failed to fetch CID on-demand for event ${event.id}: ${error.message}`,
+          );
+        }
+      }
+
+      // Contrail fallback: if PDS couldn't provide CID (e.g., event on different PDS)
+      if (!eventCid && eventUri) {
+        try {
+          const contrailRecord = await this.contrailQueryService.findByUri(
+            BLUESKY_COLLECTIONS.EVENT,
+            eventUri,
+          );
+          if (contrailRecord?.cid) {
+            eventCid = contrailRecord.cid;
+            this.logger.debug(
+              `Fetched CID from Contrail fallback for event ${event.id}: ${eventCid}`,
+            );
+          }
+        } catch (contrailError) {
+          this.logger.warn(
+            `Contrail CID fallback also failed for event ${event.id}: ${contrailError.message}`,
           );
         }
       }
@@ -352,6 +374,33 @@ export class BlueskyRsvpService {
       } catch (error) {
         this.logger.warn(
           `Could not fetch CID for event ${eventUri}: ${error.message}`,
+        );
+      }
+
+      // Contrail fallback: if PDS couldn't provide CID (e.g., event on different PDS)
+      if (!eventCid) {
+        try {
+          const contrailRecord = await this.contrailQueryService.findByUri(
+            BLUESKY_COLLECTIONS.EVENT,
+            eventUri,
+          );
+          if (contrailRecord?.cid) {
+            eventCid = contrailRecord.cid;
+            this.logger.debug(
+              `Fetched CID from Contrail fallback: ${eventCid}`,
+            );
+          }
+        } catch (contrailError) {
+          this.logger.warn(
+            `Contrail CID fallback also failed for ${eventUri}: ${contrailError.message}`,
+          );
+        }
+      }
+
+      // CID is required for a valid StrongRef subject
+      if (!eventCid) {
+        throw new Error(
+          `Cannot create RSVP: unable to resolve CID for event ${eventUri}. Neither PDS nor Contrail had the record.`,
         );
       }
 

@@ -16,6 +16,7 @@ import { TenantModule } from '../tenant/tenant.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 import { PdsModule } from '../pds/pds.module';
+import { ContrailModule } from '../contrail/contrail.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PdsModule } from '../pds/pds.module';
     TenantModule,
     MetricsModule,
     UserAtprotoIdentityModule,
+    ContrailModule,
     forwardRef(() => EventModule),
     forwardRef(() => PdsModule),
   ],
