@@ -42,8 +42,8 @@ describe('EventAttendeeController (e2e)', () => {
         name: 'Test Event',
         slug: `test-event-${Date.now()}`, // Make slug unique
         description: 'A test event',
-        startDate: '2024-12-31T00:00:00Z',
-        endDate: '2024-12-31T23:59:59Z',
+        startDate: '2099-12-31T00:00:00Z',
+        endDate: '2099-12-31T23:59:59Z',
         type: EventType.Hybrid,
         location: 'Test Location',
         locationOnline: 'https://test-online-location.com',

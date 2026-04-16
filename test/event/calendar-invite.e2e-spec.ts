@@ -212,9 +212,9 @@ describe('Calendar Invite E2E', () => {
         expect(icsContent).toContain('BEGIN:VEVENT');
         expect(icsContent).toContain('END:VEVENT');
 
-        // Verify METHOD:REQUEST (calendar invite, not just info)
-        expect(icsContent).toContain('METHOD:REQUEST');
-        console.log('✓ ICS has METHOD:REQUEST');
+        // Verify METHOD:PUBLISH (informational attachment, not auto-RSVP request)
+        expect(icsContent).toContain('METHOD:PUBLISH');
+        console.log('✓ ICS has METHOD:PUBLISH');
 
         // Verify event details are in ICS
         expect(icsContent).toContain(testEvent.name);
@@ -699,9 +699,9 @@ describe('Calendar Invite E2E', () => {
       );
       const icsContent = await icsResponse.text();
 
-      // Should have METHOD:REQUEST for calendar updates
-      expect(icsContent).toContain('METHOD:REQUEST');
-      console.log('✅ ICS uses METHOD:REQUEST for update');
+      // Should have METHOD:PUBLISH for calendar updates (informational attachment)
+      expect(icsContent).toContain('METHOD:PUBLISH');
+      console.log('✅ ICS uses METHOD:PUBLISH for update');
 
       // Should contain the same event UID (so it updates rather than creates new)
       expect(icsContent).toContain(`UID:${testEvent.ulid}`);
