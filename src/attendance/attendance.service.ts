@@ -433,6 +433,12 @@ export class AttendanceService {
     const event = resolved.tenantEvent;
     if (!event) return; // Foreign events are always public, no auth needed
 
+    // Prevent RSVP to past events
+    const eventEnd = event.endDate || event.startDate;
+    if (eventEnd && new Date(eventEnd) < new Date()) {
+      throw new BadRequestException('Cannot RSVP to a past event');
+    }
+
     // Private event access control
     if (!resolved.isPublic) {
       if (event.user && event.user.id === userId) return; // Creator always allowed
