@@ -166,15 +166,15 @@ describe('ICalendarService', () => {
       user: mockOrganizer as UserEntity,
     };
 
-    it('should generate ICS content with METHOD:REQUEST', () => {
+    it('should generate ICS content with METHOD:PUBLISH (informational only)', () => {
       const icsContent = service.generateCalendarInvite(
         mockEvent as EventEntity,
         mockAttendee as UserEntity,
         mockOrganizer as UserEntity,
       );
 
-      expect(icsContent).toContain('METHOD:REQUEST');
-      expect(icsContent).not.toContain('METHOD:PUBLISH');
+      expect(icsContent).toContain('METHOD:PUBLISH');
+      expect(icsContent).not.toContain('METHOD:REQUEST');
     });
 
     it('should include BEGIN:VCALENDAR and END:VCALENDAR', () => {
@@ -212,26 +212,25 @@ describe('ICalendarService', () => {
       expect(icsContent).toContain('organizer@example.com');
     });
 
-    it('should include attendee with PARTSTAT:ACCEPTED', () => {
+    it('should NOT include ATTENDEE properties (no RSVP tracking)', () => {
       const icsContent = service.generateCalendarInvite(
         mockEvent as EventEntity,
         mockAttendee as UserEntity,
         mockOrganizer as UserEntity,
       );
 
-      expect(icsContent).toMatch(/ATTENDEE.*John Doe/);
-      expect(icsContent).toContain('PARTSTAT=ACCEPTED');
-      expect(icsContent).toContain('attendee@example.com');
+      expect(icsContent).not.toContain('ATTENDEE');
+      expect(icsContent).not.toContain('PARTSTAT=ACCEPTED');
     });
 
-    it('should include RSVP:TRUE for attendee', () => {
+    it('should NOT include RSVP=TRUE (calendar is informational only)', () => {
       const icsContent = service.generateCalendarInvite(
         mockEvent as EventEntity,
         mockAttendee as UserEntity,
         mockOrganizer as UserEntity,
       );
 
-      expect(icsContent).toContain('RSVP=TRUE');
+      expect(icsContent).not.toContain('RSVP=TRUE');
     });
 
     it('should set STATUS to CONFIRMED', () => {
@@ -321,7 +320,7 @@ describe('ICalendarService', () => {
       expect(icsContent).toContain('organizer@example.com');
     });
 
-    it('should handle attendee without full name gracefully', () => {
+    it('should not include attendee even when attendee info is provided', () => {
       const attendeeWithoutName = {
         ...mockAttendee,
         firstName: '',
@@ -334,9 +333,8 @@ describe('ICalendarService', () => {
         mockOrganizer as UserEntity,
       );
 
-      // Should still include attendee
-      expect(icsContent).toContain('ATTENDEE');
-      expect(icsContent).toContain('attendee@example.com');
+      // PUBLISH method should never include ATTENDEE
+      expect(icsContent).not.toContain('ATTENDEE');
     });
 
     it('should handle all-day events correctly', () => {

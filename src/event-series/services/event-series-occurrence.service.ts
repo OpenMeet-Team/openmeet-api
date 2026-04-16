@@ -550,7 +550,7 @@ export class EventSeriesOccurrenceService {
       log('Finding existing events');
       let existingOccurrences: EventEntity[] = [];
       try {
-        const queryLimit = Math.min(effectiveCount * 2, 20); // Reasonable limit to prevent memory issues
+        const queryLimit = 500; // Must cover long-running series (e.g. weekly for 5+ years)
         const [events] =
           await this.eventManagementService.findEventsBySeriesSlug(
             seriesSlug,

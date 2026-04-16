@@ -77,8 +77,8 @@ describe('EventManagementService', () => {
     ulid: '01HABCDEFGHJKMNPQRSTVWXY1',
     slug: 'test-event-1',
     name: 'Test Event 1',
-    startDate: new Date('2024-01-01T10:00:00Z'),
-    endDate: new Date('2024-01-01T11:00:00Z'),
+    startDate: new Date('2099-01-01T10:00:00Z'),
+    endDate: new Date('2099-01-01T11:00:00Z'),
   } as EventEntity;
 
   const fullMockEvent2: EventEntity = {
@@ -87,8 +87,8 @@ describe('EventManagementService', () => {
     ulid: '01HABCDEFGHJKMNPQRSTVWXY2',
     slug: 'test-event-2',
     name: 'Test Event 2',
-    startDate: new Date('2024-01-02T10:00:00Z'),
-    endDate: new Date('2024-01-02T11:00:00Z'),
+    startDate: new Date('2099-01-02T10:00:00Z'),
+    endDate: new Date('2099-01-02T11:00:00Z'),
   } as EventEntity;
 
   // Mock for findOne/create results
@@ -98,8 +98,8 @@ describe('EventManagementService', () => {
     ulid: '01HABCDEFGHJKMNPQRSTVWX99',
     slug: 'test-series-event-123',
     name: 'Test Series Event',
-    startDate: new Date('2023-10-01T12:00:00Z'),
-    endDate: new Date('2023-10-01T13:00:00Z'),
+    startDate: new Date('2099-10-01T12:00:00Z'),
+    endDate: new Date('2099-10-01T13:00:00Z'),
   } as EventEntity;
 
   beforeEach(async () => {

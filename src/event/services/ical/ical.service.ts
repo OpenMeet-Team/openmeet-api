@@ -217,8 +217,10 @@ export class ICalendarService {
       });
     }
 
-    // Set method to REQUEST for calendar invites
-    calendar.method('REQUEST' as any);
+    // PUBLISH = informational "add to calendar" attachment
+    // REQUEST would trigger accept/decline in email clients, creating a
+    // shadow RSVP channel that bypasses OpenMeet (reported by CRMC)
+    calendar.method('PUBLISH' as any);
 
     // Create the event using existing method
     const calEvent = this.createCalendarEvent(event);
@@ -228,28 +230,8 @@ export class ICalendarService {
       calEvent.url(eventUrl);
     }
 
-    // Override organizer with provided organizer info
-    const organizerName =
-      `${organizer.firstName || ''} ${organizer.lastName || ''}`.trim() ||
-      organizer.email.split('@')[0];
-
-    calEvent.organizer({
-      name: organizerName,
-      email: organizer.email,
-    });
-
-    // Add the specific attendee with ACCEPTED status
-    const attendeeName =
-      `${attendee.firstName || ''} ${attendee.lastName || ''}`.trim() ||
-      attendee.email.split('@')[0];
-
-    calEvent.createAttendee({
-      name: attendeeName,
-      email: attendee.email,
-      rsvp: true,
-      status: 'ACCEPTED' as any,
-      role: 'REQ-PARTICIPANT' as any,
-    });
+    // No ATTENDEE or ORGANIZER override — PUBLISH method doesn't need them.
+    // Organizer is already set by createCalendarEvent() from event.user.
 
     // Add 24-hour reminder
     calEvent.createAlarm({
