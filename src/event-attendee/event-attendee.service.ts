@@ -1,5 +1,6 @@
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -221,6 +222,14 @@ export class EventAttendeeService {
     createEventAttendeeDto: CreateEventAttendeeDto,
   ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
+
+    // Prevent RSVP to past events
+    const eventEnd =
+      createEventAttendeeDto.event.endDate ||
+      createEventAttendeeDto.event.startDate;
+    if (eventEnd && new Date(eventEnd) < new Date()) {
+      throw new BadRequestException('Cannot RSVP to a past event');
+    }
 
     // Log creation attempt with key info for debugging
     this.logger.debug(

@@ -65,8 +65,8 @@ describe('EventAttendeeService', () => {
     id: 1,
     slug: 'test-event',
     name: 'Test Event',
-    startDate: new Date('2024-12-31T00:00:00Z'),
-    endDate: new Date('2024-12-31T23:59:59Z'),
+    startDate: new Date('2099-12-31T00:00:00Z'),
+    endDate: new Date('2099-12-31T23:59:59Z'),
     sourceData: { rkey: 'test-rkey' },
   };
 
@@ -567,6 +567,33 @@ describe('EventAttendeeService', () => {
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
       expect(result.status).toBe(EventAttendeeStatus.Confirmed);
+    });
+
+    it('should reject RSVP to a past event', async () => {
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const pastEvent: Partial<EventEntity> = {
+        id: 2,
+        slug: 'past-event',
+        name: 'Past Event',
+        startDate: new Date('2024-01-01T10:00:00Z'),
+        endDate: new Date('2024-01-01T11:00:00Z'),
+      };
+
+      const createDto = {
+        event: pastEvent as EventEntity,
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      await expect(service.create(createDto)).rejects.toThrow(
+        'Cannot RSVP to a past event',
+      );
+
+      expect(mockRepository.save).not.toHaveBeenCalled();
     });
 
     it('should handle duplicate key errors when creating attendance', async () => {
