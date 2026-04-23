@@ -7,16 +7,12 @@ import { UserService } from '../user/user.service';
 import { GroupVisibility, EventVisibility } from '../core/constants/constant';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
-import { AttendanceChangedEvent } from '../attendance/types';
-import { ContrailQueryService } from '../contrail/contrail-query.service';
-import { BLUESKY_COLLECTIONS } from '../bluesky/BlueskyTypes';
 
 interface ResolvedServices {
   activityFeedService: ActivityFeedService;
   groupService: GroupService;
   userService: UserService;
   eventQueryService: EventQueryService;
-  contrailQueryService: ContrailQueryService;
 }
 
 @Injectable()
@@ -41,31 +37,22 @@ export class ActivityFeedListener {
       { tenantId, headers: { 'x-tenant-id': tenantId } },
       contextId,
     );
-    const [
-      activityFeedService,
-      groupService,
-      userService,
-      eventQueryService,
-      contrailQueryService,
-    ] = await Promise.all([
-      this.moduleRef.resolve(ActivityFeedService, contextId, {
-        strict: false,
-      }),
-      this.moduleRef.resolve(GroupService, contextId, { strict: false }),
-      this.moduleRef.resolve(UserService, contextId, { strict: false }),
-      this.moduleRef.resolve(EventQueryService, contextId, {
-        strict: false,
-      }),
-      this.moduleRef.resolve(ContrailQueryService, contextId, {
-        strict: false,
-      }),
-    ]);
+    const [activityFeedService, groupService, userService, eventQueryService] =
+      await Promise.all([
+        this.moduleRef.resolve(ActivityFeedService, contextId, {
+          strict: false,
+        }),
+        this.moduleRef.resolve(GroupService, contextId, { strict: false }),
+        this.moduleRef.resolve(UserService, contextId, { strict: false }),
+        this.moduleRef.resolve(EventQueryService, contextId, {
+          strict: false,
+        }),
+      ]);
     return {
       activityFeedService,
       groupService,
       userService,
       eventQueryService,
-      contrailQueryService,
     };
   }
 
@@ -361,6 +348,110 @@ export class ActivityFeedListener {
     }
   }
 
+  @OnEvent('event.rsvp.ingested')
+  @OnEvent('event.rsvp.added')
+  async handleEventRsvpAdded(params: {
+    eventId: number;
+    eventSlug: string;
+    userId: number;
+    userSlug: string;
+    status: string;
+    tenantId: string;
+  }) {
+    try {
+      const {
+        activityFeedService,
+        groupService,
+        userService,
+        eventQueryService,
+      } = await this.resolveServices(params.tenantId);
+
+      this.logger.log('event rsvp added/ingested received', {
+        eventId: params.eventId,
+        eventSlug: params.eventSlug,
+        userId: params.userId,
+        userSlug: params.userSlug,
+        status: params.status,
+        tenantId: params.tenantId,
+      });
+
+      // Fetch event entity to get name, groupId
+      const event = await eventQueryService.findEventBySlug(params.eventSlug);
+      if (!event) {
+        this.logger.warn(
+          `Event not found for slug ${params.eventSlug}, skipping activity creation`,
+        );
+        return;
+      }
+
+      // Fetch user entity to get actor's name
+      const user = await userService.getUserById(params.userId);
+      if (!user) {
+        this.logger.warn(
+          `User not found for id ${params.userId}, skipping activity creation`,
+        );
+        return;
+      }
+
+      // Construct full name from firstName and lastName
+      const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+
+      // Prepare base activity data common to all RSVP activities
+      const baseActivity = {
+        activityType: 'event.rsvp' as const,
+        eventId: event.id,
+        eventSlug: event.slug,
+        eventName: event.name,
+        actorId: user.id,
+        actorSlug: user.slug,
+        actorName: actorName,
+        aggregationStrategy: 'time_window' as const,
+        aggregationWindow: 30, // 30-minute window for RSVPs (shows momentum)
+      };
+
+      // Handle group events and standalone events differently
+      if (event.group) {
+        // Fetch group entity to get group details
+        const group = await groupService.getGroupBySlug(event.group.slug);
+        if (!group) {
+          this.logger.warn(
+            `Group not found for event ${params.eventSlug}, skipping activity creation`,
+          );
+          return;
+        }
+
+        // Create event.rsvp activity in group feed
+        await activityFeedService.create({
+          ...baseActivity,
+          feedScope: 'group',
+          groupId: group.id,
+          groupSlug: group.slug,
+          groupName: group.name,
+          groupVisibility: group.visibility,
+        });
+
+        this.logger.log(
+          `Created event.rsvp activity for group event ${event.slug} by ${user.slug}`,
+        );
+      } else {
+        // Create event.rsvp activity for standalone events in event feed
+        await activityFeedService.create({
+          ...baseActivity,
+          feedScope: 'event',
+        });
+
+        this.logger.log(
+          `Created event.rsvp activity for standalone event ${event.slug} by ${user.slug}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to create RSVP activity for event ${params.eventSlug}: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
   @OnEvent('event.ingested.updated')
   @OnEvent('event.updated')
   async handleEventUpdated(params: {
@@ -481,137 +572,6 @@ export class ActivityFeedListener {
     } catch (error) {
       this.logger.error(
         `Failed to create group.updated activity for ${params.slug}: ${error.message}`,
-        error.stack,
-      );
-    }
-  }
-
-  /**
-   * Handle attendance.changed events emitted by AttendanceService for ATProto slug RSVPs.
-   * Creates activity feed entries for all attendance changes including foreign events.
-   */
-  @OnEvent('attendance.changed')
-  async handleAttendanceChanged(event: AttendanceChangedEvent) {
-    try {
-      const {
-        activityFeedService,
-        groupService,
-        userService,
-        eventQueryService,
-        contrailQueryService,
-      } = await this.resolveServices(event.tenantId);
-
-      this.logger.log('attendance.changed received', {
-        status: event.status,
-        eventSlug: event.eventSlug,
-        eventUri: event.eventUri,
-        userUlid: event.userUlid,
-        tenantId: event.tenantId,
-      });
-
-      // Look up user by ULID
-      const user = await userService.findByUlid(event.userUlid);
-      if (!user) {
-        this.logger.warn(
-          `User not found for ULID ${event.userUlid}, skipping activity creation`,
-        );
-        return;
-      }
-
-      const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
-
-      // For tenant events (eventSlug is set), do the full lookup
-      if (event.eventSlug && event.eventId !== null) {
-        const tenantEvent = await eventQueryService.findEventBySlug(
-          event.eventSlug,
-        );
-        if (!tenantEvent) {
-          this.logger.warn(
-            `Event not found for slug ${event.eventSlug}, skipping activity creation`,
-          );
-          return;
-        }
-
-        const baseActivity = {
-          activityType: 'event.rsvp' as const,
-          eventId: tenantEvent.id,
-          eventSlug: tenantEvent.slug,
-          eventName: tenantEvent.name,
-          actorId: user.id,
-          actorSlug: user.slug,
-          actorName: actorName,
-          aggregationStrategy: 'time_window' as const,
-          aggregationWindow: 30,
-        };
-
-        if (tenantEvent.group) {
-          const group = await groupService.getGroupBySlug(
-            tenantEvent.group.slug,
-          );
-          if (!group) {
-            this.logger.warn(
-              `Group not found for event ${event.eventSlug}, skipping activity creation`,
-            );
-            return;
-          }
-
-          await activityFeedService.create({
-            ...baseActivity,
-            feedScope: 'group',
-            groupId: group.id,
-            groupSlug: group.slug,
-            groupName: group.name,
-            groupVisibility: group.visibility,
-          });
-        } else {
-          await activityFeedService.create({
-            ...baseActivity,
-            feedScope: 'event',
-          });
-        }
-
-        this.logger.log(
-          `Created event.rsvp activity via attendance.changed for ${tenantEvent.slug} by ${user.slug}`,
-        );
-      } else {
-        // Foreign event (no tenant event) - look up event name from Contrail
-        let eventName: string | undefined;
-        if (event.eventUri) {
-          try {
-            const contrailRecord = await contrailQueryService.findByUri(
-              BLUESKY_COLLECTIONS.EVENT,
-              event.eventUri,
-            );
-            eventName = (contrailRecord?.record as any)?.name;
-          } catch (error) {
-            this.logger.warn(
-              `Failed to look up foreign event name from Contrail for ${event.eventUri}: ${error.message}`,
-            );
-          }
-        }
-
-        // Create sitewide activity
-        await activityFeedService.create({
-          activityType: 'event.rsvp',
-          feedScope: 'sitewide',
-          actorId: user.id,
-          actorSlug: user.slug,
-          actorName: actorName,
-          metadata: {
-            eventUri: event.eventUri,
-            status: event.status,
-            ...(eventName ? { eventName } : {}),
-          },
-          aggregationStrategy: 'none',
-        });
-
-        this.logger.log(
-          `Created user-scoped event.rsvp activity via attendance.changed for foreign event by ${user.slug}`,
-        );
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to create activity via attendance.changed: ${error.message}`,
         error.stack,
       );
     }

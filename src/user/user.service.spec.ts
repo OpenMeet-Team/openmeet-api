@@ -29,7 +29,6 @@ import { StatusEnum } from '../status/status.enum';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupService } from '../group/group.service';
 import { PdsAccountService } from '../pds/pds-account.service';
-import { EventQueryService } from '../event/services/event-query.service';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -128,14 +127,6 @@ describe('UserService', () => {
           provide: GroupService,
           useValue: {
             removeGroupForUserDeletion: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: EventQueryService,
-          useValue: {
-            getAttendingEvents: jest
-              .fn()
-              .mockResolvedValue({ events: [], total: 0 }),
           },
         },
       ],
@@ -3031,72 +3022,6 @@ describe('UserService', () => {
       expect(
         mockPdsAccountService.adminUpdateAccountEmail,
       ).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('getProfileSummary - attending events via EventQueryService', () => {
-    it('should delegate attending events to EventQueryService.getAttendingEvents', async () => {
-      const mockUserEntity = {
-        ...mockUser,
-        id: 1,
-        ulid: '01HABCDEF',
-        slug: 'test-user',
-        interests: [],
-        photo: null,
-        preferences: {},
-        isShadowAccount: false,
-      };
-
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        leftJoin: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-        getCount: jest.fn().mockResolvedValue(0),
-      };
-
-      const mockManager = {
-        createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
-        query: jest.fn().mockResolvedValue([]),
-      };
-
-      // Mock the repository to return our user
-      jest
-        .spyOn(userService['tenantConnectionService'], 'getTenantConnection')
-        .mockResolvedValue({
-          getRepository: jest.fn().mockReturnValue({
-            findOne: jest.fn().mockResolvedValue(mockUserEntity),
-            manager: mockManager,
-          }),
-        } as any);
-
-      // Also set up the usersRepository directly
-      (userService as any).usersRepository = {
-        findOne: jest.fn().mockResolvedValue(mockUserEntity),
-        manager: mockManager,
-      };
-
-      // Mock EventQueryService to return attending events
-      const eventQueryService = (userService as any).eventQueryService;
-      eventQueryService.getAttendingEvents = jest.fn().mockResolvedValue({
-        events: [{ id: 10, name: 'Test Event' }],
-        total: 3,
-      });
-
-      const result = await userService.getProfileSummary('test-user');
-
-      // Verify EventQueryService.getAttendingEvents was called with user ID and limit
-      expect(eventQueryService.getAttendingEvents).toHaveBeenCalledWith(1, {
-        limit: 5,
-      });
-
-      // Result should use EventQueryService results
-      expect(result).toBeDefined();
-      expect(result!.counts.attendingEvents).toBe(3);
-      expect(result!.attendingEvents).toEqual([{ id: 10, name: 'Test Event' }]);
     });
   });
 });

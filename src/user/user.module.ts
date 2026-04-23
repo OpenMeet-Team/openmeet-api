@@ -14,7 +14,6 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
 import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 import { GroupModule } from '../group/group.module';
 import { PdsModule } from '../pds/pds.module';
-import { EventModule } from '../event/event.module';
 
 const infrastructurePersistenceModule = RelationalUserPersistenceModule;
 
@@ -30,7 +29,6 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
     BlueskyModule, // No forwardRef needed - BlueskyIdentityService has no circular dependency
     UserAtprotoIdentityModule,
     PdsModule,
-    forwardRef(() => EventModule),
   ],
   controllers: [UserController],
   providers: [

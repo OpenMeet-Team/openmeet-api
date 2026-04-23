@@ -1,10 +1,6 @@
 import * as request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import {
-  createTestUser,
-  createEvent,
-  waitForEventInListing,
-} from '../utils/functions';
+import { createTestUser, createEvent } from '../utils/functions';
 
 describe('Past Events Section (e2e)', () => {
   const testTenantId = TESTING_TENANT_ID;
@@ -87,15 +83,7 @@ describe('Past Events Section (e2e)', () => {
       visibility: 'public',
       status: 'cancelled',
     });
-
-    // Wait for Contrail to ingest the future event from Jetstream
-    await waitForEventInListing(
-      TESTING_APP_URL,
-      futureEvent.slug,
-      TESTING_TENANT_ID,
-      30000,
-    );
-  }, 60000);
+  }, 30000);
 
   it('should exclude events with end dates in the past from the public events list', async () => {
     // Get events with a much larger page size and sort by creation date to ensure we catch our newest test events

@@ -79,6 +79,7 @@ const mockEventQueryService = {
   showEvent: jest.fn(),
   editEvent: jest.fn(),
   findEventBySlug: jest.fn(),
+  showDashboardEvents: jest.fn(),
   showDashboardEventsPaginated: jest.fn(),
   showEventAttendees: jest.fn(),
   getEventsByCreator: jest.fn(),

@@ -547,35 +547,6 @@ async function waitForEventProcessing(ms: number = 2000) {
 }
 
 /**
- * Wait for an event to appear in the public listing (Contrail ingestion).
- * Polls GET /api/events until the event slug is found or timeout.
- */
-async function waitForEventInListing(
-  app: string,
-  slug: string,
-  tenantId: string,
-  timeoutMs: number = 10000,
-): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const response = await request(app)
-      .get('/api/events')
-      .query({ limit: 200 })
-      .set('x-tenant-id', tenantId);
-    if (
-      response.status === 200 &&
-      response.body.data?.some((e: any) => e.slug === slug)
-    ) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(
-    `Event "${slug}" not found in listing within ${timeoutMs}ms (Contrail ingestion may have failed — check ATProto publish logs)`,
-  );
-}
-
-/**
  * Create a file record for testing.
  * Note: This creates the file metadata in the database but does not upload to S3.
  * The file path will be valid for the test environment.
@@ -639,7 +610,6 @@ export {
   // Chat-related functions removed - Matrix Application Service handles rooms directly
   // Utility functions
   waitForEventProcessing,
-  waitForEventInListing,
   // File helper
   createFile,
 };

@@ -60,9 +60,8 @@ export interface CreateSessionResponse {
 @Injectable()
 export class PdsAccountService {
   private readonly logger = new Logger(PdsAccountService.name);
-  private _pdsUrl: string | null = null;
-  private _adminPassword: string | null = null;
-  private _inviteCode: string | null = null;
+  private readonly pdsUrl: string;
+  private readonly adminPassword: string;
 
   /** Maximum number of retry attempts */
   private readonly maxRetries = 3;
@@ -70,36 +69,24 @@ export class PdsAccountService {
   /** Base delay in milliseconds for exponential backoff */
   private readonly baseDelay = 1000;
 
+  /** Service invite code for custodial account creation */
+  private readonly inviteCode: string;
+
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService<AllConfigType>,
-  ) {}
+  ) {
+    this.pdsUrl = this.configService.get('pds.url', { infer: true }) || '';
+    this.adminPassword =
+      this.configService.get('pds.adminPassword', { infer: true }) || '';
+    this.inviteCode =
+      this.configService.get('pds.inviteCode', { infer: true }) || '';
 
-  /** Lazy-load PDS config (avoids constructor race with ConfigModule loading order) */
-  private get pdsUrl(): string {
-    if (this._pdsUrl === null) {
-      this._pdsUrl = this.configService.get('pds.url', { infer: true }) || '';
-      this.logger.log(
-        `PDS config loaded: url=${this._pdsUrl || '(empty)'}, inviteCode=${this.configService.get('pds.inviteCode', { infer: true }) ? 'set' : '(empty)'}`,
+    if (!this.pdsUrl) {
+      this.logger.warn(
+        'PDS_URL is not configured - PDS account operations will fail',
       );
     }
-    return this._pdsUrl;
-  }
-
-  private get adminPassword(): string {
-    if (this._adminPassword === null) {
-      this._adminPassword =
-        this.configService.get('pds.adminPassword', { infer: true }) || '';
-    }
-    return this._adminPassword;
-  }
-
-  private get inviteCode(): string {
-    if (this._inviteCode === null) {
-      this._inviteCode =
-        this.configService.get('pds.inviteCode', { infer: true }) || '';
-    }
-    return this._inviteCode;
   }
 
   /**

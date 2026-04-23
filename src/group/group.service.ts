@@ -36,7 +36,6 @@ import { QueryGroupDto } from './dto/group-query.dto';
 import { DashboardGroupsSummaryDto } from './dto/dashboard-groups-summary.dto';
 import slugify from 'slugify';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
-import { EventVisibility } from '../core/constants/constant';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
@@ -908,33 +907,21 @@ export class GroupService {
   async getHomePageFeaturedGroups(): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
-    // Fetch IDs only (lightweight) then shuffle in JS to avoid ORDER BY RANDOM()
-    // which forces PostgreSQL to load and sort ALL matching rows
-    const idRows = await this.groupRepository
+    const groups = await this.groupRepository
       .createQueryBuilder('group')
-      .select('group.id')
+      .select(['group'])
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoinAndSelect('group.image', 'image')
       .where({
         visibility: GroupVisibility.Public,
         status: GroupStatus.Published,
       })
+      .orderBy('RANDOM()')
+      .limit(5)
       .getMany();
 
-    if (idRows.length === 0) return [];
-
-    // Shuffle and pick 5 in JS
-    const selectedIds = idRows
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 5)
-      .map((g) => g.id);
-
-    // Load full entities with relations for only the selected IDs
-    return this.groupRepository
-      .createQueryBuilder('group')
-      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
-      .leftJoinAndSelect('group.categories', 'categories')
-      .leftJoinAndSelect('group.image', 'image')
-      .whereInIds(selectedIds)
-      .getMany();
+    return groups;
   }
 
   async getHomePageUserCreatedGroups(
@@ -1117,32 +1104,12 @@ export class GroupService {
   async showGroupEvents(
     slug: string,
     query?: { startDate?: string; endDate?: string },
-    userId?: number,
   ): Promise<EventEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
     const group = await this.getGroupBySlug(slug);
 
-    const events = await this.eventQueryService.findEventsForGroup(
-      group.id,
-      0,
-      query,
-    );
-
-    // Filter unlisted events to group members only
-    if (!userId) {
-      return events.filter((e) => e.visibility !== EventVisibility.Unlisted);
-    }
-
-    const member = await this.groupMemberService
-      .findGroupMemberByUserId(group.id, userId)
-      .catch(() => null);
-
-    if (member) {
-      return events;
-    }
-
-    return events.filter((e) => e.visibility !== EventVisibility.Unlisted);
+    return await this.eventQueryService.findEventsForGroup(group.id, 0, query);
   }
 
   // DEPRECATED: Group discussions method removed

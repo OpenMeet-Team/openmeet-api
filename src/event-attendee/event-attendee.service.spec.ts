@@ -65,8 +65,8 @@ describe('EventAttendeeService', () => {
     id: 1,
     slug: 'test-event',
     name: 'Test Event',
-    startDate: new Date('2024-12-31T00:00:00Z'),
-    endDate: new Date('2024-12-31T23:59:59Z'),
+    startDate: new Date('2099-12-31T00:00:00Z'),
+    endDate: new Date('2099-12-31T23:59:59Z'),
     sourceData: { rkey: 'test-rkey' },
   };
 
@@ -243,9 +243,25 @@ describe('EventAttendeeService', () => {
       };
       mockRepository.save.mockResolvedValueOnce(cancelledAttendee);
 
-      const mockAtprotoPublisherService = module.get(
-        AtprotoPublisherService,
-      ) as jest.Mocked<AtprotoPublisherService>;
+      // Create mock for checking Bluesky event source condition to be true
+      // This ensures the Bluesky integration code runs
+      mockEvent.sourceType = EventSourceType.BLUESKY;
+      mockEvent.sourceData = { rkey: 'test-rkey' };
+
+      // Mock UserService.findBySlug to return the user
+      mockUserService.findBySlug.mockResolvedValueOnce(mockUser as UserEntity);
+
+      // Mock BlueskyRsvpService.createRsvp to return success
+      mockBlueskyRsvpService.createRsvp.mockResolvedValueOnce({
+        success: true,
+        rsvpUri: 'at://did:plc:test123/app.bsky.feed.post/test-rsvp',
+      });
+
+      // Mock repository.findOne for getting the attendee after Bluesky sync
+      mockRepository.findOne.mockResolvedValueOnce(cancelledAttendee);
+
+      // Mock the second save after Bluesky update
+      mockRepository.save.mockResolvedValueOnce(cancelledAttendee);
 
       // Call the function
       const result = await service.cancelEventAttendanceBySlug(
@@ -281,9 +297,17 @@ describe('EventAttendeeService', () => {
         }),
       );
 
-      // Verify BlueskyRsvpService is NOT called directly — routing goes through atprotoPublisherService
-      expect(mockBlueskyRsvpService.createRsvp).not.toHaveBeenCalled();
-      expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
+      // Verify Bluesky integration was called
+      expect(mockUserService.findBySlug).toHaveBeenCalledWith(
+        'test-user',
+        'test-tenant',
+      );
+      expect(mockBlueskyRsvpService.createRsvp).toHaveBeenCalledWith(
+        expect.anything(),
+        'notgoing',
+        'did:plc:test123',
+        'test-tenant',
+      );
 
       // Verify the result
       expect(result).toBeDefined();
@@ -352,12 +376,6 @@ describe('EventAttendeeService', () => {
       await expect(
         service.cancelEventAttendanceBySlug('test-event', 'nonexistent-user'),
       ).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('deprecated method removal', () => {
-    it('should not have deprecated cancelEventAttendance method', () => {
-      expect((service as any).cancelEventAttendance).toBeUndefined();
     });
   });
 
@@ -507,23 +525,29 @@ describe('EventAttendeeService', () => {
         role: roleEntity,
       };
 
-      const savedAttendee = {
+      // Mock repository.create and repository.save
+      mockRepository.create.mockReturnValueOnce({ ...createDto });
+      mockRepository.save.mockResolvedValueOnce({
         id: 1,
         ...createDto,
         createdAt: new Date(),
         updatedAt: new Date(),
-      };
+      });
 
-      // Mock repository.create and repository.save
-      mockRepository.create.mockReturnValueOnce({ ...createDto });
-      mockRepository.save.mockResolvedValueOnce(savedAttendee);
+      // Mock UserService.findBySlug for Bluesky integration
+      mockUserService.findBySlug.mockResolvedValueOnce(mockUser as UserEntity);
 
-      // Mock repository.findOne for reloading with relations
-      mockRepository.findOne.mockResolvedValueOnce(savedAttendee);
+      // Mock BlueskyRsvpService.createRsvp
+      mockBlueskyRsvpService.createRsvp.mockResolvedValueOnce({
+        success: true,
+        rsvpUri: 'at://did:plc:test123/app.bsky.feed.post/test-rsvp',
+      });
 
-      const mockAtprotoPublisherService = module.get(
-        AtprotoPublisherService,
-      ) as jest.Mocked<AtprotoPublisherService>;
+      // Mock repository.findOne for Bluesky update
+      mockRepository.findOne.mockResolvedValueOnce({
+        id: 1,
+        ...createDto,
+      });
 
       // Call the function
       const result = await service.create(createDto);
@@ -532,14 +556,44 @@ describe('EventAttendeeService', () => {
       expect(mockRepository.create).toHaveBeenCalledWith(createDto);
       expect(mockRepository.save).toHaveBeenCalled();
 
-      // Verify routing goes through atprotoPublisherService, NOT blueskyRsvpService directly
-      expect(mockBlueskyRsvpService.createRsvp).not.toHaveBeenCalled();
-      expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
+      // Verify Bluesky integration
+      expect(mockUserService.findBySlug).toHaveBeenCalled();
+      expect(mockBlueskyRsvpService.createRsvp).toHaveBeenCalled();
+      expect(mockRepository.findOne).toHaveBeenCalled(); // ID might vary in tests
+      expect(mockRepository.save).toHaveBeenCalledTimes(2); // Initial save + Bluesky update
 
       // Verify result
+      // console.log('result', result);
       expect(result).toBeDefined();
       expect(result.id).toBe(1);
       expect(result.status).toBe(EventAttendeeStatus.Confirmed);
+    });
+
+    it('should reject RSVP to a past event', async () => {
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const pastEvent: Partial<EventEntity> = {
+        id: 2,
+        slug: 'past-event',
+        name: 'Past Event',
+        startDate: new Date('2024-01-01T10:00:00Z'),
+        endDate: new Date('2024-01-01T11:00:00Z'),
+      };
+
+      const createDto = {
+        event: pastEvent as EventEntity,
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      await expect(service.create(createDto)).rejects.toThrow(
+        'Cannot RSVP to a past event',
+      );
+
+      expect(mockRepository.save).not.toHaveBeenCalled();
     });
 
     it('should handle duplicate key errors when creating attendance', async () => {
@@ -643,13 +697,14 @@ describe('EventAttendeeService', () => {
     });
   });
 
-  describe('create() event emission', () => {
-    it('should NOT emit event.rsvp.added (removed - attendance.changed used instead)', async () => {
+  describe('Calendar invite integration', () => {
+    it('should emit event.rsvp.added event when confirmed attendee is created', async () => {
       const mockEventRole: Partial<EventRoleEntity> = {
         id: 1,
         name: 'attendee',
       };
 
+      // Create fresh mock for this test to avoid pollution
       const freshConfirmedAttendee: Partial<EventAttendeesEntity> = {
         id: 1,
         user: mockUser as UserEntity,
@@ -662,13 +717,15 @@ describe('EventAttendeeService', () => {
       const eventEmitter = module.get(EventEmitter2);
       const emitSpy = jest.spyOn(eventEmitter, 'emit');
 
+      // Setup mocks
       mockUserService.findBySlug = jest.fn().mockResolvedValue({
         ...mockUser,
-        provider: 'local',
+        provider: 'local', // Not a Bluesky user, skip Bluesky sync
       });
       mockRepository.create.mockReturnValue(freshConfirmedAttendee);
       mockRepository.save.mockResolvedValue(freshConfirmedAttendee);
 
+      // Create confirmed attendee
       const createDto = {
         event: mockEvent as EventEntity,
         user: mockUser as UserEntity,
@@ -678,9 +735,99 @@ describe('EventAttendeeService', () => {
 
       await service.create(createDto);
 
-      // event.rsvp.added should no longer be emitted - AttendanceService emits attendance.changed instead
-      expect(emitSpy).not.toHaveBeenCalledWith(
+      // Verify event.rsvp.added was emitted with correct payload
+      expect(emitSpy).toHaveBeenCalledWith(
         'event.rsvp.added',
+        expect.objectContaining({
+          eventId: mockEvent.id,
+          eventSlug: mockEvent.slug,
+          userId: mockUser.id,
+          userSlug: mockUser.slug,
+          status: EventAttendeeStatus.Confirmed,
+          tenantId: 'test-tenant',
+        }),
+      );
+    });
+
+    it('should NOT emit event.rsvp.added for pending attendees', async () => {
+      const mockEventRole: Partial<EventRoleEntity> = {
+        id: 1,
+        name: 'attendee',
+      };
+
+      const pendingAttendee = {
+        ...mockConfirmedAttendee,
+        status: EventAttendeeStatus.Pending,
+      };
+
+      const eventEmitter = module.get(EventEmitter2);
+      const emitSpy = jest.spyOn(eventEmitter, 'emit');
+
+      mockUserService.findBySlug = jest.fn().mockResolvedValue({
+        ...mockUser,
+        provider: 'local',
+      });
+      mockRepository.create.mockReturnValue(pendingAttendee);
+      mockRepository.save.mockResolvedValue(pendingAttendee);
+
+      const createDto = {
+        event: mockEvent as EventEntity,
+        user: mockUser as UserEntity,
+        role: mockEventRole as EventRoleEntity,
+        status: EventAttendeeStatus.Pending,
+      };
+
+      await service.create(createDto);
+
+      // event.rsvp.added should still be emitted for activity feed, but listener filters by status
+      expect(emitSpy).toHaveBeenCalledWith(
+        'event.rsvp.added',
+        expect.objectContaining({
+          status: EventAttendeeStatus.Pending,
+        }),
+      );
+    });
+
+    it('should still emit event.rsvp.added from create() (regression)', async () => {
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const createDto = {
+        event: mockEvent as EventEntity,
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      const savedAttendee = {
+        id: 1,
+        ...createDto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockUserService.findBySlug = jest.fn().mockResolvedValue({
+        ...mockUser,
+        provider: 'local',
+      });
+      mockRepository.create.mockReturnValue(savedAttendee);
+      mockRepository.save.mockResolvedValue(savedAttendee);
+
+      const eventEmitter = module.get(EventEmitter2);
+      const emitSpy = jest.spyOn(eventEmitter, 'emit');
+
+      await service.create(createDto);
+
+      expect(emitSpy).toHaveBeenCalledWith(
+        'event.rsvp.added',
+        expect.objectContaining({
+          eventId: mockEvent.id,
+        }),
+      );
+      // Should NOT emit event.rsvp.ingested
+      expect(emitSpy).not.toHaveBeenCalledWith(
+        'event.rsvp.ingested',
         expect.anything(),
       );
     });
@@ -774,7 +921,7 @@ describe('EventAttendeeService', () => {
       expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
     });
 
-    it('should call publishRsvp for Bluesky-sourced events (unified path)', async () => {
+    it('should skip AT Protocol publishing for Bluesky-sourced events', async () => {
       const roleEntity = new EventRoleEntity();
       roleEntity.id = 1;
       roleEntity.name = EventAttendeeRole.Participant;
@@ -802,12 +949,133 @@ describe('EventAttendeeService', () => {
       mockRepository.save.mockResolvedValue(savedAttendee);
       mockRepository.findOne.mockResolvedValue(savedAttendee);
 
+      // Mock UserService for Bluesky integration
+      mockUserService.findBySlug.mockResolvedValue(mockUser as UserEntity);
+      mockBlueskyRsvpService.createRsvp.mockResolvedValue({
+        success: true,
+        rsvpUri: 'at://did:plc:test/app.bsky.feed.post/test',
+      });
+
       await service.create(createDto);
 
-      // AtprotoPublisherService.publishRsvp SHOULD be called for all events including Bluesky-sourced
-      expect(mockAtprotoPublisherService.publishRsvp).toHaveBeenCalled();
-      // BlueskyRsvpService.createRsvp should NEVER be called directly from EventAttendeeService
-      expect(mockBlueskyRsvpService.createRsvp).not.toHaveBeenCalled();
+      // AtprotoPublisherService.publishRsvp should NOT be called for Bluesky-sourced events
+      expect(mockAtprotoPublisherService.publishRsvp).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createFromIngestion', () => {
+    it('should emit event.rsvp.ingested (not event.rsvp.added)', async () => {
+      // Arrange
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const createDto = {
+        event: mockEvent as EventEntity,
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      const savedAttendee = {
+        id: 1,
+        ...createDto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockRepository.create.mockReturnValue(createDto);
+      mockRepository.save.mockResolvedValue(savedAttendee);
+
+      const eventEmitter = module.get(EventEmitter2);
+      const emitSpy = jest.spyOn(eventEmitter, 'emit');
+
+      // Act
+      await service.createFromIngestion(createDto);
+
+      // Assert
+      expect(emitSpy).toHaveBeenCalledWith(
+        'event.rsvp.ingested',
+        expect.objectContaining({
+          eventId: mockEvent.id,
+          eventSlug: mockEvent.slug,
+          userId: mockUser.id,
+          userSlug: mockUser.slug,
+          status: EventAttendeeStatus.Confirmed,
+          tenantId: 'test-tenant',
+        }),
+      );
+      expect(emitSpy).not.toHaveBeenCalledWith(
+        'event.rsvp.added',
+        expect.anything(),
+      );
+    });
+
+    it('should not trigger any AT Protocol sync', async () => {
+      // Arrange
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const createDto = {
+        event: {
+          ...mockEvent,
+          sourceType: EventSourceType.BLUESKY,
+          sourceData: { rkey: 'test-rkey' },
+        } as EventEntity,
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      const savedAttendee = {
+        id: 1,
+        ...createDto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockRepository.create.mockReturnValue(createDto);
+      mockRepository.save.mockResolvedValue(savedAttendee);
+
+      // Act
+      await service.createFromIngestion(createDto);
+
+      expect(mockUserService.findBySlug).not.toHaveBeenCalled();
+      expect(mockRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('should still save the attendee record successfully', async () => {
+      // Arrange
+      const roleEntity = new EventRoleEntity();
+      roleEntity.id = 1;
+      roleEntity.name = EventAttendeeRole.Participant;
+
+      const createDto = {
+        event: mockEvent as EventEntity,
+        user: mockUser as UserEntity,
+        status: EventAttendeeStatus.Confirmed,
+        role: roleEntity,
+      };
+
+      const savedAttendee = {
+        id: 1,
+        ...createDto,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockRepository.create.mockReturnValue(createDto);
+      mockRepository.save.mockResolvedValue(savedAttendee);
+
+      // Act
+      const result = await service.createFromIngestion(createDto);
+
+      // Assert
+      expect(mockRepository.create).toHaveBeenCalledWith(createDto);
+      expect(mockRepository.save).toHaveBeenCalled();
+      expect(result).toBeDefined();
+      expect(result.id).toBe(1);
     });
   });
 

@@ -1,5 +1,6 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
+import { ScheduleModule } from '@nestjs/schedule';
 import {
   PrometheusModule,
   makeGaugeProvider,
@@ -93,6 +94,21 @@ const eventIntegrationMetrics = [
   }),
 ];
 
+// Define RSVP integration metrics
+const rsvpIntegrationMetrics = [
+  makeCounterProvider({
+    name: 'rsvp_integration_processed_total',
+    help: 'Total number of external RSVPs processed',
+    labelNames: ['tenant', 'source_type', 'operation'],
+  }),
+  makeHistogramProvider({
+    name: 'rsvp_integration_processing_duration_seconds',
+    help: 'Time spent processing external RSVPs in seconds',
+    labelNames: ['tenant', 'source_type', 'operation'],
+    buckets: [0.01, 0.1, 0.5, 1, 2, 5, 10],
+  }),
+];
+
 // Define Bluesky RSVP specific metrics
 const blueskyRsvpMetrics = [
   makeCounterProvider({
@@ -133,6 +149,7 @@ const atprotoHandleMetrics = [
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     PrometheusModule.register({
       defaultMetrics: {
         enabled: true,
@@ -145,6 +162,7 @@ const atprotoHandleMetrics = [
     ...businessMetricsProviders,
     ...httpMetricsProviders,
     ...eventIntegrationMetrics,
+    ...rsvpIntegrationMetrics,
     ...blueskyRsvpMetrics,
     ...atprotoHandleMetrics,
   ],
@@ -154,6 +172,8 @@ const atprotoHandleMetrics = [
     ...httpMetricsProviders,
     // Export event integration metrics for use in EventIntegrationService
     ...eventIntegrationMetrics,
+    // Export RSVP integration metrics for use in RsvpIntegrationService
+    ...rsvpIntegrationMetrics,
     // Export Bluesky RSVP metrics for use in BlueskyRsvpService
     ...blueskyRsvpMetrics,
     // Export ATProto handle metrics for use in AtprotoHandleCacheService

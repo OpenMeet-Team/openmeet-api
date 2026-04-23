@@ -24,7 +24,6 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
 import { PdsModule } from '../pds/pds.module';
 import { UserAtprotoIdentityModule } from '../user-atproto-identity/user-atproto-identity.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
-import { AttendanceModule } from '../attendance/attendance.module';
 import { AtprotoServiceAuthService } from './services/atproto-service-auth.service';
 @Module({
   imports: [
@@ -46,7 +45,6 @@ import { AtprotoServiceAuthService } from './services/atproto-service-auth.servi
     PdsModule,
     UserAtprotoIdentityModule,
     forwardRef(() => BlueskyModule),
-    AttendanceModule,
   ],
   controllers: [AuthController],
   providers: [

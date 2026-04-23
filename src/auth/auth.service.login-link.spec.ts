@@ -23,7 +23,6 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
-import { AttendanceService } from '../attendance/attendance.service';
 
 // Mock tenant-config module to avoid needing real tenant config files
 jest.mock('../utils/tenant-config', () => ({
@@ -145,10 +144,6 @@ describe('AuthService - Login Link', () => {
         },
         { provide: BlueskyService, useValue: mockBlueskyService },
         { provide: ElastiCacheService, useValue: mockElastiCacheService },
-        {
-          provide: AttendanceService,
-          useValue: { recordAttendance: jest.fn() },
-        },
         { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();

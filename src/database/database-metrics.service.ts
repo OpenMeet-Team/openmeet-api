@@ -113,6 +113,7 @@ export class DatabaseMetricsService implements OnModuleInit {
 
   /**
    * Record query duration for performance tracking
+   * Following pattern from rsvp-integration.service.ts:55-59
    *
    * Note: Query count is tracked via Counter, not manual calculation.
    * Use rate(db_queries_total[1m]) in Prometheus for QPS metrics.
@@ -122,18 +123,12 @@ export class DatabaseMetricsService implements OnModuleInit {
     operation: string,
     durationMs: number,
     status: 'success' | 'error' = 'success',
-    fingerprint?: string,
   ): void {
     try {
       const durationSeconds = durationMs / 1000;
 
       this.queryDurationHistogram.observe(
-        {
-          tenant: tenantId,
-          operation,
-          status,
-          fingerprint: fingerprint || 'unknown',
-        },
+        { tenant: tenantId, operation, status },
         durationSeconds,
       );
 
@@ -143,7 +138,7 @@ export class DatabaseMetricsService implements OnModuleInit {
       // Warn on slow queries (> 1 second)
       if (durationMs > 1000) {
         this.logger.warn(
-          `Slow query detected for tenant ${tenantId} (${operation}, ${status}, fingerprint=${fingerprint || 'unknown'}): ${durationMs}ms`,
+          `Slow query detected for tenant ${tenantId} (${operation}, ${status}): ${durationMs}ms`,
         );
       }
     } catch (error) {

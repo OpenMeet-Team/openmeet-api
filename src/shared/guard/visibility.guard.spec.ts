@@ -9,7 +9,6 @@ import { EventQueryService } from '../../event/services/event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
 import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
-import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
 import {
   EventVisibility,
   GroupVisibility,
@@ -17,7 +16,6 @@ import {
 } from '../../core/constants/constant';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
-import { GroupMemberEntity } from '../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { mockEventQueryService } from '../../test/mocks';
 
 describe('VisibilityGuard', () => {
@@ -25,7 +23,6 @@ describe('VisibilityGuard', () => {
   let eventQueryService: jest.Mocked<EventQueryService>;
   let groupService: jest.Mocked<GroupService>;
   let groupMemberQueryService: jest.Mocked<GroupMemberQueryService>;
-  let atprotoEnrichmentService: jest.Mocked<AtprotoEnrichmentService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -53,12 +50,6 @@ describe('VisibilityGuard', () => {
             findGroupMemberByUserId: jest.fn(),
           },
         },
-        {
-          provide: AtprotoEnrichmentService,
-          useValue: {
-            parseAtprotoSlug: jest.fn().mockReturnValue(null),
-          },
-        },
       ],
     }).compile();
 
@@ -66,7 +57,6 @@ describe('VisibilityGuard', () => {
     eventQueryService = module.get(EventQueryService);
     groupService = module.get(GroupService);
     groupMemberQueryService = module.get(GroupMemberQueryService);
-    atprotoEnrichmentService = module.get(AtprotoEnrichmentService);
   });
 
   const mockContext = (params: any = {}) => {
@@ -204,43 +194,6 @@ describe('VisibilityGuard', () => {
     });
   });
 
-  describe('canActivate - ATProto-only events (Contrail)', () => {
-    const atprotoSlug = 'did:plc:abc123~somerecordkey';
-
-    it('should allow access when ATProto slug is valid', async () => {
-      mockEventQueryService.findEventBySlug.mockResolvedValueOnce(
-        null as unknown as EventEntity,
-      );
-      atprotoEnrichmentService.parseAtprotoSlug.mockReturnValue({
-        did: 'did:plc:abc123',
-        rkey: 'somerecordkey',
-      });
-
-      const context = mockContext({
-        params: { slug: atprotoSlug },
-        route: { path: '/events/:slug' },
-      });
-
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-    });
-
-    it('should throw NotFoundException for normal slug not in DB', async () => {
-      mockEventQueryService.findEventBySlug.mockResolvedValueOnce(
-        null as unknown as EventEntity,
-      );
-      atprotoEnrichmentService.parseAtprotoSlug.mockReturnValue(null);
-
-      const context = mockContext({
-        params: { slug: 'non-existent-event' },
-        route: { path: '/events/:slug' },
-      });
-
-      await expect(guard.canActivate(context)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-
   describe('canActivate - Groups', () => {
     it('should allow access to public groups', async () => {
       const mockGroup = {
@@ -313,7 +266,7 @@ describe('VisibilityGuard', () => {
         userId: 123,
         groupId: 1,
         user: mockUser,
-      } as unknown as GroupMemberEntity;
+      };
 
       groupService.findGroupBySlug.mockResolvedValue(mockGroup);
       groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue(

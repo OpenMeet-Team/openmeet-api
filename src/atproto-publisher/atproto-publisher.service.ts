@@ -23,11 +23,7 @@ const ATTENDEE_STATUS_TO_RSVP: Partial<
   [EventAttendeeStatus.Confirmed]: 'going',
   [EventAttendeeStatus.Attended]: 'going',
   [EventAttendeeStatus.Maybe]: 'interested',
-  [EventAttendeeStatus.Pending]: 'interested',
-  [EventAttendeeStatus.Waitlist]: 'interested',
-  [EventAttendeeStatus.Invited]: 'interested',
   [EventAttendeeStatus.Cancelled]: 'notgoing',
-  [EventAttendeeStatus.Rejected]: 'notgoing',
 };
 
 // Statuses that should be published to AT Protocol
@@ -35,11 +31,7 @@ const PUBLISHABLE_ATTENDEE_STATUSES = new Set([
   EventAttendeeStatus.Confirmed,
   EventAttendeeStatus.Attended,
   EventAttendeeStatus.Maybe,
-  EventAttendeeStatus.Pending,
-  EventAttendeeStatus.Waitlist,
-  EventAttendeeStatus.Invited,
   EventAttendeeStatus.Cancelled,
-  EventAttendeeStatus.Rejected,
 ]);
 
 // Event statuses that should be published (Published and Cancelled are both valid)
@@ -444,80 +436,6 @@ export class AtprotoPublisherService {
   }
 
   /**
-   * Delete an RSVP from the attendee's PDS.
-   *
-   * Returns 'skipped' if the RSVP was never published to AT Protocol.
-   * Returns 'deleted' on success.
-   * Returns 'error' with needsOAuthLink if session unavailable.
-   */
-  deleteRsvp(
-    attendee: EventAttendeesEntity,
-    tenantId: string,
-  ): PublishResult | Promise<PublishResult> {
-    if (!attendee.atprotoUri) {
-      this.logger.debug(
-        `Skipping delete for RSVP ${attendee.id}: not published to AT Protocol`,
-      );
-      return { action: 'skipped' };
-    }
-
-    return this.doDeleteRsvp(attendee, tenantId);
-  }
-
-  /**
-   * Internal async method to delete RSVP from PDS.
-   */
-  private async doDeleteRsvp(
-    attendee: EventAttendeesEntity,
-    tenantId: string,
-  ): Promise<PublishResult> {
-    const userUlid = attendee.user?.ulid;
-    if (!userUlid) {
-      throw new Error(`RSVP ${attendee.id} has no user`);
-    }
-
-    let session;
-    try {
-      session = await this.pdsSessionService.getSessionForUser(
-        tenantId,
-        userUlid,
-      );
-    } catch (error) {
-      if (error instanceof SessionUnavailableError) {
-        this.logger.warn(
-          `Session unavailable for RSVP delete ${attendee.id}: ${error.message}`,
-        );
-        return {
-          action: 'error',
-          error: 'Session unavailable for RSVP deletion',
-          needsOAuthLink: error.needsOAuthLink,
-        };
-      }
-      throw error;
-    }
-
-    if (!session) {
-      this.logger.debug(
-        `Skipping delete for RSVP ${attendee.id}: no session available`,
-      );
-      return { action: 'skipped' };
-    }
-
-    await this.blueskyRsvpService.deleteRsvp(
-      attendee.atprotoUri!,
-      session.did,
-      tenantId,
-      session.agent,
-    );
-
-    this.logger.debug(
-      `Successfully deleted RSVP ${attendee.id} from PDS: ${attendee.atprotoUri}`,
-    );
-
-    return { action: 'deleted' };
-  }
-
-  /**
    * Publish an RSVP to the attendee's PDS.
    *
    * Returns synchronously with 'skipped' if the RSVP shouldn't be published.
@@ -605,7 +523,7 @@ export class AtprotoPublisherService {
     }
 
     const result = await this.blueskyRsvpService.createRsvp(
-      event!,
+      event,
       rsvpStatus,
       session.did,
       tenantId,

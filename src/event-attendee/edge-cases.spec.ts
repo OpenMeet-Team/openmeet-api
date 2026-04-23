@@ -441,6 +441,15 @@ describe('EventAttendeeService Edge Cases', () => {
       // Mock successful save for cancellation
       mockRepository.save.mockResolvedValueOnce(cancelledAttendee);
 
+      // For Bluesky integration - mock the required services
+      mockUserService.findBySlug.mockResolvedValueOnce(mockUser as UserEntity);
+      mockBlueskyRsvpService.createRsvp.mockResolvedValueOnce({
+        success: true,
+        rsvpUri: 'at://did:plc:test123/app.bsky.feed.post/test-cancel-rsvp',
+      });
+      mockRepository.findOne.mockResolvedValueOnce(cancelledAttendee);
+      mockRepository.save.mockResolvedValueOnce(cancelledAttendee);
+
       // First cancel
       const cancelResult = await service.cancelEventAttendanceBySlug(
         'test-event',

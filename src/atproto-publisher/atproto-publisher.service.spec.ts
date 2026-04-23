@@ -117,7 +117,6 @@ describe('AtprotoPublisherService', () => {
 
     blueskyRsvpService = {
       createRsvp: jest.fn(),
-      deleteRsvp: jest.fn(),
     } as unknown as jest.Mocked<BlueskyRsvpService>;
 
     atprotoIdentityService = {
@@ -574,6 +573,27 @@ describe('AtprotoPublisherService', () => {
       );
     });
 
+    it('should throw when PDS call fails', async () => {
+      const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+      blueskyService.createEventRecord.mockRejectedValue(
+        new Error('PDS unavailable'),
+      );
+
+      await expect(service.publishEvent(event, tenantId)).rejects.toThrow(
+        'PDS unavailable',
+      );
+    });
+
     describe('orphan state handling', () => {
       it('should return error result with actionable message when SessionUnavailableError is thrown', async () => {
         const event = createMockEvent();
@@ -804,12 +824,12 @@ describe('AtprotoPublisherService', () => {
     // OpenMeet → AT Protocol mapping:
     // - Confirmed → going (publish)
     // - Maybe → interested (publish)
-    // - Pending → interested (publish)
-    // - Waitlist → interested (publish)
-    // - Invited → interested (publish)
     // - Cancelled → notgoing (publish - user explicitly declined)
-    // - Rejected → notgoing (publish - host rejected)
-    // - Attended → going (publish - post-event tracking)
+    // - Rejected → skip (host rejected, internal status)
+    // - Pending → skip (awaiting approval)
+    // - Waitlist → skip (not confirmed)
+    // - Invited → skip (no response yet)
+    // - Attended → skip (already published as 'going', post-event tracking)
 
     it('should return true for maybe status (maps to interested)', () => {
       const event = createMockEvent({
@@ -839,7 +859,7 @@ describe('AtprotoPublisherService', () => {
       expect(result).toBe(true);
     });
 
-    it('should return true for rejected RSVP (maps to notgoing)', () => {
+    it('should return false for rejected RSVP', () => {
       const event = createMockEvent({
         atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/rkey',
         visibility: EventVisibility.Public,
@@ -850,10 +870,10 @@ describe('AtprotoPublisherService', () => {
       });
 
       const result = service['shouldPublishRsvp'](attendee, event);
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
-    it('should return true for pending RSVP (maps to interested)', () => {
+    it('should return false for pending (awaiting approval) RSVP', () => {
       const event = createMockEvent({
         atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/rkey',
         visibility: EventVisibility.Public,
@@ -864,10 +884,10 @@ describe('AtprotoPublisherService', () => {
       });
 
       const result = service['shouldPublishRsvp'](attendee, event);
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
-    it('should return true for waitlist RSVP (maps to interested)', () => {
+    it('should return false for waitlist RSVP', () => {
       const event = createMockEvent({
         atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/rkey',
         visibility: EventVisibility.Public,
@@ -878,10 +898,10 @@ describe('AtprotoPublisherService', () => {
       });
 
       const result = service['shouldPublishRsvp'](attendee, event);
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
-    it('should return true for invited RSVP (maps to interested)', () => {
+    it('should return false for invited RSVP (no response yet)', () => {
       const event = createMockEvent({
         atprotoUri: 'at://did:plc:abc/community.lexicon.calendar.event/rkey',
         visibility: EventVisibility.Public,
@@ -892,7 +912,7 @@ describe('AtprotoPublisherService', () => {
       });
 
       const result = service['shouldPublishRsvp'](attendee, event);
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
     it('should return true for attended RSVP (maps to going)', () => {
@@ -959,101 +979,6 @@ describe('AtprotoPublisherService', () => {
       const result = await service.publishRsvp(attendee, tenantId);
 
       expect(result).toEqual({ action: 'skipped' });
-    });
-
-    // Statuses added in write-path convergence: Pending, Waitlist, Invited, Rejected
-    // These should publish (not throw "No AT Protocol mapping") when the event is eligible.
-    async function assertRsvpPublishes(
-      status: EventAttendeeStatus,
-      expectedRsvp: string,
-    ) {
-      const event = createMockEvent({
-        atprotoUri:
-          'at://did:plc:organizer/community.lexicon.calendar.event/event-rkey',
-      });
-      const attendee = createMockAttendee({ status, event });
-
-      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
-      blueskyRsvpService.createRsvp.mockResolvedValue({
-        success: true,
-        rsvpUri:
-          'at://did:plc:testuser123/community.lexicon.calendar.rsvp/rsvp-rkey',
-        rsvpCid: 'bafyreicid123',
-      });
-
-      const result = await service.publishRsvp(attendee, tenantId);
-
-      expect(result.action).toBe('published');
-      expect(blueskyRsvpService.createRsvp).toHaveBeenCalledWith(
-        expect.anything(),
-        expectedRsvp,
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-      );
-    }
-
-    it('should publish Pending RSVP as interested without throwing No AT Protocol mapping', async () => {
-      await assertRsvpPublishes(EventAttendeeStatus.Pending, 'interested');
-    });
-
-    it('should publish Waitlist RSVP as interested without throwing No AT Protocol mapping', async () => {
-      await assertRsvpPublishes(EventAttendeeStatus.Waitlist, 'interested');
-    });
-
-    it('should publish Invited RSVP as interested without throwing No AT Protocol mapping', async () => {
-      await assertRsvpPublishes(EventAttendeeStatus.Invited, 'interested');
-    });
-
-    it('should publish Rejected RSVP as notgoing without throwing No AT Protocol mapping', async () => {
-      await assertRsvpPublishes(EventAttendeeStatus.Rejected, 'notgoing');
-    });
-  });
-
-  describe('deleteRsvp', () => {
-    it('should return skipped when attendee has no atprotoUri', () => {
-      const attendee = createMockAttendee({ atprotoUri: null });
-
-      const result = service.deleteRsvp(attendee, tenantId) as PublishResult;
-
-      expect(result.action).toBe('skipped');
-      expect(pdsSessionService.getSessionForUser).not.toHaveBeenCalled();
-    });
-
-    it('should call BlueskyRsvpService.deleteRsvp with session agent on success', async () => {
-      const rsvpUri =
-        'at://did:plc:testuser123/community.lexicon.calendar.rsvp/rsvp-rkey';
-      const attendee = createMockAttendee({ atprotoUri: rsvpUri });
-
-      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
-      blueskyRsvpService.deleteRsvp.mockResolvedValue({ success: true });
-
-      const result = await service.deleteRsvp(attendee, tenantId);
-
-      expect(result.action).toBe('deleted');
-      expect(blueskyRsvpService.deleteRsvp).toHaveBeenCalledWith(
-        rsvpUri,
-        mockSessionResult.did,
-        tenantId,
-        mockSessionResult.agent,
-      );
-    });
-
-    it('should return error with needsOAuthLink when SessionUnavailableError is thrown', async () => {
-      const rsvpUri =
-        'at://did:plc:testuser123/community.lexicon.calendar.rsvp/rsvp-rkey';
-      const attendee = createMockAttendee({ atprotoUri: rsvpUri });
-
-      pdsSessionService.getSessionForUser.mockRejectedValue(
-        new SessionUnavailableError('OAuth session expired', true),
-      );
-
-      const result = await service.deleteRsvp(attendee, tenantId);
-
-      expect(result.action).toBe('error');
-      expect(
-        (result as PublishResult & { needsOAuthLink: boolean }).needsOAuthLink,
-      ).toBe(true);
     });
   });
 
