@@ -65,8 +65,8 @@ describe('EventAttendeeService Edge Cases', () => {
     id: 1,
     slug: 'test-event',
     name: 'Test Event',
-    startDate: new Date('2024-12-31T00:00:00Z'),
-    endDate: new Date('2024-12-31T23:59:59Z'),
+    startDate: new Date('2099-12-31T00:00:00Z'),
+    endDate: new Date('2099-12-31T23:59:59Z'),
     sourceData: { rkey: 'test-rkey' },
   };
 
