@@ -1,7 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
-import { ContrailGeoSyncService } from './contrail/contrail-geo-sync.service';
-import { ContrailModule } from './contrail/contrail.module';
 import { UserModule } from './user/user.module';
 import { FileModule } from './file/file.module';
 import { AuthModule } from './auth/auth.module';
@@ -124,8 +121,6 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
     }),
-    ScheduleModule.forRoot(),
-    ContrailModule,
     EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot([
       {
@@ -190,7 +185,6 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       : []),
   ],
   providers: [
-    ContrailGeoSyncService,
     TenantConnectionService,
     {
       provide: APP_GUARD,

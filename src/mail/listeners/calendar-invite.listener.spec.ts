@@ -2,11 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CalendarInviteListener } from './calendar-invite.listener';
 import { CalendarInviteService } from '../services/calendar-invite.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
-import { UserService } from '../../user/user.service';
 import { EventAttendeeStatus } from '../../core/constants/constant';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { ModuleRef, ContextIdFactory } from '@nestjs/core';
-import { AttendanceChangedEvent } from '../../attendance/types';
 
 describe('CalendarInviteListener - Behavior Tests', () => {
   let listener: CalendarInviteListener;
@@ -17,7 +15,6 @@ describe('CalendarInviteListener - Behavior Tests', () => {
   };
   let mockEventAttendeeService: { findOne: jest.Mock };
   let mockCalendarInviteService: { sendCalendarInvite: jest.Mock };
-  let mockUserService: { findByUlid: jest.Mock };
 
   const mockTenantConfig = {
     tenantId: 'test',
@@ -45,14 +42,6 @@ describe('CalendarInviteListener - Behavior Tests', () => {
       sendCalendarInvite: jest.fn(),
     };
 
-    mockUserService = {
-      findByUlid: jest.fn().mockResolvedValue({
-        id: 1,
-        ulid: 'user-ulid-123',
-        email: 'attendee@example.com',
-      }),
-    };
-
     mockModuleRef = {
       registerRequestByContextId: jest.fn(),
       resolve: jest.fn().mockImplementation((serviceClass: any) => {
@@ -61,9 +50,6 @@ describe('CalendarInviteListener - Behavior Tests', () => {
         }
         if (serviceClass === EventAttendeeService) {
           return Promise.resolve(mockEventAttendeeService);
-        }
-        if (serviceClass === UserService) {
-          return Promise.resolve(mockUserService);
         }
         return Promise.resolve({});
       }),
@@ -101,18 +87,12 @@ describe('CalendarInviteListener - Behavior Tests', () => {
 
   describe('Dynamic service resolution via ModuleRef', () => {
     it('should resolve EventAttendeeService dynamically via ModuleRef (not constructor-injected)', async () => {
-      const baseEvent: AttendanceChangedEvent = {
-        status: 'going',
-        previousStatus: null,
-        eventUri: null,
+      await listener.handleEventRsvpAdded({
         eventId: 1,
-        eventSlug: 'test-event',
-        userUlid: 'user-ulid-123',
-        userDid: 'did:plc:abc',
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
         tenantId: 'test-tenant',
-      };
-
-      await listener.handleAttendanceChanged(baseEvent);
+      });
 
       // Verify ContextIdFactory.create() was called
       expect(ContextIdFactory.create).toHaveBeenCalled();
@@ -134,18 +114,12 @@ describe('CalendarInviteListener - Behavior Tests', () => {
     });
 
     it('should include x-tenant-id header in synthetic request', async () => {
-      const baseEvent: AttendanceChangedEvent = {
-        status: 'going',
-        previousStatus: null,
-        eventUri: null,
+      await listener.handleEventRsvpAdded({
         eventId: 1,
-        eventSlug: 'test-event',
-        userUlid: 'user-ulid-123',
-        userDid: 'did:plc:abc',
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
         tenantId: 'my-tenant',
-      };
-
-      await listener.handleAttendanceChanged(baseEvent);
+      });
 
       expect(mockModuleRef.registerRequestByContextId).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -157,96 +131,286 @@ describe('CalendarInviteListener - Behavior Tests', () => {
     });
   });
 
-  describe('handleAttendanceChanged', () => {
-    const baseEvent: AttendanceChangedEvent = {
-      status: 'going',
-      previousStatus: null,
-      eventUri: null,
-      eventId: 1,
-      eventSlug: 'test-event',
-      userUlid: 'user-ulid-123',
-      userDid: 'did:plc:abc',
-      tenantId: 'test',
-    };
-
-    it('should send calendar invite for first-time RSVP to tenant event', async () => {
-      await listener.handleAttendanceChanged(baseEvent);
+  describe('Status-based filtering (core business logic)', () => {
+    it('should send invite when status is Confirmed', async () => {
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
 
       expect(sendInviteSpy).toHaveBeenCalled();
     });
 
-    it('should NOT send invite when previousStatus is not null (status change, not first RSVP)', async () => {
-      await listener.handleAttendanceChanged({
-        ...baseEvent,
-        previousStatus: 'notgoing',
+    it('should NOT send invite when status is Pending', async () => {
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Pending,
+        tenantId: 'test',
       });
 
       expect(sendInviteSpy).not.toHaveBeenCalled();
     });
 
-    it('should NOT send invite when status is notgoing', async () => {
-      await listener.handleAttendanceChanged({
-        ...baseEvent,
-        status: 'notgoing',
+    it('should NOT send invite when status is Waitlist', async () => {
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Waitlist,
+        tenantId: 'test',
       });
 
       expect(sendInviteSpy).not.toHaveBeenCalled();
     });
 
-    it('should NOT send invite for foreign events (eventId is null)', async () => {
-      await listener.handleAttendanceChanged({
-        ...baseEvent,
-        eventId: null,
-        eventSlug: null,
+    it('should NOT send invite when status is Cancelled', async () => {
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Cancelled,
+        tenantId: 'test',
       });
 
       expect(sendInviteSpy).not.toHaveBeenCalled();
     });
 
-    it('should not throw on errors', async () => {
-      mockModuleRef.resolve.mockRejectedValue(new Error('boom'));
+    it('should NOT resolve services when status is not Confirmed', async () => {
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Pending,
+        tenantId: 'test',
+      });
+
+      // Should short-circuit before resolving services
+      expect(mockModuleRef.resolve).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Email validation', () => {
+    it('should NOT send invite when attendee has no email', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: { id: 1, email: null },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT send invite when attendee email is empty string', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: { id: 1, email: '' },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Email notification preference', () => {
+    it('should NOT send invite when user opted out of email notifications', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: {
+          id: 1,
+          email: 'attendee@example.com',
+          preferences: { notifications: { email: false } },
+        },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should send invite when user has email notifications enabled', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: {
+          id: 1,
+          email: 'attendee@example.com',
+          preferences: { notifications: { email: true } },
+        },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).toHaveBeenCalled();
+    });
+
+    it('should send invite when user has no notification preferences set (default)', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: {
+          id: 1,
+          email: 'attendee@example.com',
+          preferences: {},
+        },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('Self-notification guard', () => {
+    it('should NOT send invite when attendee is the event creator', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        event: {
+          id: 1,
+          name: 'Test Event',
+          user: { id: 1, email: 'creator@example.com' },
+        },
+        user: { id: 1, email: 'creator@example.com' },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Missing data guards', () => {
+    it('should NOT send invite when attendee record is not found', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue(null);
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT send invite when event is missing from attendee', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        event: null,
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT send invite when event has no organizer', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        event: { id: 1, name: 'Test Event', user: null },
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT send invite when user is missing from attendee', async () => {
+      mockEventAttendeeService.findOne.mockResolvedValue({
+        ...defaultAttendee,
+        user: null,
+      });
+
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
+
+      expect(sendInviteSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Error resilience (must not crash event processing)', () => {
+    it('should not throw when attendee lookup fails', async () => {
+      mockEventAttendeeService.findOne.mockRejectedValue(new Error('DB error'));
 
       await expect(
-        listener.handleAttendanceChanged(baseEvent),
+        listener.handleEventRsvpAdded({
+          eventId: 1,
+          userId: 1,
+          status: EventAttendeeStatus.Confirmed,
+          tenantId: 'test',
+        }),
       ).resolves.not.toThrow();
     });
 
-    it('should resolve UserService via ModuleRef', async () => {
-      await listener.handleAttendanceChanged(baseEvent);
+    it('should not throw when email sending fails', async () => {
+      sendInviteSpy.mockRejectedValue(new Error('SMTP error'));
 
-      expect(mockModuleRef.resolve).toHaveBeenCalledWith(
-        UserService,
-        expect.anything(),
-        { strict: false },
-      );
-    });
-
-    it('should look up user by ULID from the event', async () => {
-      await listener.handleAttendanceChanged(baseEvent);
-
-      expect(mockUserService.findByUlid).toHaveBeenCalledWith('user-ulid-123');
-    });
-
-    it('should filter attendee lookup by both event ID and user ID', async () => {
-      await listener.handleAttendanceChanged(baseEvent);
-
-      expect(mockEventAttendeeService.findOne).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            event: { id: 1 },
-            user: { id: 1 },
-          },
+      await expect(
+        listener.handleEventRsvpAdded({
+          eventId: 1,
+          userId: 1,
+          status: EventAttendeeStatus.Confirmed,
+          tenantId: 'test',
         }),
-      );
+      ).resolves.not.toThrow();
     });
 
-    it('should NOT send invite when user is not found by ULID', async () => {
-      mockUserService.findByUlid.mockResolvedValue(null);
+    it('should not throw when ModuleRef resolution fails', async () => {
+      mockModuleRef.resolve.mockRejectedValue(
+        new Error('Cannot resolve service'),
+      );
 
-      await listener.handleAttendanceChanged(baseEvent);
-
-      expect(sendInviteSpy).not.toHaveBeenCalled();
-      expect(mockEventAttendeeService.findOne).not.toHaveBeenCalled();
+      await expect(
+        listener.handleEventRsvpAdded({
+          eventId: 1,
+          userId: 1,
+          status: EventAttendeeStatus.Confirmed,
+          tenantId: 'test',
+        }),
+      ).resolves.not.toThrow();
     });
   });
 });

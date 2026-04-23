@@ -162,7 +162,6 @@ function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
                       operation,
                       duration,
                       'success',
-                      queryFingerprint,
                     );
                   }
 
@@ -183,7 +182,6 @@ function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
                       operation,
                       duration,
                       'error',
-                      queryFingerprint,
                     );
                   }
 
@@ -205,7 +203,6 @@ function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
                 operation,
                 duration,
                 'success',
-                queryFingerprint,
               );
             }
             span.setAttribute('db.duration_ms', duration);

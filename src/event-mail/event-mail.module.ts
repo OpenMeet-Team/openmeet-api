@@ -15,7 +15,6 @@ import { EventEntity } from '../event/infrastructure/persistence/relational/enti
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { CalendarInviteListener } from '../mail/listeners/calendar-invite.listener';
 import { CalendarInviteService } from '../mail/services/calendar-invite.service';
-import { GuestJoinedListener } from './guest-joined.listener';
 
 @Module({
   imports: [
@@ -35,7 +34,6 @@ import { GuestJoinedListener } from './guest-joined.listener';
     MailService,
     CalendarInviteService,
     CalendarInviteListener,
-    GuestJoinedListener,
   ],
   exports: [EventMailService, EventAnnouncementService],
 })

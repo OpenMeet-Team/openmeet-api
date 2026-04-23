@@ -284,7 +284,7 @@ describe('ShadowAccountService', () => {
     it('should update preferences.bluesky.handle with resolved handle when DID was passed in preferences', async () => {
       // This test catches the bug where preferences.bluesky.handle contained the DID
       // instead of the resolved handle, while firstName was correctly set to the handle.
-      // Simulates the flow when userHandle is a DID.
+      // Simulates the flow from rsvp-integration.service.ts when userHandle is a DID.
       userRepository.findOne.mockResolvedValue(null);
       userRepository.save.mockImplementation((entity) =>
         Promise.resolve({
@@ -296,7 +296,7 @@ describe('ShadowAccountService', () => {
         'schuman.de',
       );
 
-      // When userHandle is a DID instead of a resolved handle
+      // This is what rsvp-integration.service.ts passes when userHandle is a DID
       const preferencesWithDidAsHandle = {
         bluesky: {
           did: 'did:plc:xo7zswqvg5vhhicuj5faubvi',

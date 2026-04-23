@@ -43,7 +43,6 @@ import { ProfileSummaryDto } from './dto/profile-summary.dto';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { GroupService } from '../group/group.service';
 import { PdsAccountService } from '../pds/pds-account.service';
-import { EventQueryService } from '../event/services/event-query.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -70,8 +69,6 @@ export class UserService {
     @Inject(forwardRef(() => GroupService))
     private readonly groupService: GroupService,
     private readonly pdsAccountService: PdsAccountService,
-    @Inject(forwardRef(() => EventQueryService))
-    private readonly eventQueryService: EventQueryService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -501,18 +498,23 @@ export class UserService {
       return null;
     }
 
-    // Get attending events from shared method (covers local, Contrail, and foreign events)
-    const attendingResult = await this.eventQueryService.getAttendingEvents(
-      user.id,
-      { limit: PREVIEW_LIMIT },
-    );
-
     // Create query builders for counts and limited data
     const createEventQuery = () =>
       this.usersRepository.manager
         .createQueryBuilder(EventEntity, 'event')
         .leftJoinAndSelect('event.image', 'eventImage')
         .where('event.userId = :userId', { userId: user.id })
+        .andWhere('event.visibility = :visibility', { visibility: 'public' })
+        .andWhere('event.status IN (:...statuses)', {
+          statuses: ['published', 'cancelled'],
+        });
+
+    const createAttendingQuery = () =>
+      this.usersRepository.manager
+        .createQueryBuilder(EventAttendeesEntity, 'eventAttendee')
+        .leftJoinAndSelect('eventAttendee.event', 'event')
+        .leftJoinAndSelect('event.image', 'eventImage')
+        .where('eventAttendee.userId = :userId', { userId: user.id })
         .andWhere('event.visibility = :visibility', { visibility: 'public' })
         .andWhere('event.status IN (:...statuses)', {
           statuses: ['published', 'cancelled'],
@@ -541,14 +543,22 @@ export class UserService {
     const [
       organizedEventsCount,
       organizedEvents,
+      attendingEventsCount,
+      attendingRecords,
       ownedGroupsCount,
       ownedGroups,
       groupMembershipsCount,
       groupMemberships,
     ] = await Promise.all([
+      // Counts
       createEventQuery().getCount(),
       createEventQuery()
         .orderBy('event.startDate', 'DESC')
+        .take(PREVIEW_LIMIT)
+        .getMany(),
+      createAttendingQuery().getCount(),
+      createAttendingQuery()
+        .orderBy('event.startDate', 'ASC')
         .take(PREVIEW_LIMIT)
         .getMany(),
       createGroupQuery().getCount(),
@@ -562,6 +572,12 @@ export class UserService {
         .take(PREVIEW_LIMIT)
         .getMany(),
     ]);
+
+    // Map attending records to events with attendee status
+    const attendingEvents = attendingRecords.map((record) => ({
+      ...record.event,
+      attendeeStatus: record.status,
+    }));
 
     // Build the summary response
     const summary: ProfileSummaryDto = {
@@ -577,13 +593,13 @@ export class UserService {
       preferences: user.preferences,
       counts: {
         organizedEvents: organizedEventsCount,
-        attendingEvents: attendingResult.total,
+        attendingEvents: attendingEventsCount,
         ownedGroups: ownedGroupsCount,
         groupMemberships: groupMembershipsCount,
       },
       interests: user.interests || [],
       organizedEvents,
-      attendingEvents: attendingResult.events as unknown as EventEntity[],
+      attendingEvents: attendingEvents as unknown as EventEntity[],
       ownedGroups,
       groupMemberships,
     };

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ExternalCalendarService } from './external-calendar.service';
 import { ExternalCalendarController } from './external-calendar.controller';
 import { AvailabilityController } from './availability.controller';
@@ -9,7 +10,7 @@ import { CalendarSourceModule } from '../calendar-source/calendar-source.module'
 import { TenantModule } from '../tenant/tenant.module';
 
 @Module({
-  imports: [TenantModule, CalendarSourceModule],
+  imports: [ScheduleModule.forRoot(), TenantModule, CalendarSourceModule],
   controllers: [ExternalCalendarController, AvailabilityController],
   providers: [
     ExternalCalendarService,

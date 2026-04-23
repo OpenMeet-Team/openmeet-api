@@ -28,6 +28,7 @@ import { UpdateEventDto } from '../dto/update-event.dto';
 import {
   EventStatus,
   EventVisibility,
+  EventAttendeeRole,
   EventAttendeeStatus,
   EventType,
 } from '../../core/constants/constant';
@@ -44,16 +45,13 @@ import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.in
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
+import { GroupRole } from '../../core/constants/constant';
 import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
 import { AtprotoPublisherService } from '../../atproto-publisher/atproto-publisher.service';
 import { markAtprotoSynced } from '../../atproto-publisher/atproto-sync.utils';
 import { SyncAtprotoResponseDto } from '../dto/sync-atproto-response.dto';
 import { TID } from '@atproto/common-web';
-import { AttendanceService } from '../../attendance/attendance.service';
-import { AttendanceChangedEvent } from '../../attendance/types';
-import { AtprotoEnrichmentService } from '../../atproto-enrichment/atproto-enrichment.service';
-import { RsvpStatusShort } from '../../bluesky/BlueskyTypes';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -85,10 +83,7 @@ export class EventManagementService {
     private readonly eventQueryService: EventQueryService,
     @Inject(forwardRef(() => GroupMemberQueryService))
     private readonly groupMemberQueryService: GroupMemberQueryService,
-    @Inject(forwardRef(() => AtprotoPublisherService))
     private readonly atprotoPublisherService: AtprotoPublisherService,
-    private readonly attendanceService: AttendanceService,
-    private readonly atprotoEnrichmentService: AtprotoEnrichmentService,
   ) {
     void this.initializeRepository();
   }
@@ -499,10 +494,6 @@ export class EventManagementService {
         this.request.tenantId,
       );
 
-      this.logger.log(
-        `ATProto publish result for ${eventToPublish.slug}: ${publishResult.action}`,
-      );
-
       if (
         publishResult.action === 'published' ||
         publishResult.action === 'updated'
@@ -515,7 +506,7 @@ export class EventManagementService {
           atprotoRecord: publishResult.atprotoRecord,
         });
 
-        this.logger.log(
+        this.logger.debug(
           `Published event ${eventToPublish.slug} to AT Protocol: ${publishResult.atprotoUri}`,
         );
       }
@@ -1107,8 +1098,77 @@ export class EventManagementService {
       sourceId: event.sourceId,
     });
 
-    // Delete from AT Protocol if the event was published there
-    if (event.atprotoUri) {
+    // Get latest user data with preferences to check Bluesky connection state
+    const currentUser = await this.userService.findByIdWithPreferences(
+      this.request.user.id,
+      this.request.tenantId,
+    );
+
+    if (!currentUser) {
+      throw new UnprocessableEntityException(
+        'Failed to retrieve current user data',
+      );
+    }
+
+    this.logger.debug('Current user data:', {
+      id: currentUser?.id,
+      socialId: currentUser?.socialId,
+      blueskyPreferences: currentUser?.preferences?.bluesky,
+    });
+
+    // If the event is a Bluesky event, attempt to delete it there
+    // The remaining structural guards (sourceType, socialId, sourceId, rkey) are sufficient
+    if (
+      event.sourceType === EventSourceType.BLUESKY && // check if event came from Bluesky
+      currentUser?.socialId && // ensure we have user's DID
+      event.sourceId && // ensure we have event creator's DID
+      event.sourceData?.rkey // ensure we have the Bluesky record key
+    ) {
+      this.logger.debug('Attempting Bluesky deletion with:', {
+        eventName: event.name,
+        eventSlug: event.slug,
+        eventSourceId: event.sourceId, // creator's DID
+        eventRkey: event.sourceData.rkey,
+        userDid: currentUser.socialId,
+        tenantId: this.request.tenantId,
+      });
+
+      try {
+        // Verify we have all required data for Bluesky deletion
+        if (!event.sourceData?.rkey) {
+          throw new Error('Missing Bluesky record key (rkey)');
+        }
+
+        // Use the current user's DID for deletion
+        await this.blueskyService.deleteEventRecord(
+          event,
+          currentUser.socialId, // Use current user's DID
+          this.request.tenantId,
+        );
+
+        this.logger.debug('Successfully deleted Bluesky event record:', {
+          eventName: event.name,
+          eventRkey: event.sourceData.rkey,
+          userDid: currentUser.socialId,
+        });
+      } catch (error) {
+        // Handle any other errors in the outer try block
+        this.logger.error('Unexpected error during Bluesky event deletion:', {
+          error: error.message,
+          stack: error.stack,
+          eventId: event.id,
+          eventSlug: event.slug,
+        });
+        // Continue with local deletion
+        this.logger.warn(
+          'Proceeding with local event deletion despite unexpected error',
+        );
+      }
+    }
+
+    // Delete from AT Protocol (user's PDS) if the event was published there
+    // This is for user-created events (not Bluesky-sourced events which are handled above)
+    if (!event.sourceType && event.atprotoUri) {
       try {
         const deleteResult = await this.atprotoPublisherService.deleteEvent(
           event,
@@ -1545,78 +1605,536 @@ export class EventManagementService {
   ) {
     await this.initializeRepository();
 
-    const user = await this.userService.getUserById(userId);
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
-    }
-
-    const status: RsvpStatusShort =
-      createEventAttendeeDto.status === EventAttendeeStatus.Cancelled
-        ? 'notgoing'
-        : createEventAttendeeDto.status === EventAttendeeStatus.Maybe
-          ? 'interested'
-          : 'going';
-
-    const resolved = await this.eventQueryService.resolveForAttendance(slug);
-
-    const result = await this.attendanceService.recordAttendance(
-      resolved,
-      user.ulid,
-      status,
+    this.logger.debug(
+      `[attendEvent] Processing attendance for event ${slug} and user ${userId}`,
     );
 
-    // For tenant events with a local record, return the full attendee entity
-    if (result.attendeeId) {
-      const attendee = await this.eventAttendeeService.findOne({
-        where: { id: result.attendeeId },
-        relations: ['event', 'user', 'role', 'role.permissions'],
-      });
-      if (attendee) return attendee;
+    const event = await this.eventRepository.findOne({
+      where: { slug },
+      relations: ['group', 'user'],
+    });
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
-    // For public-simple RSVPs (no local record), return a minimal shape
-    return {
-      id: null,
-      status:
-        result.status === 'going'
-          ? EventAttendeeStatus.Confirmed
-          : result.status,
-      rsvpUri: result.rsvpUri,
-      eventUri: result.eventUri,
-    };
+    // Issue #8: Check if user has access to RSVP to private events
+    if (event.visibility === EventVisibility.Private) {
+      this.logger.debug(
+        `[attendEvent] Event is private, checking access for user ${userId}`,
+      );
+
+      // Event creator can always RSVP to their own event
+      if (event.user && event.user.id === userId) {
+        this.logger.debug(
+          `[attendEvent] User ${userId} is the event creator, allowing RSVP`,
+        );
+      } else {
+        // Check if user is already an attendee (invited, confirmed, etc.)
+        const existingAttendee =
+          await this.eventAttendeeService.findEventAttendeeByUserId(
+            event.id,
+            userId,
+          );
+
+        if (!existingAttendee) {
+          // User is not an attendee, check if they're a member of the event's group
+          if (event.group?.id) {
+            this.logger.debug(
+              `[attendEvent] User is not an attendee, checking group membership for group ${event.group.id}`,
+            );
+
+            const groupMember =
+              await this.groupMemberQueryService.findGroupMemberByUserId(
+                event.group.id,
+                userId,
+                this.request.tenantId,
+              );
+
+            if (!groupMember) {
+              this.logger.debug(
+                `[attendEvent] User ${userId} is neither an attendee nor a group member, denying RSVP to private event`,
+              );
+              throw new ForbiddenException(
+                'You must be invited to RSVP to this private event',
+              );
+            }
+
+            this.logger.debug(
+              `[attendEvent] User ${userId} is a group member, allowing RSVP to private event`,
+            );
+          } else {
+            // Private event not in a group, and user is not invited
+            this.logger.debug(
+              `[attendEvent] Private event has no group and user is not invited, denying RSVP`,
+            );
+            throw new ForbiddenException(
+              'You must be invited to RSVP to this private event',
+            );
+          }
+        } else {
+          this.logger.debug(
+            `[attendEvent] User ${userId} is already an attendee (status: ${existingAttendee.status}), allowing RSVP`,
+          );
+        }
+      }
+    }
+
+    const user = await this.userService.getUserById(userId);
+
+    // Check if event requires group membership and validate user membership
+    if (event.requireGroupMembership && event.group) {
+      this.logger.debug(
+        `[attendEvent] Event requires group membership, checking user ${userId} membership in group ${event.group.id}`,
+      );
+
+      const groupMember =
+        await this.groupMemberQueryService.findGroupMemberByUserId(
+          event.group.id,
+          userId,
+          this.request.tenantId,
+        );
+
+      if (!groupMember) {
+        this.logger.debug(
+          `[attendEvent] User ${userId} is not a member of group ${event.group.id}, denying event attendance`,
+        );
+        throw new BadRequestException(
+          `You must be a member of the "${event.group.slug}" group to attend this event.`,
+        );
+      }
+
+      // Check if user is a guest (which should not be allowed for group-restricted events)
+      if (groupMember.groupRole?.name === GroupRole.Guest) {
+        this.logger.debug(
+          `[attendEvent] User ${userId} is a guest in group ${event.group.id}, denying event attendance`,
+        );
+        throw new BadRequestException(
+          'Guests are not allowed to attend this event. Please contact a group admin to change your role.',
+        );
+      }
+
+      this.logger.debug(
+        `[attendEvent] User ${userId} is a valid member (${groupMember.groupRole?.name}) of group ${event.group.id}`,
+      );
+    }
+
+    // First check the cache state for debugging
+    this.logger.debug(
+      `[attendEvent] Checking for existing attendance record with detailed cache logging`,
+    );
+    const eventAttendee =
+      await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        user.id,
+      );
+
+    // Log existing attendance status if any
+    if (eventAttendee) {
+      this.logger.debug(
+        `[attendEvent] Found existing attendance record with status ${eventAttendee.status}, id=${eventAttendee.id}`,
+      );
+    } else {
+      this.logger.debug(
+        `[attendEvent] No existing attendance record found in initial check`,
+      );
+    }
+
+    // Determine the appropriate role based on event ownership and group membership
+    let attendeeRole = EventAttendeeRole.Participant; // Default role
+
+    // Event creator always gets host role
+    if (event.user && event.user.id === userId) {
+      attendeeRole = EventAttendeeRole.Host;
+    } else if (event.group && event.group.id) {
+      // If event belongs to a group, check if user is owner/admin
+      const userGroupMember =
+        await this.groupMemberQueryService.findGroupMemberByUserId(
+          event.group.id,
+          userId,
+          this.request.tenantId,
+        );
+
+      if (userGroupMember) {
+        const userGroupRole = userGroupMember.groupRole?.name;
+        if (userGroupRole === 'owner' || userGroupRole === 'admin') {
+          attendeeRole = EventAttendeeRole.Host; // Give group owners/admins host role
+        }
+      }
+    }
+
+    const participantRole =
+      await this.eventRoleService.getRoleByName(attendeeRole);
+
+    // Determine the appropriate status - prioritize user's choice from DTO
+    let attendeeStatus: EventAttendeeStatus;
+
+    if (createEventAttendeeDto.status) {
+      // User explicitly set a status (e.g., "cancelled" for RSVP No)
+      attendeeStatus = createEventAttendeeDto.status;
+      this.logger.debug(
+        `[attendEvent] Using status from DTO: ${attendeeStatus}`,
+      );
+    } else {
+      // Calculate status based on event settings (default behavior)
+      attendeeStatus = EventAttendeeStatus.Confirmed;
+      if (event.allowWaitlist) {
+        const count = await this.eventAttendeeService.showEventAttendeesCount(
+          event.id,
+        );
+        if (count >= event.maxAttendees) {
+          attendeeStatus = EventAttendeeStatus.Waitlist;
+        }
+      }
+      if (event.requireApproval) {
+        attendeeStatus = EventAttendeeStatus.Pending;
+      }
+      this.logger.debug(`[attendEvent] Calculated status: ${attendeeStatus}`);
+    }
+
+    // If the attendee already exists and status hasn't changed, return it
+    if (
+      eventAttendee &&
+      eventAttendee.status !== EventAttendeeStatus.Cancelled &&
+      (!createEventAttendeeDto.status ||
+        eventAttendee.status === attendeeStatus)
+    ) {
+      this.logger.debug(
+        `[attendEvent] Using existing active attendance record with status ${eventAttendee.status}`,
+      );
+      return eventAttendee;
+    }
+
+    // If attendee exists with different status than requested, update it
+    // Note: Cancelled status is handled by reactivateEventAttendanceBySlug below
+    // which includes Bluesky sync
+    if (
+      eventAttendee &&
+      createEventAttendeeDto.status &&
+      eventAttendee.status !== attendeeStatus &&
+      eventAttendee.status !== EventAttendeeStatus.Cancelled
+    ) {
+      this.logger.debug(
+        `[attendEvent] Updating existing attendance record from ${eventAttendee.status} to ${attendeeStatus}`,
+      );
+
+      // Store the previous status before updating for event emission
+      const previousStatus = eventAttendee.status;
+      eventAttendee.status = attendeeStatus;
+
+      // Update source fields if provided
+      if (createEventAttendeeDto.sourceId) {
+        eventAttendee.sourceId = createEventAttendeeDto.sourceId;
+      }
+      if (createEventAttendeeDto.sourceType) {
+        eventAttendee.sourceType = createEventAttendeeDto.sourceType;
+      }
+      if (createEventAttendeeDto.sourceUrl) {
+        eventAttendee.sourceUrl = createEventAttendeeDto.sourceUrl;
+      }
+      if (createEventAttendeeDto.sourceData) {
+        eventAttendee.sourceData = createEventAttendeeDto.sourceData;
+      }
+
+      const updatedAttendee =
+        await this.eventAttendeeService.save(eventAttendee);
+
+      this.logger.debug(
+        `[attendEvent] Updated attendee record to status ${updatedAttendee.status}`,
+      );
+
+      // Emit event for status change
+      this.logger.debug(
+        `[attendEvent] Emitting event.attendee.status.changed: ${previousStatus} → ${attendeeStatus} for user ${user.id} in event ${event.id}`,
+      );
+      this.eventEmitter.emit('event.attendee.status.changed', {
+        eventId: event.id,
+        userId: user.id,
+        previousStatus: previousStatus,
+        newStatus: attendeeStatus,
+        eventSlug: event.slug,
+        userSlug: user.slug,
+        tenantId: this.request.tenantId,
+      });
+
+      // Get the updated record with relations for return
+      return await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        user.id,
+      );
+    }
+
+    let attendee;
+
+    try {
+      // If attendee exists but has cancelled status, use the reactivation method
+      if (
+        eventAttendee &&
+        eventAttendee.status === EventAttendeeStatus.Cancelled
+      ) {
+        this.logger.debug(
+          `[attendEvent] Reactivating cancelled attendee: ${eventAttendee.id} for event ${event.slug}`,
+        );
+
+        // Use the slug-based method to reactivate
+        attendee =
+          await this.eventAttendeeService.reactivateEventAttendanceBySlug(
+            event.slug,
+            user.slug,
+            attendeeStatus,
+            participantRole.id,
+          );
+
+        // Emit event for status change from cancelled to confirmed
+        this.logger.debug(
+          `[attendEvent] Emitting event.attendee.status.changed for reactivation: cancelled → ${attendeeStatus} for user ${user.id} in event ${event.id}`,
+        );
+        this.eventEmitter.emit('event.attendee.status.changed', {
+          eventId: event.id,
+          userId: user.id,
+          previousStatus: EventAttendeeStatus.Cancelled,
+          newStatus: attendeeStatus,
+          eventSlug: event.slug,
+          userSlug: user.slug,
+          tenantId: this.request.tenantId,
+        });
+
+        // Update source fields if needed
+        if (
+          createEventAttendeeDto.sourceId ||
+          createEventAttendeeDto.sourceType ||
+          createEventAttendeeDto.sourceUrl ||
+          createEventAttendeeDto.sourceData
+        ) {
+          if (createEventAttendeeDto.sourceId)
+            attendee.sourceId = createEventAttendeeDto.sourceId;
+          if (createEventAttendeeDto.sourceType)
+            attendee.sourceType = createEventAttendeeDto.sourceType;
+          if (createEventAttendeeDto.sourceUrl)
+            attendee.sourceUrl = createEventAttendeeDto.sourceUrl;
+          if (createEventAttendeeDto.sourceData)
+            attendee.sourceData = createEventAttendeeDto.sourceData;
+
+          // Save the updated source fields
+          attendee = await this.eventAttendeeService.save(attendee);
+        }
+
+        this.logger.debug(
+          `[attendEvent] Reactivated attendee record to status ${attendee.status}`,
+        );
+      } else {
+        // Create new attendee record if none exists
+        this.logger.debug(
+          `[attendEvent] Creating new attendance record with status ${attendeeStatus}`,
+        );
+
+        // Start with the DTO values to preserve any source fields
+        const attendeeData = {
+          ...createEventAttendeeDto,
+          // Override with the values we need to set
+          event,
+          user,
+          status: attendeeStatus,
+          role: participantRole,
+        };
+
+        try {
+          attendee = await this.eventAttendeeService.create(attendeeData);
+          this.logger.debug(
+            `[attendEvent] Created new attendee record with ID ${attendee.id}`,
+          );
+        } catch (error) {
+          // Check if the error is due to a unique constraint violation (record already exists)
+          if (
+            error.message.includes('duplicate key') ||
+            error.message.includes('unique constraint')
+          ) {
+            this.logger.warn(
+              `[attendEvent] Duplicate record detected for event ${event.id}, user ${user.id}: ${error.message}`,
+            );
+
+            // Log the cache state
+            this.logger.debug(
+              `[attendEvent] CRITICAL ERROR STATE: Race condition detected - logging cache state before retry`,
+            );
+
+            // First try: Attempt to fetch with cache state logging
+            const cachedAttendeeInfo =
+              await this.eventAttendeeService.findEventAttendeeByUserId(
+                event.id,
+                user.id,
+              );
+
+            this.logger.debug(
+              `[attendEvent] After error - first attempt to fetch record: ${cachedAttendeeInfo ? `Found ID=${cachedAttendeeInfo.id}` : 'Not found'}`,
+            );
+
+            if (cachedAttendeeInfo) {
+              this.logger.debug(
+                `[attendEvent] Found existing record using regular lookup. Using record with status ${cachedAttendeeInfo.status}, id=${cachedAttendeeInfo.id}`,
+              );
+              return cachedAttendeeInfo;
+            }
+
+            // Second try: Attempt to fetch existing record with cache bypass
+            this.logger.debug(
+              `[attendEvent] Retrying lookup with cache bypass for event ${event.id}, user ${user.id}`,
+            );
+
+            const existingAttendee =
+              await this.eventAttendeeService.findEventAttendeeByUserId(
+                event.id,
+                user.id,
+              );
+
+            if (existingAttendee) {
+              this.logger.debug(
+                `[attendEvent] Found existing record after bypass. Using record with status ${existingAttendee.status}, id=${existingAttendee.id}`,
+              );
+              return existingAttendee;
+            } else {
+              // Last ditch effort - try direct query with findOne
+              this.logger.warn(
+                `[attendEvent] Still could not find record after bypass. Trying direct query with findOne.`,
+              );
+
+              // Try one more time with fewer relations
+              const simpleAttendee = await this.eventAttendeeService.findOne({
+                where: {
+                  event: { id: event.id },
+                  user: { id: user.id },
+                },
+              });
+
+              if (simpleAttendee) {
+                this.logger.debug(
+                  `[attendEvent] Found record without relations. ID: ${simpleAttendee.id}, Status: ${simpleAttendee.status}`,
+                );
+                return simpleAttendee;
+              }
+
+              // This should be rare - we couldn't create due to duplicate but can't find the existing record
+              this.logger.error(
+                `[attendEvent] CRITICAL DATA CONSISTENCY ERROR: Record exists (due to duplicate key error) but cannot be found with any method`,
+                {
+                  eventId: event.id,
+                  userId: user.id,
+                  errorMessage: error.message,
+                  requestId: this.request.id || 'unknown',
+                },
+              );
+
+              throw new Error(
+                `Could not create attendance record due to duplicate, but could not find existing record after multiple attempts: ${error.message}`,
+              );
+            }
+          } else {
+            // Re-throw other errors
+            throw error;
+          }
+        }
+      }
+
+      // Add logging to debug the structure of the attendee object before sending mail
+      this.logger.debug(
+        `[attendEvent] Sending mail for attendee: ${attendee.id}, with event: ${attendee.event?.id || 'undefined'}`,
+      );
+
+      try {
+        await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
+      } catch (error) {
+        this.logger.error(
+          `[attendEvent] Error sending mail for attendee ${attendee.id}: ${error.message}`,
+          error.stack,
+        );
+        // Continue execution - don't let mail errors affect the overall operation
+      }
+
+      // Emit event for other parts of the system
+      this.eventEmitter.emit('event.attendee.added', {
+        eventId: event.id,
+        userId: user.id,
+        status: attendeeStatus,
+        tenantId: this.request.tenantId,
+        eventSlug: event.slug,
+        userSlug: user.slug,
+      });
+
+      // Ensure we're returning a fully populated attendee object
+      // This ensures the frontend has all the data it needs without requiring additional API calls
+      if (!attendee.role || !attendee.role.permissions) {
+        this.logger.debug(
+          `[attendEvent] Loading complete attendee record with role and permissions`,
+        );
+        attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          user.id,
+        );
+      }
+
+      return attendee;
+    } catch (error) {
+      this.logger.error(
+        `[attendEvent] Error during event attendance processing: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 
   @Trace('event-management.cancelAttendingEvent')
   async cancelAttendingEvent(slug: string, userId: number) {
     await this.initializeRepository();
 
-    const user = await this.userService.getUserById(userId);
+    this.logger.debug(
+      `[cancelAttendingEvent] Processing cancellation for event ${slug} and user ${userId}`,
+    );
+
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    // Get the user to obtain their slug
+    const user = await this.userService.getUserById(
+      userId,
+      this.request.tenantId,
+    );
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    const resolved = await this.eventQueryService.resolveForAttendance(slug);
-
-    const result = await this.attendanceService.cancelAttendance(
-      resolved,
-      user.ulid,
+    // Log before calling cancel attendance
+    this.logger.debug(
+      `[cancelAttendingEvent] Calling cancelEventAttendanceBySlug for event ${slug}, userSlug ${user.slug}`,
     );
 
-    // For tenant events with a local record, return the full attendee entity
-    if (result.attendeeId) {
-      const attendee = await this.eventAttendeeService.findOne({
-        where: { id: result.attendeeId },
-        relations: ['event', 'user', 'role', 'role.permissions'],
-      });
-      if (attendee) return attendee;
+    const attendee =
+      await this.eventAttendeeService.cancelEventAttendanceBySlug(
+        slug,
+        user.slug,
+      );
+
+    this.logger.debug(
+      `[cancelAttendingEvent] Attendance cancelled, new status: ${attendee.status}, id: ${attendee.id}`,
+    );
+
+    // Verify the attendee has correct status
+    if (attendee.status !== EventAttendeeStatus.Cancelled) {
+      this.logger.warn(
+        `[cancelAttendingEvent] Unexpected status after cancellation: ${attendee.status}. Expected: ${EventAttendeeStatus.Cancelled}`,
+      );
     }
 
-    return {
-      id: null,
-      status: EventAttendeeStatus.Cancelled,
-      rsvpUri: result.rsvpUri,
-      eventUri: result.eventUri,
-    };
+    // Emit event for other parts of the system
+    this.eventEmitter.emit('event.attendee.cancelled', {
+      eventId: event.id,
+      userId,
+      tenantId: this.request.tenantId,
+      eventSlug: event.slug,
+      userSlug: user.slug,
+    });
+
+    return attendee;
   }
 
   @Trace('event-management.updateEventAttendee')
@@ -1629,11 +2147,6 @@ export class EventManagementService {
 
     await this.eventRepository.findOneOrFail({ where: { slug } });
 
-    // Capture previous status before the update
-    const existingAttendee =
-      await this.eventAttendeeService.showEventAttendee(attendeeId);
-    const previousStatus = existingAttendee?.status;
-
     await this.eventAttendeeService.updateEventAttendee(
       attendeeId,
       updateEventAttendeeDto,
@@ -1641,47 +2154,7 @@ export class EventManagementService {
 
     await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
 
-    // Use showEventAttendee for the return value (same as before)
-    const updatedAttendee =
-      await this.eventAttendeeService.showEventAttendee(attendeeId);
-
-    // Also look up with event/user relations for the attendance.changed emission
-    const attendeeWithRelations = await this.eventAttendeeService.findOne({
-      where: { id: attendeeId },
-      relations: ['event', 'user'],
-    });
-
-    // Map EventAttendeeStatus to short status strings
-    const statusMap: Record<string, string> = {
-      [EventAttendeeStatus.Confirmed]: 'going',
-      [EventAttendeeStatus.Cancelled]: 'notgoing',
-      [EventAttendeeStatus.Maybe]: 'maybe',
-      [EventAttendeeStatus.Pending]: 'pending',
-      [EventAttendeeStatus.Waitlist]: 'waitlist',
-    };
-    const newStatus = attendeeWithRelations?.status;
-    const newShortStatus = newStatus
-      ? statusMap[newStatus] || newStatus
-      : undefined;
-    const oldShortStatus = previousStatus
-      ? statusMap[previousStatus] || previousStatus
-      : undefined;
-
-    // Only emit if status actually changed and we have valid status values
-    if (newShortStatus && newShortStatus !== oldShortStatus) {
-      this.eventEmitter.emit('attendance.changed', {
-        status: newShortStatus,
-        previousStatus: oldShortStatus ?? null,
-        eventUri: null, // admin updates are always on tenant events
-        eventId: attendeeWithRelations?.event?.id ?? null,
-        eventSlug: attendeeWithRelations?.event?.slug ?? null,
-        userUlid: attendeeWithRelations?.user?.ulid ?? '',
-        userDid: null,
-        tenantId: this.request.tenantId,
-      } satisfies AttendanceChangedEvent);
-    }
-
-    return updatedAttendee;
+    return await this.eventAttendeeService.showEventAttendee(attendeeId);
   }
 
   async delete(id: number): Promise<void> {

@@ -65,8 +65,8 @@ describe('EventAttendeeService Edge Cases', () => {
     id: 1,
     slug: 'test-event',
     name: 'Test Event',
-    startDate: new Date('2024-12-31T00:00:00Z'),
-    endDate: new Date('2024-12-31T23:59:59Z'),
+    startDate: new Date('2099-12-31T00:00:00Z'),
+    endDate: new Date('2099-12-31T23:59:59Z'),
     sourceData: { rkey: 'test-rkey' },
   };
 
@@ -439,6 +439,15 @@ describe('EventAttendeeService Edge Cases', () => {
       };
 
       // Mock successful save for cancellation
+      mockRepository.save.mockResolvedValueOnce(cancelledAttendee);
+
+      // For Bluesky integration - mock the required services
+      mockUserService.findBySlug.mockResolvedValueOnce(mockUser as UserEntity);
+      mockBlueskyRsvpService.createRsvp.mockResolvedValueOnce({
+        success: true,
+        rsvpUri: 'at://did:plc:test123/app.bsky.feed.post/test-cancel-rsvp',
+      });
+      mockRepository.findOne.mockResolvedValueOnce(cancelledAttendee);
       mockRepository.save.mockResolvedValueOnce(cancelledAttendee);
 
       // First cancel

@@ -948,48 +948,6 @@ describe('BlueskyService', () => {
       );
     });
 
-    it('should include geo location when lat/lon present but no location text', async () => {
-      const event = {
-        name: 'Map Pin Only Event',
-        description: 'Event with coordinates but no address string',
-        startDate: new Date('2023-12-01T12:00:00Z'),
-        endDate: new Date('2023-12-01T14:00:00Z'),
-        type: EventType.InPerson,
-        status: EventStatus.Published,
-        createdAt: new Date('2023-11-01T00:00:00Z'),
-        location: null,
-        lat: 38.2527,
-        lon: -85.7585,
-      } as EventEntity;
-
-      mockAgentImplementation.com.atproto.repo.getRecord.mockRejectedValueOnce({
-        status: 404,
-      });
-
-      await service.createEventRecord(
-        event,
-        'test-did',
-        'test.handle',
-        'test-tenant',
-      );
-
-      expect(
-        mockAgentImplementation.com.atproto.repo.putRecord,
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({
-          record: expect.objectContaining({
-            locations: expect.arrayContaining([
-              expect.objectContaining({
-                $type: 'community.lexicon.location.geo',
-                latitude: '38.2527',
-                longitude: '-85.7585',
-              }),
-            ]),
-          }),
-        }),
-      );
-    });
-
     it('should use correct ATProto schema for URI locations ($type)', async () => {
       // Arrange
       const event = {

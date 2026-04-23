@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TerminusModule } from '@nestjs/terminus';
 import { MatrixController } from './matrix.controller';
 import { MatrixAppServiceController } from './controllers/matrix-appservice.controller';
@@ -36,6 +37,7 @@ configureMatrixLogging();
   imports: [
     ConfigModule.forFeature(matrixConfig),
     TerminusModule,
+    ScheduleModule.forRoot(),
     forwardRef(() => UserModule),
     TenantModule,
     forwardRef(() => AuthModule),

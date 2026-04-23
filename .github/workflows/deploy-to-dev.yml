@@ -42,12 +42,6 @@ jobs:
           path: atproto-devnet
           ref: v0.1.0
 
-      - name: Checkout contrail
-        uses: actions/checkout@v4
-        with:
-          repository: flo-bit/contrail
-          path: contrail-postgres-adapter
-
       - name: Run e2e tests
         id: relational
         run: >-

@@ -60,25 +60,6 @@ services:
     environment:
       - BSKY_FIREHOSE_URL=ws://jetstream:6008/subscribe
 
-  # ── Contrail: ATProto record ingestion from Jetstream ──────────
-  contrail:
-    build:
-      context: ../contrail-postgres-adapter
-    environment:
-      CONTRAIL_ADAPTER: postgres
-      DATABASE_URL: postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
-      JETSTREAM_URL: ws://jetstream:6008/subscribe
-      FLUSH_INTERVAL_MS: 0
-    volumes:
-      - ./contrail/config.ts:/app/config/contrail.config.ts:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      jetstream:
-        condition: service_started
-    networks:
-      - api-network
-    restart: unless-stopped
 
 networks:
   api-network:

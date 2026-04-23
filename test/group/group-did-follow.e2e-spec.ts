@@ -17,12 +17,6 @@ import {
   GroupStatus,
   GroupVisibility,
 } from '../../src/core/constants/constant';
-import {
-  getPublicDataSource,
-  seedAtprotoData,
-  buildEventRecord,
-} from '../utils/atproto-test-helper';
-import { AppDataSource } from '../../src/database/data-source';
 
 const SERVICE_API_KEY = process.env.SERVICE_API_KEYS?.split(',')[0];
 
@@ -265,7 +259,6 @@ describe('Group DID Follow (e2e)', () => {
       .substring(0, 24)
       .padEnd(24, 'a');
     const shadowDid = `did:plc:${shadowDidIdentifier}`;
-    const shadowEventUri = `at://${shadowDid}/community.lexicon.calendar.event/rkey${integrationTimestamp}`;
     let shadowEventSlug: string;
     let nativeEventSlug: string;
 
@@ -290,7 +283,7 @@ describe('Group DID Follow (e2e)', () => {
         status: 'published',
         visibility: 'public',
         source: {
-          id: shadowEventUri,
+          id: `at://${shadowDid}/community.lexicon.calendar.event/rkey${integrationTimestamp}`,
           type: 'bluesky',
           handle: `didfollowtest-${integrationTimestamp}.bsky.social`,
           metadata: {
@@ -317,55 +310,6 @@ describe('Group DID Follow (e2e)', () => {
       expect(shadowEventResponse.status).toBe(202);
       shadowEventSlug = shadowEventResponse.body.slug;
 
-      // The integration endpoint sets sourceId but NOT atprotoUri.
-      // enrichRecords() links Contrail records to tenant events via atprotoUri,
-      // so we must set it manually.
-      const tenantDs = AppDataSource(TESTING_TENANT_ID);
-      if (!tenantDs.isInitialized) await tenantDs.initialize();
-      await tenantDs.query(
-        `UPDATE events SET "atprotoUri" = $1 WHERE slug = $2`,
-        [shadowEventUri, shadowEventSlug],
-      );
-
-      // Seed the shadow event into Contrail. The integration endpoint saves the
-      // event to the tenant DB but does NOT
-      // publish it to PDS, so it will never flow through the
-      // PDS→Jetstream→Contrail pipeline. findEventsForGroup queries Contrail for
-      // events by followed DIDs, so we must seed it directly.
-      try {
-        const publicDs = await getPublicDataSource();
-        await seedAtprotoData(publicDs, {
-          events: [
-            {
-              uri: shadowEventUri,
-              did: shadowDid,
-              rkey: `rkey${integrationTimestamp}`,
-              cid: `bafyreitestcid${integrationTimestamp}`,
-              record: buildEventRecord({
-                name: shadowEventPayload.name,
-                description: shadowEventPayload.description,
-                startsAt: shadowEventPayload.startDate,
-                endsAt: shadowEventPayload.endDate,
-              }),
-            },
-          ],
-          rsvps: [],
-          identities: [
-            {
-              did: shadowDid,
-              handle: `didfollowtest-${integrationTimestamp}.bsky.social`,
-              pds: 'https://pds.test',
-            },
-          ],
-          geoEntries: [],
-        });
-      } catch (err) {
-        console.error(
-          'Failed to seed Contrail for group DID follow test:',
-          err,
-        );
-      }
-
       // Step 2: Create a native group event
       const nativeEvent = await createEvent(app, ownerToken, {
         name: `Native Group Event ${integrationTimestamp}`,
@@ -386,22 +330,6 @@ describe('Group DID Follow (e2e)', () => {
       expect(followResponse.status).toBe(201);
     });
 
-    afterAll(async () => {
-      // Cleanup: remove seeded Contrail row for the shadow event
-      try {
-        const publicDs = await getPublicDataSource();
-        await publicDs.query(
-          `DELETE FROM records_community_lexicon_calendar_event WHERE uri = $1`,
-          [shadowEventUri],
-        );
-        await publicDs.query(`DELETE FROM identities WHERE did = $1`, [
-          shadowDid,
-        ]);
-      } catch {
-        // Ignore cleanup errors
-      }
-    });
-
     it('should include shadow user event with origin external', async () => {
       if (!SERVICE_API_KEY) {
         console.warn('SERVICE_API_KEYS not set — skipping test');
@@ -415,11 +343,9 @@ describe('Group DID Follow (e2e)', () => {
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
 
-      // Find the shadow user's event — check by slug or atprotoUri
-      // (enrichRecords returns tenant slug when linked, did~rkey when not)
+      // Find the shadow user's event
       const externalEvent = response.body.find(
-        (e: any) =>
-          e.slug === shadowEventSlug || e.atprotoUri === shadowEventUri,
+        (e: any) => e.slug === shadowEventSlug,
       );
       expect(externalEvent).toBeDefined();
       expect(externalEvent.origin).toBe('external');
