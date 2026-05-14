@@ -23,6 +23,9 @@ lerna-debug.log*
 k6-tests/results/*.json
 !k6-tests/results/.gitkeep
 
+# Claude Code worktree state (per-developer, never commit)
+.claude/
+
 # IDEs and editors
 /.idea
 .project

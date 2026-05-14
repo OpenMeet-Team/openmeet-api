@@ -29,6 +29,7 @@ import { MailerModule } from './mailer/mailer.module';
 import { TenantConnectionService } from './tenant/tenant.service';
 import { TenantModule } from './tenant/tenant.module';
 import { EventModule } from './event/event.module';
+import { ContrailXrpcModule } from './contrail/contrail-xrpc.module';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantGuard } from './tenant/tenant.guard';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -150,6 +151,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     HomeModule,
     TenantModule,
     EventModule,
+    ContrailXrpcModule,
     CategoryModule,
     GroupModule,
     ActivityFeedModule,

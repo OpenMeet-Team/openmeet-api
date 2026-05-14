@@ -17,6 +17,8 @@
     "migration:revert:tenant": "env-cmd ts-node -r tsconfig-paths/register ./src/database/revert-tenant-migration.ts",
     "migration:run:prod": "ts-node -r tsconfig-paths/register  ./src/database/run-multi-tenant-migrations.ts",
     "backfill:activity-feeds": "env-cmd ts-node -r tsconfig-paths/register ./src/database/backfill-activity-feeds.ts",
+    "contrail:sync": "ts-node -r tsconfig-paths/register ./src/contrail/sync.ts",
+    "contrail:smoke": "ts-node -r tsconfig-paths/register ./src/contrail/smoke-server.ts",
     "seed:run:prod": "ts-node -r tsconfig-paths/register ./src/database/seeds/relational/run-seed.ts --tenant-config=./config/tenants.json",
     "schema:drop": "npm run typeorm -- --dataSource=src/database/data-source.ts schema:drop",
     "schema:reset": "env-cmd ts-node -r tsconfig-paths/register ./src/database/run-schema-reset.ts",
@@ -62,6 +64,7 @@
     "perf:report": "node k6-tests/compare-results.js"
   },
   "dependencies": {
+    "@atmo-dev/contrail": "0.6.0",
     "@atproto/api": "^0.13.31",
     "@atproto/crypto": "^0.4.5",
     "@atproto/identity": "^0.4.7",
