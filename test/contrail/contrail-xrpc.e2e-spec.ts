@@ -11,8 +11,16 @@ import { TESTING_APP_URL } from '../utils/constants';
  *
  * These hit raw Express middleware (no Nest controller / TenantGuard /
  * api prefix). The mount in main.ts is single-tenant by design.
+ *
+ * The suite is gated on CONTRAIL_DATABASE_URL: in CI / local envs where the
+ * Contrail PG isn't wired, the provider returns 503 by design (graceful
+ * degradation), so the assertions would all fail. Skip cleanly in that case.
  */
-describe('Contrail XRPC mount (e2e)', () => {
+const describeIfContrail = process.env.CONTRAIL_DATABASE_URL
+  ? describe
+  : describe.skip;
+
+describeIfContrail('Contrail XRPC mount (e2e)', () => {
   const app = TESTING_APP_URL;
 
   it('should respond on event.listRecords', async () => {
