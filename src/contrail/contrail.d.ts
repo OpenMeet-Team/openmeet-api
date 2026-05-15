@@ -35,6 +35,12 @@ declare module '@atmo-dev/contrail' {
     error(...args: unknown[]): void;
   }
 
+  export interface NetworkOverrides {
+    resolver?: unknown;
+    slingshotUrl?: string;
+    additionalAllowedHosts?: string[];
+  }
+
   export interface ContrailConfig {
     namespace: string;
     collections: Record<string, CollectionConfig>;
@@ -42,6 +48,7 @@ declare module '@atmo-dev/contrail' {
     jetstreams?: string[];
     logger?: Logger;
     notify?: boolean | string;
+    networkOverrides?: NetworkOverrides;
   }
 
   export type Database = unknown;
@@ -63,11 +70,16 @@ declare module '@atmo-dev/contrail' {
     onProgress?: (p: BackfillProgress) => void;
   }
 
+  export interface RunPersistentOptions {
+    signal?: AbortSignal;
+  }
+
   export class Contrail {
     constructor(options: ContrailOptions);
     init(db?: Database, spacesDb?: Database): Promise<void>;
     discover(db?: Database): Promise<string[]>;
     backfill(options?: BackfillAllOptions, db?: Database): Promise<number>;
+    runPersistent(options?: RunPersistentOptions): Promise<void>;
   }
 }
 
