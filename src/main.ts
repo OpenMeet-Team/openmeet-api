@@ -17,6 +17,7 @@ import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { getBuildInfo } from './utils/version';
 import cookieParser from 'cookie-parser';
+import { ContrailProvider } from './contrail/contrail.provider';
 
 // Add direct console.log for startup debugging - these will show even before logger is configured
 const startupLog = (message: string) => {
@@ -84,6 +85,49 @@ async function bootstrap() {
       ],
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     });
+    // Contrail XRPC mount: /xrpc/net.openmeet.* served by ContrailProvider.
+    // Registered as raw Express middleware so it bypasses Nest's global prefix
+    // and TenantGuard (the new XRPC layer is single-tenant by design).
+    const contrailProvider = app.get(ContrailProvider);
+    app.use(
+      '/xrpc',
+      async (
+        req: import('express').Request,
+        res: import('express').Response,
+        next: import('express').NextFunction,
+      ) => {
+        // Scope: only intercept net.openmeet.* methods. Mounting at /xrpc
+        // (not /xrpc/net.openmeet) is required because Express's prefix
+        // matcher needs a path-boundary after the mount path; the dot in
+        // `net.openmeet.event.listRecords` is not a boundary.
+        if (!req.url.startsWith('/net.openmeet.')) return next();
+        try {
+          const fullPath = `/xrpc${req.url}`;
+          const url = new URL(
+            fullPath,
+            `http://${req.headers.host ?? 'localhost'}`,
+          );
+          const headers: Record<string, string> = {};
+          for (const [k, v] of Object.entries(req.headers)) {
+            if (typeof v === 'string') headers[k] = v;
+            else if (Array.isArray(v)) headers[k] = v.join(', ');
+          }
+          const fetchRequest = new globalThis.Request(url.toString(), {
+            method: req.method,
+            headers,
+          });
+          const fetchResponse = await contrailProvider.handle(fetchRequest);
+          res.status(fetchResponse.status);
+          fetchResponse.headers.forEach((value, key) =>
+            res.setHeader(key, value),
+          );
+          res.send(await fetchResponse.text());
+        } catch (err) {
+          next(err);
+        }
+      },
+    );
+
     startupLog('NestJS application created successfully');
 
     // Choose logger based on environment
