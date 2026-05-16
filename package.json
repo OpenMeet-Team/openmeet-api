@@ -69,6 +69,7 @@
     "@atmo-dev/contrail-appview": "file:../contrail-pr30/packages/contrail-appview"
   },
   "dependencies": {
+    "@atcute/identity-resolver": "^1.2.3",
     "@atmo-dev/contrail": "file:../contrail-pr30/packages/contrail",
     "@atproto/api": "^0.13.31",
     "@atproto/crypto": "^0.4.5",
@@ -231,7 +232,8 @@
       "<rootDir>/../test/jest-setup.ts"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!matrix-js-sdk)"
+      "node_modules/(?!matrix-js-sdk)",
+      "contrail-pr30/packages/.*/dist/"
     ],
     "maxWorkers": "75%",
     "workerIdleMemoryLimit": "512MB",
