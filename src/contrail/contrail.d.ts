@@ -95,3 +95,15 @@ declare module '@atmo-dev/contrail/postgres' {
   import type { Database } from '@atmo-dev/contrail';
   export function createPostgresDatabase(pool: Pool): Database;
 }
+
+declare module '@atcute/identity-resolver' {
+  export class CompositeDidDocumentResolver {
+    constructor(config: { methods: Record<string, unknown> });
+  }
+  export class PlcDidDocumentResolver {
+    constructor(config: { apiUrl: string });
+  }
+  export class WebDidDocumentResolver {
+    constructor();
+  }
+}

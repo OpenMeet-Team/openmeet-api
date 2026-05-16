@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import pg from 'pg';
 import type { Contrail } from '@atmo-dev/contrail';
-import { contrailConfig } from './contrail.config';
+import { buildContrailConfig } from './contrail.config';
 import { withInitLock } from './contrail-init-lock';
 import { loadContrail } from './contrail-loader';
 
@@ -40,8 +40,9 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
     } as pg.PoolConfig);
 
     const { pkg, server, postgres } = await loadContrail();
+    const config = await buildContrailConfig();
     const db = postgres.createPostgresDatabase(this.pool);
-    this.contrail = new pkg.Contrail({ ...contrailConfig, db });
+    this.contrail = new pkg.Contrail({ ...config, db });
 
     await withInitLock(this.pool, INIT_LOCK_KEY, async () => {
       await this.pool!.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
@@ -52,7 +53,7 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
 
     const redactedUrl = databaseUrl.replace(/:[^:@/]+@/, ':***@');
     this.logger.log(
-      `Contrail initialized; namespace=${contrailConfig.namespace}, schema=${schema}, db=${redactedUrl}`,
+      `Contrail initialized; namespace=${config.namespace}, schema=${schema}, db=${redactedUrl}`,
     );
   }
 

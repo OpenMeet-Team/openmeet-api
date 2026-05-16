@@ -12,7 +12,7 @@
  *   npm run contrail:sync
  */
 import pg from 'pg';
-import { contrailConfig } from './contrail.config';
+import { buildContrailConfig } from './contrail.config';
 import { withInitLock } from './contrail-init-lock';
 import { loadContrail } from './contrail-loader';
 
@@ -43,8 +43,9 @@ async function main(): Promise<void> {
 
   try {
     const { pkg, postgres } = await loadContrail();
+    const config = await buildContrailConfig();
     const db = postgres.createPostgresDatabase(pool);
-    const contrail = new pkg.Contrail({ ...contrailConfig, db });
+    const contrail = new pkg.Contrail({ ...config, db });
     const syncStart = Date.now();
 
     console.log(`=== Contrail sync (schema=${schema}) ===\n`);
