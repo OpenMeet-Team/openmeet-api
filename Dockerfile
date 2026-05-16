@@ -59,12 +59,3 @@ EXPOSE 3000
 
 # CMD npm run migration:run:prod && npm run seed:run:prod && npm run start:prod
 CMD npm run start:prod
-
-
-# ---- Ingest ----
-# Same artifact as `release`, different default command. The contrail live-ingest
-# Deployment streams ATProto records from Jetstream into Postgres continuously;
-# no HTTP port. Process liveness is the sole health signal (kubelet restarts on
-# exit). See src/contrail/ingest.ts and the Phase D plan.
-FROM release AS ingest
-CMD ["npm", "run", "contrail:ingest"]
