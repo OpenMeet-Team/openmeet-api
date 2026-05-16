@@ -64,8 +64,12 @@
     "perf:compare": "mkdir -p k6-tests/results && MODE=comparison k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/latest.json",
     "perf:report": "node k6-tests/compare-results.js"
   },
+  "overrides": {
+    "@atmo-dev/contrail-base": "file:../contrail-pr30/packages/contrail-base",
+    "@atmo-dev/contrail-appview": "file:../contrail-pr30/packages/contrail-appview"
+  },
   "dependencies": {
-    "@atmo-dev/contrail": "0.6.0",
+    "@atmo-dev/contrail": "file:../contrail-pr30/packages/contrail",
     "@atproto/api": "^0.13.31",
     "@atproto/crypto": "^0.4.5",
     "@atproto/identity": "^0.4.7",
