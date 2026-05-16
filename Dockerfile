@@ -8,10 +8,15 @@ COPY package*.json ./
 # Copy ts config
 COPY tsconfig.json ./
 
+# Vendored @atmo-dev/contrail* tarballs referenced by file: deps in package.json.
+# Required before npm ci; regenerated via scripts/prepare-contrail-deps.sh.
+# Drops out when upstream publishes to npm (PR #44 follow-up).
+COPY vendor/ ./vendor/
+
 
 # ---- Dependencies ----
 FROM base AS dependencies
-# Install production dependencies 
+# Install production dependencies
 RUN npm ci
 RUN npm install -g ts-node
 
@@ -54,3 +59,12 @@ EXPOSE 3000
 
 # CMD npm run migration:run:prod && npm run seed:run:prod && npm run start:prod
 CMD npm run start:prod
+
+
+# ---- Ingest ----
+# Same artifact as `release`, different default command. The contrail live-ingest
+# Deployment streams ATProto records from Jetstream into Postgres continuously;
+# no HTTP port. Process liveness is the sole health signal (kubelet restarts on
+# exit). See src/contrail/ingest.ts and the Phase D plan.
+FROM release AS ingest
+CMD ["npm", "run", "contrail:ingest"]
