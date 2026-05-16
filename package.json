@@ -18,6 +18,7 @@
     "migration:run:prod": "ts-node -r tsconfig-paths/register  ./src/database/run-multi-tenant-migrations.ts",
     "backfill:activity-feeds": "env-cmd ts-node -r tsconfig-paths/register ./src/database/backfill-activity-feeds.ts",
     "contrail:sync": "node dist/contrail/sync.js",
+    "contrail:ingest": "node dist/contrail/ingest.js",
     "contrail:smoke": "ts-node -r tsconfig-paths/register ./src/contrail/smoke-server.ts",
     "seed:run:prod": "ts-node -r tsconfig-paths/register ./src/database/seeds/relational/run-seed.ts --tenant-config=./config/tenants.json",
     "schema:drop": "npm run typeorm -- --dataSource=src/database/data-source.ts schema:drop",
