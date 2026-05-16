@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# Build the three @atmo-dev/contrail* packages from a sibling fork worktree
+# Build the five @atmo-dev/contrail* packages from a sibling fork worktree
 # and place the resulting tarballs under vendor/ with stable filenames.
 #
 # Local: assumes ../contrail-pr30 exists (override with CONTRAIL_DIR).
 # Stable names (atmo-dev-contrail.tgz, etc.) let package.json pin paths
 # without churn across fork bumps.
 #
+# vendor/*.tgz are TRACKED in git so CI (deploy-to-dev.yml: npm ci +
+# docker build) can resolve the file: deps without a fork checkout.
+#
 # Regeneration workflow on a fork bump:
 #   scripts/prepare-contrail-deps.sh
-#   rm -rf node_modules package-lock.json && npm install
-#   git add package-lock.json && git commit -m "chore(contrail): bump fork pin"
+#   npm install                                     # only touches lockfile entries for the tarballs
+#   git add vendor/*.tgz package-lock.json
+#   git commit -m "chore(contrail): bump fork pin to <new-sha>"
 #
-# Drop this script once @atmo-dev/contrail* publish to npm (post PR #44 merge).
+# Drop this script + vendor/ entirely once @atmo-dev/contrail* publish
+# to npm (post PR #44 merge).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
