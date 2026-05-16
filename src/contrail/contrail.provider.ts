@@ -6,11 +6,9 @@ import {
 } from '@nestjs/common';
 import pg from 'pg';
 import type { Contrail } from '@atmo-dev/contrail';
-import { contrailConfig } from './contrail.config';
-import { withInitLock } from './contrail-init-lock';
+import { buildContrailConfig } from './contrail.config';
 import { loadContrail } from './contrail-loader';
 
-const INIT_LOCK_KEY = 'net.openmeet.contrail.init';
 const DEFAULT_SCHEMA = 'contrail';
 
 @Injectable()
@@ -40,19 +38,18 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
     } as pg.PoolConfig);
 
     const { pkg, server, postgres } = await loadContrail();
+    const config = await buildContrailConfig();
     const db = postgres.createPostgresDatabase(this.pool);
-    this.contrail = new pkg.Contrail({ ...contrailConfig, db });
+    this.contrail = new pkg.Contrail({ ...config, db });
 
-    await withInitLock(this.pool, INIT_LOCK_KEY, async () => {
-      await this.pool!.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-      await this.contrail!.init();
-    });
+    await this.pool!.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+    await this.contrail!.init();
 
     this.handler = server.createHandler(this.contrail);
 
     const redactedUrl = databaseUrl.replace(/:[^:@/]+@/, ':***@');
     this.logger.log(
-      `Contrail initialized; namespace=${contrailConfig.namespace}, schema=${schema}, db=${redactedUrl}`,
+      `Contrail initialized; namespace=${config.namespace}, schema=${schema}, db=${redactedUrl}`,
     );
   }
 

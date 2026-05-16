@@ -4,6 +4,9 @@ RUN apk add --no-cache bash
 RUN npm i -g @nestjs/cli typescript ts-node
 
 COPY package*.json /tmp/app/
+# Vendored @atmo-dev/contrail* tarballs referenced by file: deps; required for
+# npm install. Drops out when upstream publishes (PR #44 follow-up).
+COPY vendor/ /tmp/app/vendor/
 RUN cd /tmp/app && npm install
 
 COPY . /usr/src/app

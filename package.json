@@ -18,6 +18,7 @@
     "migration:run:prod": "ts-node -r tsconfig-paths/register  ./src/database/run-multi-tenant-migrations.ts",
     "backfill:activity-feeds": "env-cmd ts-node -r tsconfig-paths/register ./src/database/backfill-activity-feeds.ts",
     "contrail:sync": "node dist/contrail/sync.js",
+    "contrail:ingest": "node dist/contrail/ingest.js",
     "contrail:smoke": "ts-node -r tsconfig-paths/register ./src/contrail/smoke-server.ts",
     "seed:run:prod": "ts-node -r tsconfig-paths/register ./src/database/seeds/relational/run-seed.ts --tenant-config=./config/tenants.json",
     "schema:drop": "npm run typeorm -- --dataSource=src/database/data-source.ts schema:drop",
@@ -63,8 +64,15 @@
     "perf:compare": "mkdir -p k6-tests/results && MODE=comparison k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/latest.json",
     "perf:report": "node k6-tests/compare-results.js"
   },
+  "overrides": {
+    "@atmo-dev/contrail-base": "file:./vendor/atmo-dev-contrail-base.tgz",
+    "@atmo-dev/contrail-appview": "file:./vendor/atmo-dev-contrail-appview.tgz",
+    "@atmo-dev/contrail-authority": "file:./vendor/atmo-dev-contrail-authority.tgz",
+    "@atmo-dev/contrail-record-host": "file:./vendor/atmo-dev-contrail-record-host.tgz"
+  },
   "dependencies": {
-    "@atmo-dev/contrail": "0.6.0",
+    "@atcute/identity-resolver": "^1.2.3",
+    "@atmo-dev/contrail": "file:./vendor/atmo-dev-contrail.tgz",
     "@atproto/api": "^0.13.31",
     "@atproto/crypto": "^0.4.5",
     "@atproto/identity": "^0.4.7",
@@ -226,7 +234,8 @@
       "<rootDir>/../test/jest-setup.ts"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!matrix-js-sdk)"
+      "node_modules/(?!matrix-js-sdk)",
+      "contrail-pr30/packages/.*/dist/"
     ],
     "maxWorkers": "75%",
     "workerIdleMemoryLimit": "512MB",

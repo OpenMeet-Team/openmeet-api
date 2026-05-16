@@ -12,11 +12,9 @@
  *   npm run contrail:sync
  */
 import pg from 'pg';
-import { contrailConfig } from './contrail.config';
-import { withInitLock } from './contrail-init-lock';
+import { buildContrailConfig } from './contrail.config';
 import { loadContrail } from './contrail-loader';
 
-const INIT_LOCK_KEY = 'net.openmeet.contrail.init';
 const DEFAULT_SCHEMA = 'contrail';
 
 function elapsed(start: number): string {
@@ -43,16 +41,15 @@ async function main(): Promise<void> {
 
   try {
     const { pkg, postgres } = await loadContrail();
+    const config = await buildContrailConfig();
     const db = postgres.createPostgresDatabase(pool);
-    const contrail = new pkg.Contrail({ ...contrailConfig, db });
+    const contrail = new pkg.Contrail({ ...config, db });
     const syncStart = Date.now();
 
     console.log(`=== Contrail sync (schema=${schema}) ===\n`);
 
-    await withInitLock(pool, INIT_LOCK_KEY, async () => {
-      await pool.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-      await contrail.init();
-    });
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+    await contrail.init();
 
     console.log('--- Discovery ---');
     const discoveryStart = Date.now();
