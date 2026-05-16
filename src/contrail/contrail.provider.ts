@@ -7,10 +7,8 @@ import {
 import pg from 'pg';
 import type { Contrail } from '@atmo-dev/contrail';
 import { buildContrailConfig } from './contrail.config';
-import { withInitLock } from './contrail-init-lock';
 import { loadContrail } from './contrail-loader';
 
-const INIT_LOCK_KEY = 'net.openmeet.contrail.init';
 const DEFAULT_SCHEMA = 'contrail';
 
 @Injectable()
@@ -44,10 +42,8 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
     const db = postgres.createPostgresDatabase(this.pool);
     this.contrail = new pkg.Contrail({ ...config, db });
 
-    await withInitLock(this.pool, INIT_LOCK_KEY, async () => {
-      await this.pool!.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-      await this.contrail!.init();
-    });
+    await this.pool!.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+    await this.contrail!.init();
 
     this.handler = server.createHandler(this.contrail);
 
