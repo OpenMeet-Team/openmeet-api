@@ -74,11 +74,43 @@ declare module '@atmo-dev/contrail' {
     signal?: AbortSignal;
   }
 
+  export interface CollectionStats {
+    missing: number;
+    staleUpdates: number;
+    inSync: number;
+  }
+
+  export interface RefreshProgress {
+    usersComplete: number;
+    usersTotal: number;
+    usersFailed: number;
+    recordsScanned: number;
+  }
+
+  export interface RefreshResult {
+    byCollection: Record<string, CollectionStats>;
+    total: CollectionStats;
+    usersScanned: number;
+    usersFailed: number;
+    ignoreWindowMs: number;
+    elapsedMs: number;
+  }
+
+  export interface RefreshOptions {
+    concurrency?: number;
+    ignoreWindowMs?: number;
+    nsids?: string[];
+    onProgress?: (p: RefreshProgress) => void;
+    maxRetries?: number;
+    requestTimeout?: number;
+  }
+
   export class Contrail {
     constructor(options: ContrailOptions);
     init(db?: Database, spacesDb?: Database): Promise<void>;
     discover(db?: Database): Promise<string[]>;
     backfill(options?: BackfillAllOptions, db?: Database): Promise<number>;
+    refresh(options?: RefreshOptions, db?: Database): Promise<RefreshResult>;
     runPersistent(options?: RunPersistentOptions): Promise<void>;
   }
 }
