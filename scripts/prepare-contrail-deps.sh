@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the five @atmo-dev/contrail* packages from a sibling fork worktree
+# Build the six @atmo-dev/contrail* packages from a sibling fork worktree
 # and place the resulting tarballs under vendor/ with stable filenames.
 #
 # Local: assumes ../contrail-pr30 exists (override with CONTRAIL_DIR).
@@ -32,11 +32,11 @@ fi
 echo "building @atmo-dev/contrail* from $CONTRAIL_DIR ($(git -C "$CONTRAIL_DIR" rev-parse --short HEAD))"
 cd "$CONTRAIL_DIR"
 pnpm install --frozen-lockfile
-pnpm -r --filter "@atmo-dev/contrail" --filter "@atmo-dev/contrail-base" --filter "@atmo-dev/contrail-appview" --filter "@atmo-dev/contrail-authority" --filter "@atmo-dev/contrail-record-host" build
+pnpm -r --filter "@atmo-dev/contrail" --filter "@atmo-dev/contrail-base" --filter "@atmo-dev/contrail-appview" --filter "@atmo-dev/contrail-authority" --filter "@atmo-dev/contrail-record-host" --filter "@atmo-dev/contrail-community" build
 
 mkdir -p "$REPO_ROOT/vendor"
 
-for pkg in contrail contrail-base contrail-appview contrail-authority contrail-record-host; do
+for pkg in contrail contrail-base contrail-appview contrail-authority contrail-record-host contrail-community; do
   cd "$CONTRAIL_DIR/packages/$pkg"
   packed=$(pnpm pack --silent | tail -1)
   dest="$REPO_ROOT/vendor/atmo-dev-${pkg}.tgz"

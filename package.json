@@ -73,6 +73,7 @@
   "dependencies": {
     "@atcute/identity-resolver": "^1.2.3",
     "@atmo-dev/contrail": "file:./vendor/atmo-dev-contrail.tgz",
+    "@atmo-dev/contrail-community": "file:./vendor/atmo-dev-contrail-community.tgz",
     "@atproto/api": "^0.13.31",
     "@atproto/crypto": "^0.4.5",
     "@atproto/identity": "^0.4.7",
