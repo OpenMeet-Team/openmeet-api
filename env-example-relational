@@ -187,3 +187,55 @@ PDS_CREDENTIAL_KEY_2=
 #   -H "Authorization: Basic $(echo -n 'admin:PASSWORD' | base64)" \
 #   -H "Content-Type: application/json" -d '{"useCount": 999999}'
 PDS_INVITE_CODE=
+
+# ============================================================================
+# Contrail (AT Protocol appview) — public event/RSVP read layer + community
+# ============================================================================
+# The /xrpc/net.openmeet.* mount is single-tenant and lives in main.ts (no
+# Nest controller, TenantGuard, or /api prefix). It serves public Contrail
+# records out of a Postgres populated by `npm run contrail:sync`.
+
+# Connection string for the Contrail Postgres. REQUIRED to enable the mount —
+# when unset, ContrailProvider does not initialize and every /xrpc/net.openmeet.*
+# request returns 503 (graceful degradation). Can point at the same local
+# Postgres as the API; records live in the CONTRAIL_SCHEMA below.
+CONTRAIL_DATABASE_URL=
+# Schema the Contrail tables live in (created on init if absent). Default: contrail
+CONTRAIL_SCHEMA=contrail
+
+# --- Community + spaces (group-owned records) -------------------------------
+# Community XRPC routes (/xrpc/net.openmeet.community.*) mount ONLY when BOTH
+# the community block AND spaces.authority below are configured. With just one,
+# the routes are silently absent (404). All community routes are auth-gated
+# (service-auth JWT); an unauthenticated request to a mounted route returns 401.
+
+# AES-GCM key that envelope-encrypts stored group rotation keys + PDS app
+# passwords. Enables the `community` config branch. Vendor config field is
+# `masterKey`; we feed it this var.
+# Generate with: openssl rand -base64 32
+CONTRAIL_COMMUNITY_ENCRYPTION_KEY=
+# Comma-separated PDS endpoints the community integration may provision against.
+CONTRAIL_ALLOWED_PDS_ENDPOINTS=
+
+# Base64-encoded JSON CredentialKeyMaterial (P-256 / ES256 private+public JWK).
+# Enables the `spaces.authority` config branch. The authority signs space
+# credentials and is the issuer the service-auth verifier trusts.
+# Generate with:
+#   node -e 'crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]).then(async p=>{const privateKey=await crypto.subtle.exportKey("jwk",p.privateKey);const publicKey=await crypto.subtle.exportKey("jwk",p.publicKey);console.log(Buffer.from(JSON.stringify({privateKey,publicKey})).toString("base64"))})'
+CONTRAIL_AUTHORITY_SIGNING_KEY=
+# DID the authority issues credentials as. Default: did:web:api.openmeet.net
+SERVICE_DID=
+# Lexicon type for authored spaces. Default: tools.atmo.event.space
+CONTRAIL_SPACE_TYPE=
+
+# --- Network overrides (all optional) ---------------------------------------
+# DID PLC directory URL (also used as the community plcDirectory).
+CONTRAIL_PLC_URL=
+# Slingshot resolver URL.
+CONTRAIL_SLINGSHOT_URL=
+# Comma-separated additional allowed PDS hosts for record resolution.
+CONTRAIL_ALLOWED_HOSTS=
+# Comma-separated Jetstream firehose URLs (live ingest).
+CONTRAIL_JETSTREAM_URLS=
+# Comma-separated relay URLs.
+CONTRAIL_RELAYS=
