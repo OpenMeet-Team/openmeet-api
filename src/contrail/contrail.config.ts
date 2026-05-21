@@ -55,11 +55,14 @@ export async function buildContrailConfig(): Promise<ContrailConfig> {
       }
     : undefined;
 
-  // community — present only when the master key is configured.
-  const masterKey = process.env.CONTRAIL_COMMUNITY_MASTER_KEY;
-  const community = masterKey
+  // community — present only when the encryption key is configured.
+  // `masterKey` is the @atmo-dev/contrail-community config field (vendor API);
+  // we feed it our CONTRAIL_COMMUNITY_ENCRYPTION_KEY env var. It's the AES-GCM
+  // key that envelope-encrypts stored group rotation keys + PDS app passwords.
+  const encryptionKey = process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY;
+  const community = encryptionKey
     ? {
-        masterKey,
+        masterKey: encryptionKey,
         plcDirectory: plcUrl,
         allowProvisioning: false, // default-deny until Step 3
         allowedPdsEndpoints:

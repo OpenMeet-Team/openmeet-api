@@ -42,7 +42,7 @@ maybe('contrail-community wiring', () => {
   });
 
   it('should NOT create the communities table without the integration', async () => {
-    delete process.env.CONTRAIL_COMMUNITY_MASTER_KEY;
+    delete process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY;
     delete process.env.CONTRAIL_AUTHORITY_SIGNING_KEY;
 
     const { pkg, postgres } = await loadContrail();
@@ -62,7 +62,7 @@ maybe('contrail-community wiring', () => {
     process.env.CONTRAIL_AUTHORITY_SIGNING_KEY = Buffer.from(
       JSON.stringify(signing),
     ).toString('base64');
-    process.env.CONTRAIL_COMMUNITY_MASTER_KEY =
+    process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY =
       randomBytes(32).toString('base64');
 
     const config = await buildContrailConfig();
