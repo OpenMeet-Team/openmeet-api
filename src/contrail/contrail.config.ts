@@ -1,4 +1,4 @@
-import type { ContrailConfig } from '@atmo-dev/contrail';
+import type { ContrailConfig, CredentialKeyMaterial } from '@atmo-dev/contrail';
 
 // @atcute/identity-resolver ships as ESM-only. Mirrors the trick in
 // contrail-loader.ts so the dynamic import survives `module: commonjs`.
@@ -7,6 +7,14 @@ const esmImport = new Function('specifier', 'return import(specifier)') as <
 >(
   specifier: string,
 ) => Promise<T>;
+
+function parseAuthoritySigningKey(
+  raw?: string,
+): CredentialKeyMaterial | undefined {
+  if (!raw) return undefined;
+  const json = Buffer.from(raw, 'base64').toString('utf8');
+  return JSON.parse(json) as CredentialKeyMaterial;
+}
 
 export async function buildContrailConfig(): Promise<ContrailConfig> {
   const plcUrl = process.env.CONTRAIL_PLC_URL;
@@ -32,6 +40,32 @@ export async function buildContrailConfig(): Promise<ContrailConfig> {
     resolver || slingshotUrl || additionalAllowedHosts
       ? { resolver, slingshotUrl, additionalAllowedHosts }
       : undefined;
+
+  // spaces.authority — present only when the signing key is configured.
+  const authoritySigningKey = parseAuthoritySigningKey(
+    process.env.CONTRAIL_AUTHORITY_SIGNING_KEY,
+  );
+  const spaces = authoritySigningKey
+    ? {
+        authority: {
+          type: process.env.CONTRAIL_SPACE_TYPE ?? 'tools.atmo.event.space',
+          serviceDid: process.env.SERVICE_DID ?? 'did:web:api.openmeet.net',
+          signing: authoritySigningKey,
+        },
+      }
+    : undefined;
+
+  // community — present only when the master key is configured.
+  const masterKey = process.env.CONTRAIL_COMMUNITY_MASTER_KEY;
+  const community = masterKey
+    ? {
+        masterKey,
+        plcDirectory: plcUrl,
+        allowProvisioning: false, // default-deny until Step 3
+        allowedPdsEndpoints:
+          process.env.CONTRAIL_ALLOWED_PDS_ENDPOINTS?.split(',') || undefined,
+      }
+    : undefined;
 
   return {
     namespace: 'net.openmeet',
@@ -77,5 +111,7 @@ export async function buildContrailConfig(): Promise<ContrailConfig> {
     jetstreams: process.env.CONTRAIL_JETSTREAM_URLS?.split(',') || undefined,
     relays: process.env.CONTRAIL_RELAYS?.split(',') || undefined,
     networkOverrides,
+    ...(spaces ? { spaces } : {}),
+    ...(community ? { community } : {}),
   };
 }
