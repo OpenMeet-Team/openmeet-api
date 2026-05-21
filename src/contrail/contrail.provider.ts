@@ -5,9 +5,9 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import pg from 'pg';
-import type { Contrail } from '@atmo-dev/contrail';
+import type { Contrail, CommunityIntegration } from '@atmo-dev/contrail';
 import { buildContrailConfig } from './contrail.config';
-import { loadContrail } from './contrail-loader';
+import { loadContrail, loadContrailCommunity } from './contrail-loader';
 
 const DEFAULT_SCHEMA = 'contrail';
 
@@ -17,6 +17,7 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
   private pool?: pg.Pool;
   private contrail?: Contrail;
   private handler?: (request: Request) => Promise<Response>;
+  private communityEnabled = false;
 
   async onModuleInit(): Promise<void> {
     const databaseUrl = process.env.CONTRAIL_DATABASE_URL;
@@ -40,7 +41,18 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
     const { pkg, server, postgres } = await loadContrail();
     const config = await buildContrailConfig();
     const db = postgres.createPostgresDatabase(this.pool);
-    this.contrail = new pkg.Contrail({ ...config, db });
+
+    let communityIntegration: CommunityIntegration | undefined;
+    if (config.community) {
+      const communityPkg = await loadContrailCommunity();
+      communityIntegration = communityPkg.createCommunityIntegration({
+        db,
+        config,
+      });
+      this.communityEnabled = true;
+    }
+
+    this.contrail = new pkg.Contrail({ ...config, db, communityIntegration });
 
     await this.pool!.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
     await this.contrail!.init();
@@ -49,7 +61,7 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
 
     const redactedUrl = databaseUrl.replace(/:[^:@/]+@/, ':***@');
     this.logger.log(
-      `Contrail initialized; namespace=${config.namespace}, schema=${schema}, db=${redactedUrl}`,
+      `Contrail initialized; namespace=${config.namespace}, schema=${schema}, community=${this.communityEnabled ? 'enabled' : 'disabled'}, db=${redactedUrl}`,
     );
   }
 
@@ -59,6 +71,10 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
 
   isReady(): boolean {
     return this.handler !== undefined;
+  }
+
+  isCommunityReady(): boolean {
+    return this.communityEnabled && this.handler !== undefined;
   }
 
   async handle(request: Request): Promise<Response> {
