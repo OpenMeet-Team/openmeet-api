@@ -39,12 +39,34 @@ describe('buildContrailConfig community/spaces gating', () => {
     expect(config.spaces?.authority?.signing).toBeDefined();
   });
 
-  it('should add community with default-deny provisioning when the encryption key is set', async () => {
+  it('should add community with default-deny provisioning when BOTH keys are set', async () => {
+    // Community needs the authority to sign/verify the service-auth credentials
+    // its routes depend on, so it only assembles when spaces.authority is also
+    // present (i.e. the authority signing key is configured too).
     process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY = FAKE_ENCRYPTION_KEY;
+    process.env.CONTRAIL_AUTHORITY_SIGNING_KEY = FAKE_SIGNING;
     const config = await buildContrailConfig();
     const community = config.community as Record<string, unknown>;
     // `masterKey` is the vendor (contrail-community) config field name.
     expect(community.masterKey).toBe(FAKE_ENCRYPTION_KEY);
     expect(community.allowProvisioning).toBe(false);
+  });
+
+  it('should drop community (and warn) when the encryption key is set without the authority signing key', async () => {
+    process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY = FAKE_ENCRYPTION_KEY;
+    delete process.env.CONTRAIL_AUTHORITY_SIGNING_KEY;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const config = await buildContrailConfig();
+
+    // Partial config is not a valid mount: without spaces.authority the
+    // community routes can't function, so the block is dropped rather than
+    // handed half-configured to the vendor integration at startup.
+    expect(config.community).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('CONTRAIL_AUTHORITY_SIGNING_KEY'),
+    );
+
+    warn.mockRestore();
   });
 });

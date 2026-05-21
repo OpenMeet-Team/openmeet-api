@@ -55,20 +55,32 @@ export async function buildContrailConfig(): Promise<ContrailConfig> {
       }
     : undefined;
 
-  // community — present only when the encryption key is configured.
-  // `masterKey` is the @atmo-dev/contrail-community config field (vendor API);
-  // we feed it our CONTRAIL_COMMUNITY_ENCRYPTION_KEY env var. It's the AES-GCM
-  // key that envelope-encrypts stored group rotation keys + PDS app passwords.
+  // community — present only when BOTH the encryption key AND spaces.authority
+  // are configured. The community routes are service-auth gated against
+  // credentials the authority signs/verifies, so an encryption key alone is a
+  // half-configured mount that the vendor integration can't serve. Drop it
+  // (and warn) rather than hand a partial config to createCommunityIntegration
+  // at startup. `masterKey` is the @atmo-dev/contrail-community config field
+  // (vendor API); we feed it our CONTRAIL_COMMUNITY_ENCRYPTION_KEY env var —
+  // the AES-GCM key that envelope-encrypts stored rotation keys + app passwords.
   const encryptionKey = process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY;
-  const community = encryptionKey
-    ? {
-        masterKey: encryptionKey,
-        plcDirectory: plcUrl,
-        allowProvisioning: false, // default-deny until Step 3
-        allowedPdsEndpoints:
-          process.env.CONTRAIL_ALLOWED_PDS_ENDPOINTS?.split(',') || undefined,
-      }
-    : undefined;
+  if (encryptionKey && !spaces) {
+    console.warn(
+      'CONTRAIL_COMMUNITY_ENCRYPTION_KEY is set but CONTRAIL_AUTHORITY_SIGNING_KEY ' +
+        'is not; community routes need spaces.authority to function. Dropping the ' +
+        'community config — set both keys to mount /xrpc/net.openmeet.community.*.',
+    );
+  }
+  const community =
+    encryptionKey && spaces
+      ? {
+          masterKey: encryptionKey,
+          plcDirectory: plcUrl,
+          allowProvisioning: false, // default-deny until Step 3
+          allowedPdsEndpoints:
+            process.env.CONTRAIL_ALLOWED_PDS_ENDPOINTS?.split(',') || undefined,
+        }
+      : undefined;
 
   return {
     namespace: 'net.openmeet',

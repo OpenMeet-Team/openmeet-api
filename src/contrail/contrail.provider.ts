@@ -73,10 +73,6 @@ export class ContrailProvider implements OnModuleInit, OnModuleDestroy {
     return this.handler !== undefined;
   }
 
-  isCommunityReady(): boolean {
-    return this.communityEnabled && this.handler !== undefined;
-  }
-
   async handle(request: Request): Promise<Response> {
     if (!this.handler) {
       return new Response(
