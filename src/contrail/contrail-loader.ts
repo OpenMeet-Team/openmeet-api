@@ -8,6 +8,14 @@ const esmImport = new Function('specifier', 'return import(specifier)') as <
   specifier: string,
 ) => Promise<T>;
 
+export async function loadContrailCommunity(): Promise<
+  typeof import('@atmo-dev/contrail-community')
+> {
+  return esmImport<typeof import('@atmo-dev/contrail-community')>(
+    '@atmo-dev/contrail-community',
+  );
+}
+
 export async function loadContrail(): Promise<{
   pkg: typeof import('@atmo-dev/contrail');
   server: typeof import('@atmo-dev/contrail/server');
