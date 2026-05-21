@@ -24,9 +24,10 @@ async function tableExists(pool: pg.Pool, table: string): Promise<boolean> {
 
 maybe('contrail-community wiring', () => {
   let pool: pg.Pool;
-  const saved = { ...process.env };
+  let saved: NodeJS.ProcessEnv;
 
   beforeEach(async () => {
+    saved = { ...process.env };
     pool = new pg.Pool({
       connectionString: databaseUrl,
       options: `-c search_path=${TEST_SCHEMA},public`,
