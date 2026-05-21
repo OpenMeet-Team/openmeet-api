@@ -217,6 +217,17 @@ services:
       - ELASTICACHE_HOST=redis
       - MAIL_HOST=maildev
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tracing:4318
+      # Contrail appview: reuse the local Postgres (schema-isolated under
+      # CONTRAIL_SCHEMA). Without CONTRAIL_DATABASE_URL the provider stays
+      # uninitialized and /xrpc/net.openmeet.* returns 503.
+      - CONTRAIL_DATABASE_URL=postgres://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+      - CONTRAIL_SCHEMA=contrail
+      # Community routes mount only when BOTH keys are present (see
+      # env-example-relational). Pass them at `up` time, e.g.:
+      #   CONTRAIL_COMMUNITY_ENCRYPTION_KEY=... CONTRAIL_AUTHORITY_SIGNING_KEY=... \
+      #     docker compose -f docker-compose-dev.yml up -d api
+      - CONTRAIL_COMMUNITY_ENCRYPTION_KEY=${CONTRAIL_COMMUNITY_ENCRYPTION_KEY:-}
+      - CONTRAIL_AUTHORITY_SIGNING_KEY=${CONTRAIL_AUTHORITY_SIGNING_KEY:-}
     env_file:
       - .env
     networks:

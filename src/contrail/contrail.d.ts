@@ -41,6 +41,33 @@ declare module '@atmo-dev/contrail' {
     additionalAllowedHosts?: string[];
   }
 
+  export interface CredentialKeyMaterial {
+    /** Private key in JWK form. P-256 / ES256. */
+    privateKey: Record<string, unknown>;
+    /** Public key in JWK form. Must match privateKey. */
+    publicKey: Record<string, unknown>;
+    /** DID-doc verification method id. Defaults to "atproto_space_authority". */
+    keyId?: string;
+  }
+
+  export interface AuthorityConfig {
+    /** NSID identifying the kind of space this authority hosts. */
+    type: string;
+    /** Service DID that service-auth tokens target (aud) and that signs
+     *  issued credentials (iss). */
+    serviceDid: string;
+    /** ES256 signing key for issuing space credentials. When omitted,
+     *  net.openmeet.space.getCredential returns 501. */
+    signing?: CredentialKeyMaterial;
+  }
+
+  export interface SpacesConfig {
+    authority?: AuthorityConfig;
+  }
+
+  /** Opaque pre-built community integration from @atmo-dev/contrail-community. */
+  export type CommunityIntegration = unknown;
+
   export interface ContrailConfig {
     namespace: string;
     collections: Record<string, CollectionConfig>;
@@ -49,6 +76,10 @@ declare module '@atmo-dev/contrail' {
     logger?: Logger;
     notify?: boolean | string;
     networkOverrides?: NetworkOverrides;
+    spaces?: SpacesConfig;
+    /** User-supplied community config blob (masterKey, plcDirectory, etc.).
+     *  Read by the community integration via config.community. */
+    community?: unknown;
   }
 
   export type Database = unknown;
@@ -56,6 +87,7 @@ declare module '@atmo-dev/contrail' {
   export interface ContrailOptions extends ContrailConfig {
     db?: Database;
     spacesDb?: Database;
+    communityIntegration?: CommunityIntegration;
   }
 
   export interface BackfillProgress {
@@ -113,6 +145,8 @@ declare module '@atmo-dev/contrail' {
     refresh(options?: RefreshOptions, db?: Database): Promise<RefreshResult>;
     runPersistent(options?: RunPersistentOptions): Promise<void>;
   }
+
+  export function generateAuthoritySigningKey(): Promise<CredentialKeyMaterial>;
 }
 
 declare module '@atmo-dev/contrail/server' {
@@ -126,6 +160,23 @@ declare module '@atmo-dev/contrail/postgres' {
   import type { Pool } from 'pg';
   import type { Database } from '@atmo-dev/contrail';
   export function createPostgresDatabase(pool: Pool): Database;
+}
+
+declare module '@atmo-dev/contrail-community' {
+  import type {
+    Database,
+    ContrailConfig,
+    CommunityIntegration,
+  } from '@atmo-dev/contrail';
+
+  export interface CommunityIntegrationOptions {
+    db: Database;
+    config: ContrailConfig;
+  }
+
+  export function createCommunityIntegration(
+    options: CommunityIntegrationOptions,
+  ): CommunityIntegration;
 }
 
 declare module '@atcute/identity-resolver' {

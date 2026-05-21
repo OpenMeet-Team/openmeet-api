@@ -192,3 +192,17 @@ DEVNET_PDS_HOSTNAME=pds.test
 DEVNET_PDS_ADMIN_PASSWORD=ci-pds-admin-password
 DEVNET_SMTP_URL=smtp://maildev:1025
 DEVNET_HANDLE_DOMAIN=.pds.test
+
+# Contrail appview — enables the /xrpc/net.openmeet.* mount in CI e2e so the
+# contrail-xrpc suite runs instead of skipping. Reuses the CI Postgres
+# (schema-isolated under CONTRAIL_SCHEMA); the schema + tables are created on
+# contrail.init(), so event/rsvp.listRecords return 200 [] with no sync step.
+CONTRAIL_DATABASE_URL=postgres://root:secret@postgres:5432/api
+CONTRAIL_SCHEMA=contrail
+# Throwaway CI-only test keys (no production value). The two below enable the
+# community block + spaces.authority so community.getHealth mounts (401).
+# DO NOT REUSE: these are committed fixtures, inert outside CI. Real envs get
+# their keys from the deployment secret store (see om-uwis / om-k55c), never
+# from this file. The committed P-256 private key here signs nothing of value.
+CONTRAIL_COMMUNITY_ENCRYPTION_KEY=BBiI4DJaQ+AsoTJuKvMv06dNEFL+NprY9atylYM4Eds=
+CONTRAIL_AUTHORITY_SIGNING_KEY=eyJwcml2YXRlS2V5Ijp7ImtleV9vcHMiOlsic2lnbiJdLCJleHQiOnRydWUsImt0eSI6IkVDIiwieCI6ImM5ZnhwRWlQdktXd2g5eEk5OGFmUTVucVBYcjI5WU03NHkxOG1qeks0V2siLCJ5IjoiNmF1c1c5MVgyS21XMEJYXzFuRDlBZmtHRDh2ZldNNE0yU29kN0dLMkZpRSIsImNydiI6IlAtMjU2IiwiZCI6Ik9tMzM4Q0NCRmhMUzFON1JmYjZESnJ5NlpnYTdJakx1c3JpM2ExcGdvX3MifSwicHVibGljS2V5Ijp7ImtleV9vcHMiOlsidmVyaWZ5Il0sImV4dCI6dHJ1ZSwia3R5IjoiRUMiLCJ4IjoiYzlmeHBFaVB2S1d3aDl4STk4YWZRNW5xUFhyMjlZTTc0eTE4bWp6SzRXayIsInkiOiI2YXVzVzkxWDJLbVcwQlhfMW5EOUFma0dEOHZmV000TTJTb2Q3R0syRmlFIiwiY3J2IjoiUC0yNTYifX0=
