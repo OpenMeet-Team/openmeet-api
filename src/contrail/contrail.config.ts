@@ -19,7 +19,11 @@ function parseAuthoritySigningKey(
 export async function buildContrailConfig(): Promise<ContrailConfig> {
   const plcUrl = process.env.CONTRAIL_PLC_URL;
 
-  let resolver: unknown | undefined;
+  // Typed `unknown` because the ESM-only @atcute resolver type isn't cleanly
+  // importable under this project's moduleResolution; it's attached to the
+  // config below via spread (which skips excess-property checks) and consumed
+  // structurally at runtime by contrail-base's buildVerifier.
+  let resolver: unknown;
   if (plcUrl) {
     const ir = await esmImport<typeof import('@atcute/identity-resolver')>(
       '@atcute/identity-resolver',
@@ -51,6 +55,13 @@ export async function buildContrailConfig(): Promise<ContrailConfig> {
           type: process.env.CONTRAIL_SPACE_TYPE ?? 'tools.atmo.event.space',
           serviceDid: process.env.SERVICE_DID ?? 'did:web:api.openmeet.net',
           signing: authoritySigningKey,
+          // Without this the spaces-authority verifier (buildVerifier in
+          // contrail-base) defaults to a public plc.directory resolver and
+          // can't resolve caller DIDs minted on a non-public PLC — the auth
+          // middleware then 401s with "failed to retrieve did document".
+          // Only set when CONTRAIL_PLC_URL is configured; otherwise the vendor
+          // default (public PLC) is correct.
+          ...(resolver ? { resolver } : {}),
         },
       }
     : undefined;
@@ -76,6 +87,10 @@ export async function buildContrailConfig(): Promise<ContrailConfig> {
       ? {
           masterKey: encryptionKey,
           plcDirectory: plcUrl,
+          // Same rationale as spaces.authority.resolver above: the community
+          // adopt/identity-resolution paths use cfg.resolver; without it they
+          // fall back to public PLC and can't see non-public-PLC DIDs.
+          ...(resolver ? { resolver } : {}),
           // Default-deny: the one-shot Step-3 provision window opens by setting
           // CONTRAIL_ALLOW_PROVISIONING=true (no code edit), then unsetting it.
           // Strict `=== 'true'` so only a deliberate value lifts the route's
