@@ -116,8 +116,8 @@ describeIfCommunity('Contrail community XRPC mount (e2e)', () => {
  * fails before any PLC op, so no community is provisioned — the test is
  * repeatable with no accumulating PDS/PLC state.
  *
- * Preconditions (skips cleanly unless ALL are met — these are the operator
- * "provision window", not the default config):
+ * Preconditions (skips cleanly unless ALL are met — provisioning has to be
+ * configured and enabled, which is not the default config):
  *   - community env (mount): CONTRAIL_COMMUNITY_ENCRYPTION_KEY +
  *     CONTRAIL_AUTHORITY_SIGNING_KEY + CONTRAIL_DATABASE_URL
  *   - live PDS for account creation + service-auth mint: PDS_URL +
@@ -132,12 +132,12 @@ describeIfCommunity('Contrail community XRPC mount (e2e)', () => {
  * the resolver points at the CI devnet PLC and provisioning is enabled. aud
  * alignment is automatic: both OM's did.json `id` and contrail's verifier
  * serviceDid default to did:web:api.openmeet.net when SERVICE_DID is unset.
- * The gate just makes the test skip cleanly anywhere the window is closed
+ * The gate just makes the test skip cleanly where provisioning isn't enabled
  * (e.g. a plain local run) rather than failing with a 401/403. It first
  * caught this bridge regression during the local Step-3 rehearsal (verified
  * RED without the main.ts fix).
  */
-const describeIfProvisionWindow =
+const describeIfProvisioningEnabled =
   process.env.CONTRAIL_DATABASE_URL &&
   process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY &&
   process.env.CONTRAIL_AUTHORITY_SIGNING_KEY &&
@@ -148,7 +148,7 @@ const describeIfProvisionWindow =
     ? describe
     : describe.skip;
 
-describeIfProvisionWindow(
+describeIfProvisioningEnabled(
   'Contrail community POST body forwarding (e2e)',
   () => {
     const app = TESTING_APP_URL;
