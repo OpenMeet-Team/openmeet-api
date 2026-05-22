@@ -112,9 +112,24 @@ async function bootstrap() {
             if (typeof v === 'string') headers[k] = v;
             else if (Array.isArray(v)) headers[k] = v.join(', ');
           }
+          // This middleware runs before Nest's body parsers and never calls
+          // next() for net.openmeet.*, so req is an unconsumed readable stream.
+          // Buffer it and forward as the request body — without this, every
+          // POST XRPC (provision, putRecord, space.grant, …) reaches the Hono
+          // handler empty and fails its required-fields validation.
+          let body: Buffer | undefined;
+          const method = req.method.toUpperCase();
+          if (method !== 'GET' && method !== 'HEAD') {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) chunks.push(chunk as Buffer);
+            body = Buffer.concat(chunks);
+          }
+          // Drop content-length so undici recomputes it for the buffered body.
+          delete headers['content-length'];
           const fetchRequest = new globalThis.Request(url.toString(), {
             method: req.method,
             headers,
+            ...(body && body.length ? { body } : {}),
           });
           const fetchResponse = await contrailProvider.handle(fetchRequest);
           res.status(fetchResponse.status);
