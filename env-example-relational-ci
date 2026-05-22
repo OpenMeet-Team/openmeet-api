@@ -206,3 +206,14 @@ CONTRAIL_SCHEMA=contrail
 # from this file. The committed P-256 private key here signs nothing of value.
 CONTRAIL_COMMUNITY_ENCRYPTION_KEY=BBiI4DJaQ+AsoTJuKvMv06dNEFL+NprY9atylYM4Eds=
 CONTRAIL_AUTHORITY_SIGNING_KEY=eyJwcml2YXRlS2V5Ijp7ImtleV9vcHMiOlsic2lnbiJdLCJleHQiOnRydWUsImt0eSI6IkVDIiwieCI6ImM5ZnhwRWlQdktXd2g5eEk5OGFmUTVucVBYcjI5WU03NHkxOG1qeks0V2siLCJ5IjoiNmF1c1c5MVgyS21XMEJYXzFuRDlBZmtHRDh2ZldNNE0yU29kN0dLMkZpRSIsImNydiI6IlAtMjU2IiwiZCI6Ik9tMzM4Q0NCRmhMUzFON1JmYjZESnJ5NlpnYTdJakx1c3JpM2ExcGdvX3MifSwicHVibGljS2V5Ijp7ImtleV9vcHMiOlsidmVyaWZ5Il0sImV4dCI6dHJ1ZSwia3R5IjoiRUMiLCJ4IjoiYzlmeHBFaVB2S1d3aDl4STk4YWZRNW5xUFhyMjlZTTc0eTE4bWp6SzRXayIsInkiOiI2YXVzVzkxWDJLbVcwQlhfMW5EOUFma0dEOHZmV000TTJTb2Q3R0syRmlFIiwiY3J2IjoiUC0yNTYifX0=
+# Provision-window vars — enable the community.provision body-forwarding e2e
+# to actually RUN in CI (not skip). The resolver must point at the CI devnet
+# PLC so caller DIDs minted there resolve (else auth 401s before the body is
+# read); provisioning must be enabled to reach createAccount; the PDS endpoint
+# must be allow-listed. aud alignment is automatic — both OM's did.json `id`
+# and contrail's verifier serviceDid default to did:web:api.openmeet.net when
+# SERVICE_DID is unset (as it is here). The e2e uses a bad invite, so it fails
+# at createAccount and provisions nothing — no accumulating CI state.
+CONTRAIL_PLC_URL=http://plc:2582
+CONTRAIL_ALLOWED_PDS_ENDPOINTS=http://pds:3000
+CONTRAIL_ALLOW_PROVISIONING=true

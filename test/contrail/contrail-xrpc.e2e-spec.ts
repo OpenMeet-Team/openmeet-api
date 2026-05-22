@@ -116,19 +116,39 @@ describeIfCommunity('Contrail community XRPC mount (e2e)', () => {
  * fails before any PLC op, so no community is provisioned — the test is
  * repeatable with no accumulating PDS/PLC state.
  *
- * Needs a live PDS (account creation + service-auth mint) on top of the
- * community env, so it skips unless PDS_URL + PDS_INVITE_CODE are also set.
+ * Preconditions (skips cleanly unless ALL are met — these are the operator
+ * "provision window", not the default config):
+ *   - community env (mount): CONTRAIL_COMMUNITY_ENCRYPTION_KEY +
+ *     CONTRAIL_AUTHORITY_SIGNING_KEY + CONTRAIL_DATABASE_URL
+ *   - live PDS for account creation + service-auth mint: PDS_URL +
+ *     PDS_INVITE_CODE
+ *   - CONTRAIL_PLC_URL: the internal-PLC resolver must be wired, else the
+ *     caller DID (minted on that PLC) can't resolve and auth 401s before the
+ *     body is ever read. (This is also what fix #2 in this PR addresses.)
+ *   - CONTRAIL_ALLOW_PROVISIONING === 'true': otherwise the route 403s at the
+ *     gate before reaching createAccount, so we'd never observe the body.
+ *
+ * These are set in CI (env-example-relational-ci) so the test RUNS there —
+ * the resolver points at the CI devnet PLC and provisioning is enabled. aud
+ * alignment is automatic: both OM's did.json `id` and contrail's verifier
+ * serviceDid default to did:web:api.openmeet.net when SERVICE_DID is unset.
+ * The gate just makes the test skip cleanly anywhere the window is closed
+ * (e.g. a plain local run) rather than failing with a 401/403. It first
+ * caught this bridge regression during the local Step-3 rehearsal (verified
+ * RED without the main.ts fix).
  */
-const describeIfCommunityProvision =
+const describeIfProvisionWindow =
   process.env.CONTRAIL_DATABASE_URL &&
   process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY &&
   process.env.CONTRAIL_AUTHORITY_SIGNING_KEY &&
   process.env.PDS_URL &&
-  process.env.PDS_INVITE_CODE
+  process.env.PDS_INVITE_CODE &&
+  process.env.CONTRAIL_PLC_URL &&
+  process.env.CONTRAIL_ALLOW_PROVISIONING === 'true'
     ? describe
     : describe.skip;
 
-describeIfCommunityProvision(
+describeIfProvisionWindow(
   'Contrail community POST body forwarding (e2e)',
   () => {
     const app = TESTING_APP_URL;
