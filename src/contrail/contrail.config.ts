@@ -76,7 +76,11 @@ export async function buildContrailConfig(): Promise<ContrailConfig> {
       ? {
           masterKey: encryptionKey,
           plcDirectory: plcUrl,
-          allowProvisioning: false, // default-deny until Step 3
+          // Default-deny: the one-shot Step-3 provision window opens by setting
+          // CONTRAIL_ALLOW_PROVISIONING=true (no code edit), then unsetting it.
+          // Strict `=== 'true'` so only a deliberate value lifts the route's
+          // default-deny posture (router returns 403 ProvisioningDisabled).
+          allowProvisioning: process.env.CONTRAIL_ALLOW_PROVISIONING === 'true',
           allowedPdsEndpoints:
             process.env.CONTRAIL_ALLOWED_PDS_ENDPOINTS?.split(',') || undefined,
         }
