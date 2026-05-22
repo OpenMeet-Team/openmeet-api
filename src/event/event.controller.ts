@@ -30,7 +30,6 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttendee.dto';
 import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttendee.dto';
 import { QueryEventAttendeeDto } from '../event-attendee/dto/query-eventAttendee.dto';
@@ -68,7 +67,6 @@ export class EventController {
     private readonly eventManagementService: EventManagementService,
     private readonly eventQueryService: EventQueryService,
     private readonly eventRecommendationService: EventRecommendationService,
-    private readonly eventAttendeeService: EventAttendeeService,
     private readonly iCalendarService: ICalendarService,
     private readonly eventSeriesOccurrenceService: EventSeriesOccurrenceService,
     private readonly eventMailService: EventMailService,
@@ -273,10 +271,10 @@ export class EventController {
     );
   }
 
-  // @Permissions({
-  //   context: 'event',
-  //   permissions: [EventAttendeePermission.ManageAttendees],
-  // })
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageAttendees],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/attendees/:attendeeId')
   @ApiOperation({ summary: 'Update event attendee' })
@@ -292,10 +290,10 @@ export class EventController {
     );
   }
 
-  // @Permissions({
-  //   context: 'event',
-  //   permissions: [EventAttendeePermission.ManageAttendees],
-  // })
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageAttendees],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/attendees/:attendeeId')
   @ApiOperation({ summary: 'Delete event attendee' })
@@ -303,7 +301,7 @@ export class EventController {
     @Param('slug') slug: string,
     @Param('attendeeId') attendeeId: number,
   ) {
-    return this.eventAttendeeService.deleteEventAttendee(attendeeId);
+    return this.eventManagementService.deleteEventAttendee(slug, attendeeId);
   }
 
   @Public()

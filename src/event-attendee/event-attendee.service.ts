@@ -1044,6 +1044,25 @@ export class EventAttendeeService {
     return deleted;
   }
 
+  // Verifies the attendee record actually belongs to the given event before a
+  // management action (update/delete) acts on it. Without this, a user with
+  // ManageAttendees on event A could pass an attendeeId from event B (IDOR).
+  @Trace('event-attendee.findEventAttendeeScopedToEvent')
+  async findEventAttendeeScopedToEvent(attendeeId: number, eventId: number) {
+    await this.getTenantSpecificEventRepository();
+    const attendee = await this.eventAttendeesRepository.findOne({
+      where: { id: attendeeId, event: { id: eventId } },
+    });
+
+    if (!attendee) {
+      throw new NotFoundException(
+        `Attendee with ID ${attendeeId} not found for this event`,
+      );
+    }
+
+    return attendee;
+  }
+
   @Trace('event-attendee.getAttendeeById')
   async getAttendeeById(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
