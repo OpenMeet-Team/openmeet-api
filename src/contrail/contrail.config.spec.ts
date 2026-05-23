@@ -39,16 +39,38 @@ describe('buildContrailConfig community/spaces gating', () => {
     expect(config.spaces?.authority?.signing).toBeDefined();
   });
 
-  it('should add community with default-deny provisioning when BOTH keys are set', async () => {
+  it('should add community with default-deny provisioning when BOTH keys are set and CONTRAIL_ALLOW_PROVISIONING is unset', async () => {
     // Community needs the authority to sign/verify the service-auth credentials
     // its routes depend on, so it only assembles when spaces.authority is also
     // present (i.e. the authority signing key is configured too).
     process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY = FAKE_ENCRYPTION_KEY;
     process.env.CONTRAIL_AUTHORITY_SIGNING_KEY = FAKE_SIGNING;
+    delete process.env.CONTRAIL_ALLOW_PROVISIONING;
     const config = await buildContrailConfig();
     const community = config.community as Record<string, unknown>;
     // `masterKey` is the vendor (contrail-community) config field name.
     expect(community.masterKey).toBe(FAKE_ENCRYPTION_KEY);
+    expect(community.allowProvisioning).toBe(false);
+  });
+
+  it('should enable provisioning when CONTRAIL_ALLOW_PROVISIONING is exactly "true"', async () => {
+    // The Step-3 one-shot provision window opens by setting this env var, with
+    // no code edit. Strict `=== 'true'` so the route's default-deny posture is
+    // only lifted by an explicit, deliberate value.
+    process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY = FAKE_ENCRYPTION_KEY;
+    process.env.CONTRAIL_AUTHORITY_SIGNING_KEY = FAKE_SIGNING;
+    process.env.CONTRAIL_ALLOW_PROVISIONING = 'true';
+    const config = await buildContrailConfig();
+    const community = config.community as Record<string, unknown>;
+    expect(community.allowProvisioning).toBe(true);
+  });
+
+  it('should keep provisioning disabled for a non-"true" CONTRAIL_ALLOW_PROVISIONING value', async () => {
+    process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY = FAKE_ENCRYPTION_KEY;
+    process.env.CONTRAIL_AUTHORITY_SIGNING_KEY = FAKE_SIGNING;
+    process.env.CONTRAIL_ALLOW_PROVISIONING = '1';
+    const config = await buildContrailConfig();
+    const community = config.community as Record<string, unknown>;
     expect(community.allowProvisioning).toBe(false);
   });
 

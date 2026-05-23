@@ -1,5 +1,10 @@
 import request from 'supertest';
-import { TESTING_APP_URL } from '../utils/constants';
+import {
+  TESTING_APP_URL,
+  TESTING_PDS_URL,
+  TESTING_PDS_HANDLE_DOMAIN,
+  TESTING_PDS_INVITE_CODE,
+} from '../utils/constants';
 
 /**
  * Curl-level proof that OM API's /xrpc/net.openmeet.* mount works.
@@ -92,3 +97,137 @@ describeIfCommunity('Contrail community XRPC mount (e2e)', () => {
     expect(res.status).toBe(401);
   });
 });
+
+/**
+ * Regression guard for the nest→Hono bridge request-body forwarding
+ * (src/main.ts /xrpc middleware). That middleware runs before Nest's body
+ * parsers and never calls next() for net.openmeet.*, so `req` is an
+ * unconsumed readable stream that must be buffered and forwarded — otherwise
+ * every POST XRPC reaches the Hono handler with an empty body and fails its
+ * required-fields validation. GET routes have no body, which is why the
+ * getHealth probe above never caught this.
+ *
+ * The discriminator: with the body DROPPED, an authenticated provision call
+ * returns 400 InvalidRequest "...required". With the body FORWARDED, the same
+ * call carries handle/email/password/pdsEndpoint/rotationKey past that gate
+ * into the orchestrator, which reaches createAccount and fails only on the
+ * deliberately-invalid invite code (502 ProvisioningFailed). Reaching
+ * createAccount is positive proof the body crossed the bridge. A bad invite
+ * fails before any PLC op, so no community is provisioned — the test is
+ * repeatable with no accumulating PDS/PLC state.
+ *
+ * Preconditions (skips cleanly unless ALL are met — provisioning has to be
+ * configured and enabled, which is not the default config):
+ *   - community env (mount): CONTRAIL_COMMUNITY_ENCRYPTION_KEY +
+ *     CONTRAIL_AUTHORITY_SIGNING_KEY + CONTRAIL_DATABASE_URL
+ *   - live PDS for account creation + service-auth mint: PDS_URL +
+ *     PDS_INVITE_CODE
+ *   - CONTRAIL_PLC_URL: the internal-PLC resolver must be wired, else the
+ *     caller DID (minted on that PLC) can't resolve and auth 401s before the
+ *     body is ever read. (This is also what fix #2 in this PR addresses.)
+ *   - CONTRAIL_ALLOW_PROVISIONING === 'true': otherwise the route 403s at the
+ *     gate before reaching createAccount, so we'd never observe the body.
+ *
+ * These are set in CI (env-example-relational-ci) so the test RUNS there —
+ * the resolver points at the CI devnet PLC and provisioning is enabled. aud
+ * alignment is automatic: both OM's did.json `id` and contrail's verifier
+ * serviceDid default to did:web:api.openmeet.net when SERVICE_DID is unset.
+ * The gate just makes the test skip cleanly where provisioning isn't enabled
+ * (e.g. a plain local run) rather than failing with a 401/403. It first
+ * caught this bridge regression during the local Step-3 rehearsal (verified
+ * RED without the main.ts fix).
+ */
+const describeIfProvisioningEnabled =
+  process.env.CONTRAIL_DATABASE_URL &&
+  process.env.CONTRAIL_COMMUNITY_ENCRYPTION_KEY &&
+  process.env.CONTRAIL_AUTHORITY_SIGNING_KEY &&
+  process.env.PDS_URL &&
+  process.env.PDS_INVITE_CODE &&
+  process.env.CONTRAIL_PLC_URL &&
+  process.env.CONTRAIL_ALLOW_PROVISIONING === 'true'
+    ? describe
+    : describe.skip;
+
+describeIfProvisioningEnabled(
+  'Contrail community POST body forwarding (e2e)',
+  () => {
+    const app = TESTING_APP_URL;
+    const pdsUrl = TESTING_PDS_URL;
+    // Endpoint the OM API server (not this test process) uses to reach the PDS.
+    // On devnet that's the in-cluster address; CONTRAIL_ALLOWED_PDS_ENDPOINTS
+    // gates it, so it must match one of the allowed values.
+    const inContainerPdsEndpoint =
+      process.env.CONTRAIL_ALLOWED_PDS_ENDPOINTS?.split(',')[0].trim() ||
+      'http://pds:3000';
+
+    const shortId = () => Math.random().toString(36).substring(2, 8);
+
+    /** Create a throwaway PDS account and mint a community.provision-scoped
+     *  service-auth JWT (aud = OM's SERVICE_DID from did.json). */
+    async function mintProvisionCaller(): Promise<string> {
+      const id = shortId();
+      // Use the domain the PDS actually serves (.env's PDS_SERVICE_HANDLE_DOMAINS
+      // can drift from the devnet PDS config — e.g. .pds.test vs .devnet.test).
+      const describe = await request(pdsUrl)
+        .get('/xrpc/com.atproto.server.describeServer')
+        .expect(200);
+      const handleDomain: string =
+        describe.body.availableUserDomains?.[0] ?? TESTING_PDS_HANDLE_DOMAIN;
+
+      const create = await request(pdsUrl)
+        .post('/xrpc/com.atproto.server.createAccount')
+        .set('Content-Type', 'application/json')
+        .send({
+          email: `bodyfwd-${id}@test.invalid`,
+          handle: `bodyfwd${id}${handleDomain}`,
+          password: 'test-password-123',
+          inviteCode: TESTING_PDS_INVITE_CODE,
+        })
+        .expect(200);
+      const { accessJwt } = create.body;
+
+      const didJson = await request(app)
+        .get('/.well-known/did.json')
+        .expect(200);
+      const serviceDid = didJson.body.id;
+
+      const svc = await request(pdsUrl)
+        .get('/xrpc/com.atproto.server.getServiceAuth')
+        .query({ aud: serviceDid, lxm: 'net.openmeet.community.provision' })
+        .set('Authorization', `Bearer ${accessJwt}`)
+        .expect(200);
+      return svc.body.token;
+    }
+
+    it('should forward the POST body across the bridge (provision reaches createAccount, not the empty-body 400)', async () => {
+      const token = await mintProvisionCaller();
+      const id = shortId();
+
+      const res = await request(app)
+        .post('/xrpc/net.openmeet.community.provision')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Content-Type', 'application/json')
+        .send({
+          handle: `bodyfwd-tgt-${id}.devnet.test`,
+          email: `bodyfwd-tgt-${id}@test.invalid`,
+          password: `pw-${id}`,
+          pdsEndpoint: inContainerPdsEndpoint,
+          rotationKey:
+            'did:key:zDnaeWVHmxYg3V8sBygjT64PRcQzCVjePBhmPrjEPngAvatvi',
+          inviteCode: 'deliberately-invalid-invite',
+        });
+
+      // The empty-body bug returned 400 "...required". The body crossed if we
+      // do NOT see that rejection.
+      const message: string = res.body?.message ?? '';
+      expect(message).not.toMatch(/required/i);
+      expect(res.status).not.toBe(400);
+
+      // Positive proof: the orchestrator received all fields and got as far as
+      // createAccount, failing only on the bad invite.
+      expect(res.status).toBe(502);
+      expect(res.body?.error).toBe('ProvisioningFailed');
+      expect(message).toMatch(/createAccount/i);
+    });
+  },
+);

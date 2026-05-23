@@ -222,12 +222,15 @@ services:
       # uninitialized and /xrpc/net.openmeet.* returns 503.
       - CONTRAIL_DATABASE_URL=postgres://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
       - CONTRAIL_SCHEMA=contrail
-      # Community routes mount only when BOTH keys are present (see
-      # env-example-relational). Pass them at `up` time, e.g.:
-      #   CONTRAIL_COMMUNITY_ENCRYPTION_KEY=... CONTRAIL_AUTHORITY_SIGNING_KEY=... \
-      #     docker compose -f docker-compose-dev.yml up -d api
-      - CONTRAIL_COMMUNITY_ENCRYPTION_KEY=${CONTRAIL_COMMUNITY_ENCRYPTION_KEY:-}
-      - CONTRAIL_AUTHORITY_SIGNING_KEY=${CONTRAIL_AUTHORITY_SIGNING_KEY:-}
+      # Community keys + the one-shot Step-3 provision window
+      # (CONTRAIL_COMMUNITY_ENCRYPTION_KEY, CONTRAIL_AUTHORITY_SIGNING_KEY,
+      # CONTRAIL_PLC_URL, CONTRAIL_ALLOWED_PDS_ENDPOINTS,
+      # CONTRAIL_ALLOW_PROVISIONING) are injected straight from `.env` via
+      # env_file below — no `environment:` override here, so they don't get
+      # blanked when absent from the shell. Community routes mount only when
+      # BOTH keys are present; provisioning stays default-deny unless
+      # CONTRAIL_ALLOW_PROVISIONING=true. Close the window by removing those
+      # three lines from `.env` and recreating.
     env_file:
       - .env
     networks:
