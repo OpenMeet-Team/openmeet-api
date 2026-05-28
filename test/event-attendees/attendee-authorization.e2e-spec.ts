@@ -7,8 +7,16 @@ import {
   TESTING_USER_PASSWORD,
   TESTING_TENANT_ID,
 } from '../utils/constants';
-import { getAuthToken, createEvent } from '../utils/functions';
-import { EventType } from '../../src/core/constants/constant';
+import {
+  getAuthToken,
+  createEvent,
+  createGroup,
+  joinGroup,
+  approveMember,
+  getGroupMembers,
+  updateGroupMemberRole,
+} from '../utils/functions';
+import { EventType, GroupStatus } from '../../src/core/constants/constant';
 
 // Regression coverage for the attendee-management IDOR:
 // the DELETE/PATCH `/events/:slug/attendees/:attendeeId` routes once had their
@@ -179,5 +187,61 @@ describe('Event attendee management authorization (e2e)', () => {
       (a: { id: number }) => a.id === attendeeInB.id,
     );
     expect(stillThere).toBeDefined();
+  });
+
+  it('should allow a group admin to delete an attendee on a group event they did not create (CRMC scenario)', async () => {
+    // Organizer creates a group and an event under it.
+    const group = await createGroup(TESTING_APP_URL, organizerToken, {
+      name: `IDOR Test Group ${Date.now()}`,
+      description: 'Group for attendee authz test',
+      status: GroupStatus.Published,
+    });
+    const groupEvent = await newEvent(organizerToken, { group: group.id });
+
+    // Second user joins the group, gets approved and promoted to admin.
+    const membership = await joinGroup(
+      TESTING_APP_URL,
+      TESTING_TENANT_ID,
+      group.slug,
+      attackerToken,
+    );
+    await approveMember(
+      TESTING_APP_URL,
+      TESTING_TENANT_ID,
+      group.slug,
+      membership.id,
+      organizerToken,
+    );
+    const members = await getGroupMembers(
+      TESTING_APP_URL,
+      TESTING_TENANT_ID,
+      group.slug,
+      organizerToken,
+    );
+    const memberRecord = members.find(
+      (m: { id: number }) => m.id === membership.id,
+    );
+    await updateGroupMemberRole(
+      TESTING_APP_URL,
+      TESTING_TENANT_ID,
+      group.slug,
+      memberRecord.id,
+      'admin',
+      organizerToken,
+    );
+
+    // Organizer attends the group event.
+    const organizerAttendee = await attend(organizerToken, groupEvent.slug);
+
+    // Group admin (not event creator) deletes the organizer's attendance.
+    const res = await deleteAttendee(
+      attackerToken,
+      groupEvent.slug,
+      organizerAttendee.id,
+    );
+
+    // Should succeed: group admins have MANAGE_EVENTS which grants
+    // event-scoped operations including attendee management.
+    expect([200, 204]).toContain(res.status);
   });
 });
