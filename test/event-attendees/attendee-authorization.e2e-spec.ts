@@ -13,7 +13,6 @@ import {
   createGroup,
   joinGroup,
   approveMember,
-  getGroupMembers,
   updateGroupMemberRole,
 } from '../utils/functions';
 import { EventType, GroupStatus } from '../../src/core/constants/constant';
@@ -212,20 +211,11 @@ describe('Event attendee management authorization (e2e)', () => {
       membership.id,
       organizerToken,
     );
-    const members = await getGroupMembers(
-      TESTING_APP_URL,
-      TESTING_TENANT_ID,
-      group.slug,
-      organizerToken,
-    );
-    const memberRecord = members.find(
-      (m: { id: number }) => m.id === membership.id,
-    );
     await updateGroupMemberRole(
       TESTING_APP_URL,
       TESTING_TENANT_ID,
       group.slug,
-      memberRecord.id,
+      membership.id,
       'admin',
       organizerToken,
     );
