@@ -2145,7 +2145,13 @@ export class EventManagementService {
   ) {
     await this.initializeRepository();
 
-    await this.eventRepository.findOneOrFail({ where: { slug } });
+    const event = await this.eventRepository.findOneOrFail({ where: { slug } });
+
+    // Ensure the attendee actually belongs to this event before mutating it.
+    await this.eventAttendeeService.findEventAttendeeScopedToEvent(
+      attendeeId,
+      event.id,
+    );
 
     await this.eventAttendeeService.updateEventAttendee(
       attendeeId,
@@ -2155,6 +2161,21 @@ export class EventManagementService {
     await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
 
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
+  }
+
+  @Trace('event-management.deleteEventAttendee')
+  async deleteEventAttendee(slug: string, attendeeId: number) {
+    await this.initializeRepository();
+
+    const event = await this.eventRepository.findOneOrFail({ where: { slug } });
+
+    // Ensure the attendee actually belongs to this event before deleting it.
+    await this.eventAttendeeService.findEventAttendeeScopedToEvent(
+      attendeeId,
+      event.id,
+    );
+
+    return await this.eventAttendeeService.deleteEventAttendee(attendeeId);
   }
 
   async delete(id: number): Promise<void> {
