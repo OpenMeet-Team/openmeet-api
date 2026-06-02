@@ -28,7 +28,7 @@ automate, you authenticate as a user (ideally a dedicated bot account).
 | Method | Endpoint | Interactive? | Good for |
 |--------|----------|-------------|----------|
 | Email + password | `POST /api/v1/auth/email/login` | No | Bots, scripts, frontends |
-| ATProto service auth | `POST /api/v1/auth/atproto/service-auth` | No | Bots/automation with an ATProto (Bluesky) account |
+| ATProto service auth | `POST /api/v1/auth/atproto/service-auth` | No | Bots/automation with any AT Protocol account (Bluesky or a self-hosted PDS) |
 | Bluesky OAuth | `GET /api/v1/auth/bluesky/authorize` | Yes (browser) | Members signing in with their Bluesky handle |
 | Google OAuth | `POST /api/v1/auth/google/login` | Yes (browser) | Members |
 | GitHub OAuth | `POST /api/v1/auth/github/login` | Yes (browser) | Members |
@@ -145,21 +145,56 @@ curl https://api.openmeet.net/api/v1/events \
 
 ## ATProto service auth (bot-friendly)
 
-If your bot has an ATProto (Bluesky) account, you can skip storing an OpenMeet
-password and exchange a **PDS-signed service-auth token** for OpenMeet tokens.
-This is non-interactive (no browser, no DPoP), and yields the **same OpenMeet
-JWTs** as every other path. Unknown DIDs are auto-provisioned as users, and the
-account is portable — the same DID later signing in via Bluesky OAuth resolves
-to the same OpenMeet account.
+This path works for **any AT Protocol account**, not just Bluesky. The bot can
+live on `bsky.social`, on a self-hosted PDS, or anywhere else on the network —
+OpenMeet verifies the token against the caller's DID document, so it never
+assumes a particular host. If your bot has an ATProto account you can skip
+storing an OpenMeet password and exchange a **PDS-signed service-auth token** for
+OpenMeet tokens. This is non-interactive (no browser, no DPoP), and yields the
+**same OpenMeet JWTs** as every other path. Unknown DIDs are auto-provisioned as
+users, and the account is portable — the same DID later signing in via ATProto
+(Bluesky) OAuth resolves to the same OpenMeet account.
+
+The one requirement: the bot's PDS must implement
+`com.atproto.server.getServiceAuth` with the `lxm` (lexicon-method) parameter,
+which the reference PDS and `bsky.social` both do.
+
+### Finding the bot's PDS
+
+Don't hardcode `bsky.social` — discover where the account actually lives. The
+example below uses a handle on a self-hosted PDS (`alice.example.com`). Resolve
+the handle to a DID, then the DID to its DID document, and read the PDS service
+endpoint from it:
 
 ```bash
-SERVICE_DID="did:web:api.openmeet.net"   # OpenMeet's identity
-PDS_URL="https://bsky.social"            # wherever the bot account lives
+HANDLE="alice.example.com"   # the bot's ATProto handle (any PDS)
+
+# Resolve the handle to a DID. Every ATProto handle publishes its DID here
+# (some setups use a DNS TXT record at _atproto.$HANDLE instead).
+DID=$(curl -s "https://$HANDLE/.well-known/atproto-did")
+
+# Resolve the DID to its DID document.
+#   did:plc lives in the PLC directory; did:web serves its own doc over HTTPS.
+case "$DID" in
+  did:plc:*) DID_DOC=$(curl -s "https://plc.directory/$DID") ;;
+  did:web:*) DID_DOC=$(curl -s "https://${DID#did:web:}/.well-known/did.json") ;;
+esac
+
+# The PDS is the service entry whose id ends in #atproto_pds.
+PDS_URL=$(echo "$DID_DOC" \
+  | jq -r '.service[] | select(.id | endswith("#atproto_pds")) | .serviceEndpoint')
+# → e.g. https://pds.example.com (whatever hosts the account)
+```
+
+### Exchanging for OpenMeet tokens
+
+```bash
+SERVICE_DID="did:web:api.openmeet.net"   # OpenMeet's identity (the audience)
 
 # 1. Open a PDS session with the bot's app password
 ACCESS_JWT=$(curl -s -X POST "$PDS_URL/xrpc/com.atproto.server.createSession" \
   -H "Content-Type: application/json" \
-  -d '{"identifier":"mybot.bsky.social","password":"<app-password>"}' \
+  -d "{\"identifier\":\"$HANDLE\",\"password\":\"<app-password>\"}" \
   | jq -r '.accessJwt')
 
 # 2. Ask the PDS for a service-auth token scoped to OpenMeet
@@ -171,13 +206,14 @@ SERVICE_TOKEN=$(curl -s -G "$PDS_URL/xrpc/com.atproto.server.getServiceAuth" \
 
 # 3. Exchange it for OpenMeet tokens
 curl -s -X POST https://api.openmeet.net/api/v1/auth/atproto/service-auth \
-  -H "x-tenant-id: <tenant-id>" \
+  -H "x-tenant-id: lsdfaopkljdfs" \
   -H "Content-Type: application/json" \
   -d "{\"token\": \"$SERVICE_TOKEN\"}"
 # → { token, refreshToken, tokenExpires, user }
 ```
 
-The API verifies the JWT signature against the caller's DID document and enforces:
+The API resolves the caller's DID document, pulls the signing key from it (so any
+PDS works), verifies the JWT signature, and enforces:
 
 - `aud` = OpenMeet's service DID (`did:web:api.openmeet.net`, with or without an
   `#openmeet` fragment). Confirm the live value at
