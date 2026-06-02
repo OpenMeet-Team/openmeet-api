@@ -1,180 +1,288 @@
 # Auth
 
+How to authenticate against the OpenMeet API — for frontend clients and for
+unattended automation (bots, scripts, integrations).
+
 ## Table of Contents <!-- omit in toc -->
 
-- [General info](#general-info)
-  - [Auth via email flow](#auth-via-email-flow)
-  - [Auth via external services or social networks flow](#auth-via-external-services-or-social-networks-flow)
-- [Configure Auth](#configure-auth)
-- [Auth via Apple](#auth-via-apple)
-- [Auth via Facebook](#auth-via-facebook)
-- [Auth via Google](#auth-via-google)
-- [Auth via Twitter](#auth-via-twitter)
-- [About JWT strategy](#about-jwt-strategy)
+- [Auth methods](#auth-methods)
+- [The tenant header](#the-tenant-header)
+- [Email sign-in](#email-sign-in)
 - [Refresh token flow](#refresh-token-flow)
-  - [Video example](#video-example)
+- [Programmatic / automation access](#programmatic--automation-access)
+- [ATProto service auth (bot-friendly)](#atproto-service-auth-bot-friendly)
+- [Social / OAuth sign-in](#social--oauth-sign-in)
+- [About the JWT strategy](#about-the-jwt-strategy)
+- [Configure auth secrets](#configure-auth-secrets)
 - [Logout](#logout)
 
 ---
 
-## General info
+## Auth methods
 
-### Auth via email flow
+Every method ends the same way: you get an **OpenMeet JWT** (`token` +
+`refreshToken`) and use it as a `Bearer` token on subsequent requests. There
+are currently **no API keys, personal access tokens, or service accounts** — to
+automate, you authenticate as a user (ideally a dedicated bot account).
 
-By default boilerplate used sign in and sign up via email and password.
+| Method | Endpoint | Interactive? | Good for |
+|--------|----------|-------------|----------|
+| Email + password | `POST /api/v1/auth/email/login` | No | Bots, scripts, frontends |
+| ATProto service auth | `POST /api/v1/auth/atproto/service-auth` | No | Bots/automation with any AT Protocol account (Bluesky or a self-hosted PDS) |
+| Bluesky OAuth | `GET /api/v1/auth/bluesky/authorize` | Yes (browser) | Members signing in with their Bluesky handle |
+| Google OAuth | `POST /api/v1/auth/google/login` | Yes (browser) | Members |
+| GitHub OAuth | `POST /api/v1/auth/github/login` | Yes (browser) | Members |
+| Facebook OAuth | `POST /api/v1/auth/facebook/login` | Yes (browser) | Members |
 
-```mermaid
-sequenceDiagram
-    participant A as Fronted App (Web, Mobile, Desktop)
-    participant B as Backend App
-
-    A->>B: 1. Sign up via email and password
-    A->>B: 2. Sign in via email and password
-    B->>A: 3. Get a JWT token
-    A->>B: 4. Make any requests using a JWT token
-```
-
-<https://user-images.githubusercontent.com/6001723/224566194-1c1f4e98-5691-4703-b30e-92f99ec5d929.mp4>
-
-### Auth via external services or social networks flow
-
-Also you can sign up via another external services or social networks like Apple, Facebook, Google, and Twitter.
-
-```mermaid
-sequenceDiagram
-    participant B as External Auth Services (Apple, Google, etc)
-    participant A as Fronted App (Web, Mobile, Desktop)
-    participant C as Backend App
-
-    A->>B: 1. Sign in through an external service
-    B->>A: 2. Get Access Token
-    A->>C: 3. Send Access Token to auth endpoint
-    C->>A: 4. Get a JWT token
-    A->>C: 5. Make any requests using a JWT token
-```
-
-For auth with external services or social networks you need:
-
-1. Sign in through an external service and get access token(s).
-1. Call one of endpoints with access token received in frontend app on 1-st step and get JWT token from the backend app.
-
-   ```text
-   POST /api/v1/auth/facebook/login
-
-   POST /api/v1/auth/google/login
-
-   POST /api/v1/auth/twitter/login
-
-   POST /api/v1/auth/apple/login
-   ```
-
-1. Make any requests using a JWT token
+For unattended automation, use **email + password** or **ATProto service auth**.
+The OAuth flows require a browser redirect (and DPoP-bound tokens for Bluesky),
+so they can't be driven from `curl`.
 
 ---
 
-## Configure Auth
+## The tenant header
 
-1. Generate secret keys for `access token` and `refresh token`:
+OpenMeet is multi-tenant. **Almost every request — including login and refresh —
+requires the `x-tenant-id` header.** Omitting it returns
+`401 Tenant ID is required`.
 
-   ```bash
-   node -e "console.log('\nAUTH_JWT_SECRET=' + require('crypto').randomBytes(256).toString('base64') + '\n\nAUTH_REFRESH_SECRET=' + require('crypto').randomBytes(256).toString('base64') + '\n\nAUTH_FORGOT_SECRET=' + require('crypto').randomBytes(256).toString('base64') + '\n\nAUTH_CONFIRM_EMAIL_SECRET=' + require('crypto').randomBytes(256).toString('base64'));"
-   ```
+```
+x-tenant-id: <your-tenant-id>
+```
 
-1. Go to `/.env` and replace `AUTH_JWT_SECRET` and `AUTH_REFRESH_SECRET` with output from step 1.
+(For local dev the seeded tenant is `lsdfaopkljdfs`.)
 
-   ```text
-   AUTH_JWT_SECRET=HERE_SECRET_KEY_FROM_STEP_1
-   AUTH_REFRESH_SECRET=HERE_SECRET_KEY_FROM_STEP_1
-   ```
+---
 
-## Auth via Apple
+## Email sign-in
 
-1. [Set up your service on Apple](https://www.npmjs.com/package/apple-signin-auth)
-1. Change `APPLE_APP_AUDIENCE` in `.env`
+```bash
+curl -X POST https://api.openmeet.net/api/v1/auth/email/login \
+  -H "x-tenant-id: <tenant-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "password": "..."}'
+```
 
-   ```text
-   APPLE_APP_AUDIENCE=["com.company", "com.company.web"]
-   ```
+Response:
 
-## Auth via Facebook
-
-1. Go to https://developers.facebook.com/apps/creation/ and create a new app
-   <img alt="image" src="https://github.com/brocoders/nestjs-boilerplate/assets/6001723/05721db2-9d26-466a-ad7a-072680d0d49b">
-
-   <img alt="image" src="https://github.com/brocoders/nestjs-boilerplate/assets/6001723/9f4aae18-61da-4abc-9304-821a0995a306">
-2. Go to `Settings` -> `Basic` and get `App ID` and `App Secret` from your app
-   <img alt="image" src="https://github.com/brocoders/nestjs-boilerplate/assets/6001723/b0fc7d50-4bc6-45d0-8b20-fda0b6c01ac2">
-3. Change `FACEBOOK_APP_ID` and `FACEBOOK_APP_SECRET` in `.env`
-
-   ```text
-   FACEBOOK_APP_ID=123
-   FACEBOOK_APP_SECRET=abc
-   ```
-
-## Auth via Google
-
-1. You need a `CLIENT_ID`, `CLIENT_SECRET`. You can find these pieces of information by going to the [Developer Console](https://console.cloud.google.com/), clicking your project (if doesn't have create it here https://console.cloud.google.com/projectcreate) -> `APIs & services` -> `credentials`.
-1. Change `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`
-
-   ```text
-   GOOGLE_CLIENT_ID=abc
-   GOOGLE_CLIENT_SECRET=abc
-   ```
-
-## Auth via Twitter
-
-1. Set up your service on Twitter
-1. Change `TWITTER_CONSUMER_KEY` and `TWITTER_CONSUMER_SECRET` in `.env`
-
-   ```text
-   TWITTER_CONSUMER_KEY=abc
-   TWITTER_CONSUMER_SECRET=abc
-   ```
-
-## About JWT strategy
-
-In the `validate` method of the `src/auth/strategies/jwt.strategy.ts` file, you can see that we do not check if the user exists in the database because it is redundant, it may lose the benefits of the JWT approach and can affect the application performance.
-
-To better understand how JWT works, watch the video explanation https://www.youtube.com/watch?v=Y2H3DXDeS3Q and read this article https://jwt.io/introduction/
-
-```typescript
-// src/auth/strategies/jwt.strategy.ts
-
-@Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  // ...
-
-  public validate(payload) {
-    if (!payload.id) {
-      throw new UnauthorizedException();
-    }
-
-    return payload;
-  }
+```jsonc
+{
+  "token": "eyJ...",          // access token (JWT)
+  "refreshToken": "eyJ...",   // refresh token (JWT)
+  "tokenExpires": 1738359000000, // ms epoch when `token` expires
+  "user": { ... },
+  "sessionId": "..."
 }
 ```
 
-> If you need to get full user information, get it in services.
+Use the access token on every other request:
+
+```bash
+curl https://api.openmeet.net/api/v1/auth/me \
+  -H "x-tenant-id: <tenant-id>" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
 
 ## Refresh token flow
 
-1. On sign in (`POST /api/v1/auth/email/login`) you will receive `token`, `tokenExpires` and `refreshToken` in response.
-1. On each regular request you need to send `token` in `Authorization` header.
-1. If `token` is expired (check with `tokenExpires` property on client app) you need to send `refreshToken` to `POST /api/v1/auth/refresh` in `Authorization` header to refresh `token`. You will receive new `token`, `tokenExpires` and `refreshToken` in response.
+1. On sign-in you receive `token`, `tokenExpires`, and `refreshToken`.
+2. Send `token` in the `Authorization` header on each request.
+3. When `token` is expired (compare `tokenExpires` against the current time),
+   send the **refresh token** in the `Authorization` header to
+   `POST /api/v1/auth/refresh` to get a fresh set:
 
-### Video example
+   ```bash
+   curl -X POST https://api.openmeet.net/api/v1/auth/refresh \
+     -H "x-tenant-id: <tenant-id>" \
+     -H "Authorization: Bearer <refreshToken>"
+   ```
 
-https://github.com/brocoders/nestjs-boilerplate/assets/6001723/f6fdcc89-5ec6-472b-a6fc-d24178ad1bbb
+   You receive a new `token`, `tokenExpires`, and `refreshToken`.
+
+> **Refresh tokens are single-use and rotate.** Each successful refresh
+> invalidates the token you just used and returns a *new* `refreshToken` — you
+> must store and use the new one next time. Replaying a spent refresh token
+> returns `401`. (See `test/user/auth.e2e-spec.ts`.)
+
+Token lifetimes are configurable per environment
+(`AUTH_JWT_TOKEN_EXPIRES_IN`, default `15m`; `AUTH_REFRESH_TOKEN_EXPIRES_IN`).
+Don't hardcode them — drive refresh off the `tokenExpires` value in the response.
+
+---
+
+## Programmatic / automation access
+
+There's no dedicated machine credential yet, so a bot authenticates as a user.
+The robust, self-healing pattern:
+
+1. **Use a dedicated bot account** (not a real person's login), so token
+   rotation and revocation don't disrupt anyone.
+2. Store the bot's credentials in a secret manager / env var — never in code.
+3. On startup (or first 401), `POST /auth/email/login` to get tokens.
+4. Before/around each call, if `tokenExpires` has passed, refresh — and **persist
+   the new `refreshToken`** (it rotates; see above).
+5. If a refresh returns `401` (refresh token expired or already spent),
+   fall back to a fresh `email/login`.
+
+```text
+login ──► use token ──► 401 / expired? ──► refresh
+                                  │              │
+                                  │         refresh 401?
+                                  └──────────────┴──► login again
+```
+
+Every request carries both headers:
+
+```bash
+curl https://api.openmeet.net/api/v1/events \
+  -H "x-tenant-id: <tenant-id>" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## ATProto service auth (bot-friendly)
+
+This path works for **any AT Protocol account**, not just Bluesky. The bot can
+live on `bsky.social`, on a self-hosted PDS, or anywhere else on the network —
+OpenMeet verifies the token against the caller's DID document, so it never
+assumes a particular host. If your bot has an ATProto account you can skip
+storing an OpenMeet password and exchange a **PDS-signed service-auth token** for
+OpenMeet tokens. This is non-interactive (no browser, no DPoP), and yields the
+**same OpenMeet JWTs** as every other path. Unknown DIDs are auto-provisioned as
+users, and the account is portable — the same DID later signing in via ATProto
+(Bluesky) OAuth resolves to the same OpenMeet account.
+
+The one requirement: the bot's PDS must implement
+`com.atproto.server.getServiceAuth` with the `lxm` (lexicon-method) parameter,
+which the reference PDS and `bsky.social` both do.
+
+### Finding the bot's PDS
+
+Don't hardcode `bsky.social` — discover where the account actually lives. The
+example below uses a handle on a self-hosted PDS (`alice.example.com`). Resolve
+the handle to a DID, then the DID to its DID document, and read the PDS service
+endpoint from it:
+
+```bash
+HANDLE="alice.example.com"   # the bot's ATProto handle (any PDS)
+
+# Resolve the handle to a DID. Every ATProto handle publishes its DID here
+# (some setups use a DNS TXT record at _atproto.$HANDLE instead).
+DID=$(curl -s "https://$HANDLE/.well-known/atproto-did")
+
+# Resolve the DID to its DID document.
+#   did:plc lives in the PLC directory; did:web serves its own doc over HTTPS.
+case "$DID" in
+  did:plc:*) DID_DOC=$(curl -s "https://plc.directory/$DID") ;;
+  did:web:*) DID_DOC=$(curl -s "https://${DID#did:web:}/.well-known/did.json") ;;
+esac
+
+# The PDS is the service entry whose id ends in #atproto_pds.
+PDS_URL=$(echo "$DID_DOC" \
+  | jq -r '.service[] | select(.id | endswith("#atproto_pds")) | .serviceEndpoint')
+# → e.g. https://pds.example.com (whatever hosts the account)
+```
+
+### Exchanging for OpenMeet tokens
+
+```bash
+SERVICE_DID="did:web:api.openmeet.net"   # OpenMeet's identity (the audience)
+
+# 1. Open a PDS session with the bot's app password
+ACCESS_JWT=$(curl -s -X POST "$PDS_URL/xrpc/com.atproto.server.createSession" \
+  -H "Content-Type: application/json" \
+  -d "{\"identifier\":\"$HANDLE\",\"password\":\"<app-password>\"}" \
+  | jq -r '.accessJwt')
+
+# 2. Ask the PDS for a service-auth token scoped to OpenMeet
+SERVICE_TOKEN=$(curl -s -G "$PDS_URL/xrpc/com.atproto.server.getServiceAuth" \
+  -H "Authorization: Bearer $ACCESS_JWT" \
+  --data-urlencode "aud=$SERVICE_DID" \
+  --data-urlencode "lxm=net.openmeet.auth" \
+  | jq -r '.token')
+
+# 3. Exchange it for OpenMeet tokens
+curl -s -X POST https://api.openmeet.net/api/v1/auth/atproto/service-auth \
+  -H "x-tenant-id: lsdfaopkljdfs" \
+  -H "Content-Type: application/json" \
+  -d "{\"token\": \"$SERVICE_TOKEN\"}"
+# → { token, refreshToken, tokenExpires, user }
+```
+
+The API resolves the caller's DID document, pulls the signing key from it (so any
+PDS works), verifies the JWT signature, and enforces:
+
+- `aud` = OpenMeet's service DID (`did:web:api.openmeet.net`, with or without an
+  `#openmeet` fragment). Confirm the live value at
+  `https://api.openmeet.net/.well-known/did.json`.
+- `lxm` = `net.openmeet.auth`
+- `exp` within 5 minutes (generate a fresh token per exchange — don't cache it)
+- `jti` present (replay-protected)
+
+From here, use the returned `token` / `refreshToken` exactly like any other user.
+See `test/auth/atproto-service-auth.e2e-spec.ts` for the end-to-end flow.
+
+---
+
+## Social / OAuth sign-in
+
+For members (browser-based), OpenMeet supports:
+
+- **Bluesky / ATProto** — `GET /api/v1/auth/bluesky/authorize?handle=<handle>`
+  starts the OAuth redirect; the callback returns to the configured frontend
+  with OpenMeet tokens. Uses PAR + DPoP-bound tokens (browser only).
+- **Google** — `POST /api/v1/auth/google/login` with an access token obtained in
+  the frontend.
+- **GitHub** — `POST /api/v1/auth/github/login`.
+- **Facebook** — `POST /api/v1/auth/facebook/login`.
+
+Each resolves to the same OpenMeet JWT as email sign-in.
+
+---
+
+## About the JWT strategy
+
+In `src/auth/strategies/jwt.strategy.ts`, the `validate` method does not re-load
+the user from the database — that would negate the performance benefit of JWTs.
+The token payload carries `id`, `role`, `slug`, `sessionId`, and `tenantId`.
+
+```typescript
+// src/auth/strategies/jwt.strategy.ts
+public validate(payload: JwtPayloadType): JwtPayloadType {
+  if (!payload.id) {
+    throw new UnauthorizedException('JWT payload missing user ID');
+  }
+  return payload;
+}
+```
+
+If you need full user info, load it in a service.
+
+---
+
+## Configure auth secrets
+
+When standing up an instance, generate signing secrets:
+
+```bash
+node -e "console.log('\nAUTH_JWT_SECRET=' + require('crypto').randomBytes(256).toString('base64') + '\n\nAUTH_REFRESH_SECRET=' + require('crypto').randomBytes(256).toString('base64') + '\n\nAUTH_FORGOT_SECRET=' + require('crypto').randomBytes(256).toString('base64') + '\n\nAUTH_CONFIRM_EMAIL_SECRET=' + require('crypto').randomBytes(256).toString('base64'));"
+```
+
+Set `AUTH_JWT_SECRET` and `AUTH_REFRESH_SECRET` (plus the forgot/confirm secrets)
+in your environment from the output.
+
+---
 
 ## Logout
 
-1. Call following endpoint:
+```text
+POST /api/v1/auth/logout
+```
 
-   ```text
-   POST /api/v1/auth/logout
-   ```
-
-2. Remove `access token` and `refresh token` from your client app (cookies, localStorage, etc).
+Then drop the access and refresh tokens from client storage.
 
 ---
 

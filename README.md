@@ -112,6 +112,15 @@ See **[DEVELOPMENT.md](./DEVELOPMENT.md)** for complete local development instru
 
 > **Low RAM?** Use `docker-compose-slim.yml` (~675MB) instead of the full dev compose. It includes only the essentials: API, PostgreSQL, Redis, and Maildev.
 
+### Documentation
+
+In-depth guides live in [`docs/`](./docs/). Notably:
+
+- **[Auth](./docs/auth.md)** — authenticating against the API, including the
+  refresh-token flow and **programmatic / bot access** (email + ATProto service
+  auth) for automation and integrations.
+- Interactive API reference: [api.openmeet.net/docs](https://api.openmeet.net/docs) (Swagger/OpenAPI)
+
 ### Database Migrations
 
 Migrations are **not** run automatically on `docker compose up`. Run them manually:
