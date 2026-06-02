@@ -187,7 +187,7 @@ curl -s -H "x-tenant-id: lsdfaopkljdfs" \
 
 **Key points:**
 - Path is `/api/meta/` (no `v1`)
-- Requires `x-tenant-id` header (`lsdfaopkljdfs` for local, `openmeet` for dev/prod)
+- Requires `x-tenant-id` header (`lsdfaopkljdfs` for all environments)
 - Returns full HTML with OG tags - grep for `og:description` to verify
 - In production, nginx routes bot User-Agents to these endpoints automatically
 

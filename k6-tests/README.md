@@ -98,8 +98,8 @@ Tests use environment variables with sensible defaults:
 # API endpoint (default: http://localhost:3000)
 export API_URL=http://localhost:3000
 
-# Tenant ID (default: openmeet)
-export TENANT_ID=openmeet
+# Tenant ID (default: lsdfaopkljdfs)
+export TENANT_ID=lsdfaopkljdfs
 
 # Load profile
 export TEST_DURATION=5m        # How long to run test
