@@ -7,10 +7,10 @@ import { FilesS3PresignedController } from './file.controller';
 import { MulterModule } from '@nestjs/platform-express';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
-import { S3Client } from '@aws-sdk/client-s3';
 import multerS3 from 'multer-s3';
 
 import { FilesS3PresignedService } from './file.service';
+import { createFileS3Client } from '../../../s3-client.factory';
 import { RelationalFilePersistenceModule } from '../../persistence/relational/relational-persistence.module';
 import { AllConfigType } from '../../../../config/config.type';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
@@ -27,16 +27,18 @@ const infrastructurePersistenceModule = RelationalFilePersistenceModule;
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService<AllConfigType>) => {
-        const s3 = new S3Client({
+        const s3 = createFileS3Client({
           region: configService.get('file.awsS3Region', { infer: true }),
-          credentials: {
-            accessKeyId: configService.getOrThrow('file.accessKeyId', {
-              infer: true,
-            }),
-            secretAccessKey: configService.getOrThrow('file.secretAccessKey', {
-              infer: true,
-            }),
-          },
+          accessKeyId: configService.getOrThrow('file.accessKeyId', {
+            infer: true,
+          }),
+          secretAccessKey: configService.getOrThrow('file.secretAccessKey', {
+            infer: true,
+          }),
+          endpoint: configService.get('file.awsS3Endpoint', { infer: true }),
+          forcePathStyle: configService.get('file.awsS3ForcePathStyle', {
+            infer: true,
+          }),
         });
 
         return {

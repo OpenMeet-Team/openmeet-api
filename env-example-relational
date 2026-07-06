@@ -50,6 +50,12 @@ ACCESS_KEY_ID=None
 SECRET_ACCESS_KEY=None
 AWS_S3_REGION=None
 AWS_DEFAULT_S3_BUCKET=None
+# Optional: point the S3 client at an S3-compatible provider (e.g. DigitalOcean
+# Spaces: https://nyc3.digitaloceanspaces.com). Leave unset to use AWS S3.
+# AWS_S3_ENDPOINT=
+# Optional: path-style addressing (endpoint/bucket/key). Leave "false" for
+# providers that support virtual-hosted-style buckets without dots.
+# AWS_S3_FORCE_PATH_STYLE=false
 
 # MAIL_HOST is for API inside Docker (container-to-container)
 MAIL_HOST=maildev
