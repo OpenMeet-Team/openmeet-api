@@ -11,6 +11,8 @@ export type FileConfig = {
   secretAccessKey?: string;
   awsDefaultS3Bucket?: string;
   awsS3Region?: string;
+  awsS3Endpoint?: string;
+  awsS3ForcePathStyle?: boolean;
   cloudfrontDistributionDomain?: string;
   cloudfrontKeyPairId?: string;
   cloudfrontPrivateKey?: string;

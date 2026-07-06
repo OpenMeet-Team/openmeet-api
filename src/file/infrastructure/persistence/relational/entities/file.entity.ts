@@ -7,7 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Transform } from 'class-transformer';
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ApiProperty } from '@nestjs/swagger';
 import { AppConfig } from '../../../../../config/app-config.type';
@@ -15,6 +15,7 @@ import appConfig from '../../../../../config/app.config';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { FileConfig, FileDriver } from '../../../../config/file-config.type';
 import fileConfig from '../../../../config/file.config';
+import { createFileS3Client } from '../../../../s3-client.factory';
 import { ulid } from 'ulid';
 
 @Entity({ name: 'files' })
@@ -69,12 +70,12 @@ export class FileEntity extends EntityRelationalHelper {
       } else if (
         [FileDriver.S3_PRESIGNED, FileDriver.S3].includes(config.driver)
       ) {
-        const s3 = new S3Client({
+        const s3 = createFileS3Client({
           region: config.awsS3Region ?? '',
-          credentials: {
-            accessKeyId: config.accessKeyId ?? '',
-            secretAccessKey: config.secretAccessKey ?? '',
-          },
+          accessKeyId: config.accessKeyId ?? '',
+          secretAccessKey: config.secretAccessKey ?? '',
+          endpoint: config.awsS3Endpoint,
+          forcePathStyle: config.awsS3ForcePathStyle,
         });
 
         const command = new GetObjectCommand({

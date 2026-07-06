@@ -40,6 +40,26 @@ class EnvironmentVariablesValidator {
   @IsString()
   AWS_S3_REGION: string;
 
+  // Optional custom S3-compatible endpoint (e.g. DigitalOcean Spaces).
+  // When unset, the AWS SDK targets AWS S3 as before.
+  @ValidateIf((envValues) =>
+    [FileDriver.S3, FileDriver.S3_PRESIGNED, FileDriver.CLOUDFRONT].includes(
+      envValues.FILE_DRIVER,
+    ),
+  )
+  @IsString()
+  @IsOptional()
+  AWS_S3_ENDPOINT: string;
+
+  @ValidateIf((envValues) =>
+    [FileDriver.S3, FileDriver.S3_PRESIGNED, FileDriver.CLOUDFRONT].includes(
+      envValues.FILE_DRIVER,
+    ),
+  )
+  @IsString()
+  @IsOptional()
+  AWS_S3_FORCE_PATH_STYLE: string;
+
   @ValidateIf((envValues) => envValues.FILE_DRIVER === FileDriver.CLOUDFRONT)
   @IsString()
   CLOUDFRONT_DISTRIBUTION_DOMAIN: string;
@@ -66,6 +86,8 @@ export default registerAs<FileConfig>('file', () => {
     secretAccessKey: process.env.SECRET_ACCESS_KEY,
     awsDefaultS3Bucket: process.env.AWS_DEFAULT_S3_BUCKET,
     awsS3Region: process.env.AWS_S3_REGION,
+    awsS3Endpoint: process.env.AWS_S3_ENDPOINT,
+    awsS3ForcePathStyle: process.env.AWS_S3_FORCE_PATH_STYLE === 'true',
     cloudfrontDistributionDomain: process.env.CLOUDFRONT_DISTRIBUTION_DOMAIN,
     cloudfrontKeyPairId: process.env.CLOUDFRONT_KEY_PAIR_ID,
     cloudfrontPrivateKey: process.env.CLOUDFRONT_PRIVATE_KEY,

@@ -11,6 +11,7 @@ import {
 import { FileUploadDto } from './dto/file.dto';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createFileS3Client } from '../../../s3-client.factory';
 import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
 import { ConfigService } from '@nestjs/config';
 import { FileType } from '../../../domain/file';
@@ -31,17 +32,23 @@ export class FilesS3PresignedService {
     private readonly configService: ConfigService,
     private readonly tenantConnectionService: TenantConnectionService,
   ) {
-    this.s3 = new S3Client({
+    this.s3 = createFileS3Client({
       region: configService.get<string>('file.awsS3Region', { infer: true }),
-      credentials: {
-        accessKeyId: configService.getOrThrow<string>('file.accessKeyId', {
+      accessKeyId: configService.getOrThrow<string>('file.accessKeyId', {
+        infer: true,
+      }),
+      secretAccessKey: configService.getOrThrow<string>(
+        'file.secretAccessKey',
+        {
           infer: true,
-        }),
-        secretAccessKey: configService.getOrThrow<string>(
-          'file.secretAccessKey',
-          { infer: true },
-        ),
-      },
+        },
+      ),
+      endpoint: configService.get<string>('file.awsS3Endpoint', {
+        infer: true,
+      }),
+      forcePathStyle: configService.get<boolean>('file.awsS3ForcePathStyle', {
+        infer: true,
+      }),
     });
   }
 
