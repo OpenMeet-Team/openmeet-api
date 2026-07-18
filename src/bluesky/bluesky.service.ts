@@ -6,6 +6,7 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { Agent } from '@atproto/api';
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { TID } from '@atproto/common-web';
+import { BlobRef } from '@atproto/lexicon';
 import { instanceToPlain } from 'class-transformer';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
@@ -16,6 +17,7 @@ import {
   BLUESKY_COLLECTIONS,
 } from './BlueskyTypes';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
+import { EventImageBlobService } from './event-image-blob.service';
 import { mergeArrayField } from './atproto-record-merge.utils';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
@@ -68,6 +70,7 @@ export class BlueskyService {
     private readonly blueskyIdentityService: BlueskyIdentityService,
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
     private readonly atprotoLexiconService: AtprotoLexiconService,
+    private readonly eventImageBlobService: EventImageBlobService,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -79,34 +82,23 @@ export class BlueskyService {
   }
 
   /**
-   * Build a full URL for an image path.
-   * If the path is already a full URL, return it as-is.
-   * Otherwise, construct from CloudFront or backend domain config.
+   * Resolve the PDS host for a DID so the getBlob URL points at the repo that
+   * actually holds the blob. Falls back to OpenMeet's own PDS (custodial users).
    */
-  private buildImageUrl(path: string): string {
-    // Already a full URL
-    if (/^https?:\/\//i.test(path)) {
-      return path;
+  private async resolveUserPdsUrl(did: string): Promise<string> {
+    try {
+      const profile = await this.blueskyIdentityService.resolveProfile(did);
+      if (profile?.pdsUrl) {
+        return profile.pdsUrl;
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Could not resolve PDS URL for ${did}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
-
-    const cloudfrontDomain = this.configService.get<string>(
-      'file.cloudfrontDistributionDomain',
-      { infer: true },
-    );
-    if (cloudfrontDomain) {
-      return `https://${cloudfrontDomain}/${path}`;
-    }
-
-    const backendDomain =
-      this.configService.get<string>('app.backendDomain', { infer: true }) ||
-      this.configService.get<string>('BACKEND_DOMAIN', { infer: true });
-    if (backendDomain) {
-      const separator = path.startsWith('/') ? '' : '/';
-      return `${backendDomain}${separator}${path}`;
-    }
-
-    // Last resort: prepend https://
-    return `https://${path}`;
+    return this.configService.get<string>('pds.url', { infer: true }) || '';
   }
 
   async resumeSession(tenantId: string, did: string): Promise<Agent> {
@@ -414,19 +406,58 @@ export class BlueskyService {
         );
       }
 
-      // Prepare uris array with image if it exists
+      // Prepare uris array with image if it exists.
+      //
+      // The event image is uploaded to the owner's PDS as a content-addressed
+      // blob and referenced by a stable, federated getBlob URL. This keeps the
+      // media in the same portable substrate as the (immutable) record instead
+      // of a non-portable OpenMeet/S3/CloudFront URL. The blob ref is also pinned
+      // into the record (openMeetMedia, below) so the PDS does not garbage-
+      // collect it -- the community lexicon has no blob field, so a URL alone
+      // would leave the blob unreferenced and it would eventually be deleted.
       const uris: BlueskyEventUri[] = [];
+      let eventImageBlob: BlobRef | undefined;
+      let eventImageSourceKey: string | undefined;
       if (event.image?.path) {
-        // Build the full image URL from the raw DB path.
-        // instanceToPlain may not fire @Transform on plain objects, so we
-        // construct the URL using config -- the same approach as embed.service.ts.
-        const imageUrl = this.buildImageUrl(event.image.path);
-        uris.push({
-          $type: 'community.lexicon.calendar.event#uri',
-          uri: imageUrl,
-          name: 'Event Image',
-          source: sourceId,
-        });
+        const imagePath = event.image.path;
+        if (/^https?:\/\//i.test(imagePath)) {
+          // Already a full URL (legacy/corrupted state): pass through, no blob.
+          uris.push({
+            $type: 'community.lexicon.calendar.event#uri',
+            uri: imagePath,
+            name: 'Event Image',
+            source: sourceId,
+          });
+        } else {
+          // TODO(dedup): re-uploads on every publish. Safe (a fresh, valid
+          // BlobRef always re-pins the blob) but wasteful; a future optimization
+          // can reuse the prior blob when the source key is unchanged.
+          const uploaded = await this.eventImageBlobService.uploadEventImage(
+            agent,
+            imagePath,
+          );
+          if (uploaded) {
+            const userPdsUrl = await this.resolveUserPdsUrl(did);
+            const imageUrl = this.eventImageBlobService.buildGetBlobUrl(
+              userPdsUrl,
+              did,
+              uploaded.cid,
+            );
+            eventImageBlob = uploaded.blob;
+            eventImageSourceKey = imagePath;
+            uris.push({
+              $type: 'community.lexicon.calendar.event#uri',
+              uri: imageUrl,
+              name: 'Event Image',
+              source: sourceId,
+            });
+          } else {
+            this.logger.warn(
+              'Failed to upload event image blob; publishing event without image',
+              { eventId: event.id, imagePath },
+            );
+          }
+        }
       } else if (event.image) {
         // Log a warning if we have an image but no path
         this.logger.warn('Event has image but no path', {
@@ -511,6 +542,18 @@ export class BlueskyService {
         };
       } else {
         delete recordData.openMeetMeta;
+      }
+
+      // Pin the event image blob. The community lexicon has no blob field, so we
+      // reference the blob via an OpenMeet-namespaced field to keep the PDS from
+      // garbage-collecting it; the getBlob URL in `uris` is what appviews render.
+      if (eventImageBlob) {
+        recordData.openMeetMedia = {
+          image: eventImageBlob,
+          sourceKey: eventImageSourceKey,
+        };
+      } else {
+        delete recordData.openMeetMedia;
       }
 
       // Validate record against AT Protocol lexicon schema

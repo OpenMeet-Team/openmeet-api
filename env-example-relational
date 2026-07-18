@@ -56,6 +56,11 @@ AWS_DEFAULT_S3_BUCKET=None
 # Optional: path-style addressing (endpoint/bucket/key). Leave "false" for
 # providers that support virtual-hosted-style buckets without dots.
 # AWS_S3_FORCE_PATH_STYLE=false
+# Optional: public base URL (a CDN) fronting the PDS com.atproto.sync.getBlob
+# endpoint, baked into federated event records for images stored as PDS blobs
+# on OpenMeet's own PDS (e.g. https://media.openmeet.net). Leave unset to bake
+# the owner's own PDS host instead. See src/bluesky/event-image-blob.service.ts.
+# BLOB_PUBLIC_BASE_URL=
 
 # MAIL_HOST is for API inside Docker (container-to-container)
 MAIL_HOST=maildev

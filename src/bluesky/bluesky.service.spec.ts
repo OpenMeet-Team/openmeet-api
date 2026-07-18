@@ -14,6 +14,7 @@ import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
+import { EventImageBlobService } from './event-image-blob.service';
 
 // Mock modules first before creating mock implementations
 jest.mock('@atproto/api', () => ({
@@ -94,6 +95,7 @@ const mockBlueskyIdentityService = {
   resolveProfile: jest.fn().mockResolvedValue({
     did: 'did:plc:test-resolved',
     handle: 'test.user',
+    pdsUrl: 'https://pds.opnmt.me',
     displayName: 'Test User',
     avatar: 'https://example.com/avatar.jpg',
     followersCount: 100,
@@ -137,6 +139,21 @@ const mockRequest = {
 
 const mockAtprotoLexiconService = {
   validate: jest.fn().mockReturnValue({ success: true, value: {} }),
+};
+
+const mockEventImageBlobService = {
+  uploadEventImage: jest.fn().mockResolvedValue({
+    blob: { ref: { toString: () => 'bafkreiblob' }, mimeType: 'image/jpeg', size: 1234 },
+    cid: 'bafkreiblob',
+    mimeType: 'image/jpeg',
+    size: 1234,
+  }),
+  buildGetBlobUrl: jest.fn(
+    (_pdsUrl: string, did: string, cid: string) =>
+      `https://media.openmeet.net/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(
+        did,
+      )}&cid=${encodeURIComponent(cid)}`,
+  ),
 };
 
 // Mock Agent implementation to return in tests
@@ -217,6 +234,10 @@ describe('BlueskyService', () => {
         {
           provide: AtprotoLexiconService,
           useValue: mockAtprotoLexiconService,
+        },
+        {
+          provide: EventImageBlobService,
+          useValue: mockEventImageBlobService,
         },
       ],
     }).compile();
@@ -1322,8 +1343,8 @@ describe('BlueskyService', () => {
       expect(result.rkey).toBe(sourceDataRkey);
     });
 
-    // Bug 1: Image URI should be a full URL, not raw DB path
-    it('should transform image path to a full URL using instanceToPlain', async () => {
+    // Image is uploaded as a PDS blob and referenced by a stable getBlob URL
+    it('should upload the image as a blob and bake a getBlob URL into the record', async () => {
       // Arrange - event with a raw DB path (tenantId/filename.jpg)
       const event = {
         name: 'Test Event with Image',
@@ -1346,18 +1367,32 @@ describe('BlueskyService', () => {
       // Act
       await service.createEventRecord(event, did, handle, tenantId);
 
-      // Assert - the image URI should NOT be the raw DB path
+      // The image should have been uploaded as a blob from its raw DB key
+      expect(mockEventImageBlobService.uploadEventImage).toHaveBeenCalledWith(
+        expect.anything(),
+        'lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg',
+      );
+
       const putRecordCall =
         mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
       const imageUri = putRecordCall.record.uris.find(
         (u: any) => u.name === 'Event Image',
       );
       expect(imageUri).toBeDefined();
-      // The raw path should have been transformed - it should NOT be the bare DB value
+      // The raw path should NOT be baked in, and neither should a non-portable
+      // api.openmeet.net / CloudFront / S3 URL -- it must be a stable getBlob URL.
       expect(imageUri.uri).not.toBe('lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg');
-      // It should be a full CloudFront URL
+      expect(imageUri.uri).not.toContain('api.openmeet.net');
+      expect(imageUri.uri).not.toContain('cloudfront');
       expect(imageUri.uri).toBe(
-        'https://cdn.example.com/lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg',
+        'https://media.openmeet.net/xrpc/com.atproto.sync.getBlob?did=test-did&cid=bafkreiblob',
+      );
+
+      // The blob must be pinned in the record so the PDS does not GC it
+      expect(putRecordCall.record.openMeetMedia).toBeDefined();
+      expect(putRecordCall.record.openMeetMedia.image).toBeDefined();
+      expect(putRecordCall.record.openMeetMedia.sourceKey).toBe(
+        'lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg',
       );
     });
 
