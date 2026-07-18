@@ -1404,6 +1404,9 @@ describe('BlueskyService', () => {
       expect(thumbnail.content).toBeDefined();
       expect(thumbnail.content.ref.toString()).toBe('bafkreiblob');
       expect(thumbnail.aspect_ratio).toEqual({ width: 800, height: 600 });
+      // Accessibility default: the event name stands in for alt text until a
+      // dedicated alt-text field exists.
+      expect(thumbnail.alt).toBe('Test Event with Image');
 
       // The old bespoke openMeetMedia field is gone.
       expect(record.openMeetMedia).toBeUndefined();
@@ -1452,6 +1455,7 @@ describe('BlueskyService', () => {
       const thumbnails = media.filter((m) => m.role === 'thumbnail');
       expect(thumbnails).toHaveLength(1);
       expect(thumbnails[0].content.ref.toString()).toBe('bafkreiblob');
+      expect(thumbnails[0].alt).toBe('Test Event with Foreign Media');
     });
 
     it('should drop the thumbnail but keep foreign media when the event has no image', async () => {
@@ -1532,6 +1536,7 @@ describe('BlueskyService', () => {
       );
       expect(thumbnail.content.ref.toString()).toBe('bafexternal');
       expect(thumbnail.aspect_ratio).toEqual({ width: 1024, height: 768 });
+      expect(thumbnail.alt).toBe('Test Event Legacy URL Image');
       // External re-host has no S3 source key.
       expect(record.openMeetMeta).toBeUndefined();
     });

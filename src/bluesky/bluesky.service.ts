@@ -523,9 +523,13 @@ export class BlueskyService {
         : [];
       const foreignMedia = existingMedia.filter((m) => m?.role !== 'thumbnail');
       if (eventImageBlob) {
+        // alt is optional in the ecosystem media shape; default it to the event
+        // name as an accessibility fallback (screen readers get something
+        // meaningful) until the product grows a dedicated alt-text field.
         const thumbnail: Record<string, unknown> = {
           role: 'thumbnail',
           content: eventImageBlob,
+          alt: event.name,
         };
         if (eventImageAspectRatio) {
           thumbnail.aspect_ratio = eventImageAspectRatio;

@@ -1,9 +1,11 @@
+import { promises as fsPromises } from 'fs';
+import { basename, join } from 'path';
 import { Injectable, Logger } from '@nestjs/common';
 import { Agent } from '@atproto/api';
 import { BlobRef } from '@atproto/lexicon';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
-import { FileConfig } from '../file/config/file-config.type';
+import { FileConfig, FileDriver } from '../file/config/file-config.type';
 import fileConfig from '../file/config/file.config';
 import { createFileS3Client } from '../file/s3-client.factory';
 
@@ -41,10 +43,24 @@ export class EventImageBlobService {
   // atmo's 900KB skip-if-small threshold.
   private static readonly MAX_BLOB_BYTES = 900 * 1024;
   private static readonly MAX_EDGE = 2048;
-  private static readonly LAST_RESORT_EDGE = 1280;
   private static readonly QUALITY_START = 80;
   private static readonly QUALITY_FLOOR = 45;
-  private static readonly LAST_RESORT_QUALITY = 70;
+
+  // Descending fallback ladder for images the 2048px quality loop cannot fit
+  // under the ceiling. WebP encodes the alpha channel losslessly, so a
+  // high-entropy RGBA image can stay oversized at any quality; the later rungs
+  // flatten the alpha away to break that. If even the last rung is oversized,
+  // the caller publishes without an image.
+  private static readonly FALLBACK_LADDER: ReadonlyArray<{
+    edge: number;
+    quality: number;
+    flatten: boolean;
+  }> = [
+    { edge: 1280, quality: 70, flatten: false },
+    { edge: 1024, quality: 60, flatten: false },
+    { edge: 800, quality: 55, flatten: true },
+    { edge: 640, quality: 50, flatten: true },
+  ];
 
   // Guards for re-hosting legacy full-URL images (see uploadExternalImage).
   private static readonly EXTERNAL_MAX_BYTES = 10 * 1024 * 1024;
@@ -110,8 +126,9 @@ export class EventImageBlobService {
     agent: Agent,
     bytes: Buffer,
     mimeType: string,
-  ): Promise<UploadedEventImage> {
+  ): Promise<UploadedEventImage | null> {
     const normalized = await this.normalizeForBlob(bytes, mimeType);
+    if (!normalized) return null;
     const res = await agent.uploadBlob(normalized.bytes, {
       encoding: normalized.mimeType,
     });
@@ -130,6 +147,20 @@ export class EventImageBlobService {
     key: string,
   ): Promise<{ bytes: Buffer; mimeType: string } | null> {
     const config = fileConfig() as FileConfig;
+
+    // Local file driver (dev/CI environments): the object lives on disk under
+    // ./files/<name>, which is also where the local download route serves it
+    // from. Reduce the stored path to its basename to address the file (this
+    // doubles as path-traversal protection).
+    if (config.driver === FileDriver.LOCAL) {
+      const name = basename(key);
+      const bytes = await fsPromises.readFile(join('./files', name));
+      return {
+        bytes: Buffer.from(bytes),
+        mimeType: this.mimeFromKey(name) || 'application/octet-stream',
+      };
+    }
+
     const s3 = createFileS3Client({
       region: config.awsS3Region ?? '',
       accessKeyId: config.accessKeyId ?? '',
@@ -199,29 +230,48 @@ export class EventImageBlobService {
         return null;
       }
 
-      const bytes = Buffer.from(await res.arrayBuffer());
-      if (bytes.length > EventImageBlobService.EXTERNAL_MAX_BYTES) {
-        this.logger.warn(
-          `External image "${url}" is ${bytes.length}B, over the ${EventImageBlobService.EXTERNAL_MAX_BYTES}B cap`,
-        );
+      if (!res.body) {
+        this.logger.warn(`External image fetch for "${url}" returned no body`);
         return null;
       }
 
-      return { bytes, mimeType: contentType.split(';')[0].trim() };
+      // Read the body incrementally so a server that omits or lies about
+      // Content-Length cannot force an arbitrarily large allocation: stop and
+      // abort the transfer the moment the running total exceeds the cap.
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+        total += chunk.byteLength;
+        if (total > EventImageBlobService.EXTERNAL_MAX_BYTES) {
+          controller.abort();
+          this.logger.warn(
+            `External image "${url}" exceeded the ${EventImageBlobService.EXTERNAL_MAX_BYTES}B cap mid-download; aborting`,
+          );
+          return null;
+        }
+        chunks.push(Buffer.from(chunk));
+      }
+
+      return {
+        bytes: Buffer.concat(chunks),
+        mimeType: contentType.split(';')[0].trim(),
+      };
     } finally {
       clearTimeout(timer);
     }
   }
 
   /**
-   * Ensure the blob fits comfortably under the size ceiling and capture the
-   * final image dimensions for the media entry's aspect_ratio.
+   * Ensure the blob fits under the size ceiling and capture the final image
+   * dimensions for the media entry's aspect_ratio.
    *
    * Small images (<= MAX_BLOB_BYTES) are uploaded byte-for-byte (best fidelity;
    * preserves small GIFs/PNGs exactly). Larger ones are auto-oriented, resized
    * so the longest edge is <= 2048, and re-encoded to WebP (which handles alpha,
    * so a single codec covers both opaque and transparent images), stepping the
-   * quality down until under the ceiling.
+   * quality down until under the ceiling, then walking a bounded fallback
+   * ladder of smaller sizes. Returns null if nothing fits -- the caller then
+   * publishes without an image rather than uploading an over-ceiling blob.
    */
   private async normalizeForBlob(
     bytes: Buffer,
@@ -231,7 +281,7 @@ export class EventImageBlobService {
     mimeType: string;
     width?: number;
     height?: number;
-  }> {
+  } | null> {
     if (bytes.length <= EventImageBlobService.MAX_BLOB_BYTES) {
       // Uploaded as-is; probe dimensions for aspect_ratio. If the probe fails
       // (odd/unsupported format), omit dimensions rather than fail the upload.
@@ -273,20 +323,35 @@ export class EventImageBlobService {
       quality = Math.max(EventImageBlobService.QUALITY_FLOOR, quality - 10);
     }
 
-    // Last resort: guarantee we get under the ceiling by shrinking harder.
+    // Fallback ladder: shrink harder until it fits. Bounded -- if the last
+    // rung is still oversized, give up rather than upload an over-ceiling blob.
     if (out.length > EventImageBlobService.MAX_BLOB_BYTES) {
-      const result = await sharp(bytes, { failOn: 'none' })
-        .rotate()
-        .resize({
-          width: EventImageBlobService.LAST_RESORT_EDGE,
-          height: EventImageBlobService.LAST_RESORT_EDGE,
+      for (const rung of EventImageBlobService.FALLBACK_LADDER) {
+        let step = sharp(bytes, { failOn: 'none' }).rotate().resize({
+          width: rung.edge,
+          height: rung.edge,
           fit: 'inside',
           withoutEnlargement: true,
-        })
-        .webp({ quality: EventImageBlobService.LAST_RESORT_QUALITY })
-        .toBuffer({ resolveWithObject: true });
-      out = result.data;
-      info = result.info;
+        });
+        if (rung.flatten) {
+          // Drop the alpha channel: WebP stores alpha losslessly, so
+          // high-entropy transparency alone can keep the encode oversized.
+          step = step.flatten();
+        }
+        const result = await step
+          .webp({ quality: rung.quality })
+          .toBuffer({ resolveWithObject: true });
+        out = result.data;
+        info = result.info;
+        if (out.length <= EventImageBlobService.MAX_BLOB_BYTES) break;
+      }
+    }
+
+    if (out.length > EventImageBlobService.MAX_BLOB_BYTES) {
+      this.logger.warn(
+        `Could not normalize event image under ${EventImageBlobService.MAX_BLOB_BYTES}B (best attempt ${out.length}B from ${bytes.length}B ${mimeType}); skipping image`,
+      );
+      return null;
     }
 
     this.logger.debug(

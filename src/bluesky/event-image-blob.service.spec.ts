@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { promises as fsPromises } from 'fs';
 import { Test, TestingModule } from '@nestjs/testing';
 import sharp from 'sharp';
 import { EventImageBlobService } from './event-image-blob.service';
@@ -12,6 +13,8 @@ const mockedCreateS3 = createFileS3Client as jest.MockedFunction<
   typeof createFileS3Client
 >;
 const mockedFileConfig = fileConfig as jest.MockedFunction<typeof fileConfig>;
+
+const MAX_BLOB_BYTES = 900 * 1024;
 
 /** A small, valid image well under the 900KB passthrough threshold. */
 async function smallImage(
@@ -35,13 +38,29 @@ async function smallImage(
 }
 
 /**
- * A random-noise image that does not compress below the 900KB threshold and
+ * A random-noise RGB image that does not compress below the 900KB threshold and
  * whose longest edge exceeds 2048, so normalizeForBlob takes the resize+WebP
  * path. Noise is (nearly) incompressible, so the encoded PNG stays large.
  */
 async function oversizedImage(width: number, height: number): Promise<Buffer> {
   const raw = randomBytes(width * height * 3);
   return sharp(raw, { raw: { width, height, channels: 3 } })
+    .png()
+    .toBuffer();
+}
+
+/**
+ * A high-entropy RGBA image: WebP encodes the alpha channel LOSSLESSLY, so
+ * noise transparency keeps the encode oversized at any lossy quality until the
+ * fallback ladder flattens the alpha away. Reproduces the over-ceiling bug the
+ * bounded ladder fixes.
+ */
+async function oversizedAlphaImage(
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  const raw = randomBytes(width * height * 4);
+  return sharp(raw, { raw: { width, height, channels: 4 } })
     .png()
     .toBuffer();
 }
@@ -69,6 +88,10 @@ describe('EventImageBlobService', () => {
     }).compile();
 
     service = module.get<EventImageBlobService>(EventImageBlobService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   function mockAgent(cid = 'bafuploadedcid') {
@@ -132,7 +155,7 @@ describe('EventImageBlobService', () => {
 
     it('should resize and re-encode oversized images to WebP, capturing final dimensions', async () => {
       const big = await oversizedImage(2100, 500);
-      expect(big.length).toBeGreaterThan(900 * 1024);
+      expect(big.length).toBeGreaterThan(MAX_BLOB_BYTES);
       mockS3Returning({ bytes: big, contentType: 'image/png' });
       const { agent, uploadBlob } = mockAgent('bafwebp');
 
@@ -144,9 +167,32 @@ describe('EventImageBlobService', () => {
       expect(result!.width).toBe(2048);
       expect(result!.height).toBeLessThanOrEqual(2048);
       expect(result!.height).toBeLessThan(500);
+      expect(result!.size).toBeLessThanOrEqual(MAX_BLOB_BYTES);
       const [, opts] = uploadBlob.mock.calls[0];
       expect(opts).toEqual({ encoding: 'image/webp' });
-    }, 20000);
+    }, 30000);
+
+    it('should never upload an over-ceiling blob for high-entropy RGBA input (ladder or skip)', async () => {
+      // WebP stores alpha losslessly, so noise transparency can defeat the
+      // lossy quality loop entirely; the bounded fallback ladder must either
+      // produce something under the ceiling (flattening the alpha) or give up
+      // with null -- never return oversized bytes.
+      const rgba = await oversizedAlphaImage(1500, 1500);
+      expect(rgba.length).toBeGreaterThan(MAX_BLOB_BYTES);
+      mockS3Returning({ bytes: rgba, contentType: 'image/png' });
+      const { agent, uploadBlob } = mockAgent('bafalpha');
+
+      const result = await service.uploadEventImage(agent, 'tenant/alpha.png');
+
+      if (result === null) {
+        expect(uploadBlob).not.toHaveBeenCalled();
+      } else {
+        expect(result.size).toBeLessThanOrEqual(MAX_BLOB_BYTES);
+        expect(result.mimeType).toBe('image/webp');
+        const [bytesArg] = uploadBlob.mock.calls[0];
+        expect(bytesArg.length).toBeLessThanOrEqual(MAX_BLOB_BYTES);
+      }
+    }, 60000);
 
     it('should return null (not throw) when the object cannot be fetched', async () => {
       const send = jest.fn().mockRejectedValue(new Error('NoSuchKey'));
@@ -171,15 +217,51 @@ describe('EventImageBlobService', () => {
 
       expect(uploadBlob.mock.calls[0][1]).toEqual({ encoding: 'image/png' });
     });
+
+    it('should read the object from local disk when the local file driver is active', async () => {
+      mockedFileConfig.mockReturnValue({
+        ...baseFileConfig,
+        driver: 'local',
+      } as any);
+      const png = await smallImage(12, 8, 'png');
+      const readFileSpy = jest
+        .spyOn(fsPromises, 'readFile')
+        .mockResolvedValue(png as any);
+      const { agent, uploadBlob } = mockAgent('baflocal');
+
+      const result = await service.uploadEventImage(
+        agent,
+        '/api/v1/files/abc123.png',
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(12);
+      expect(result!.height).toBe(8);
+      // Reads ./files/<basename> -- where the local driver stores uploads.
+      expect(readFileSpy).toHaveBeenCalledWith('files/abc123.png');
+      expect(uploadBlob).toHaveBeenCalledTimes(1);
+      expect(uploadBlob.mock.calls[0][1]).toEqual({ encoding: 'image/png' });
+      // No S3 client involved on this path.
+      expect(mockedCreateS3).not.toHaveBeenCalled();
+    });
   });
 
   describe('uploadExternalImage', () => {
+    function toStream(chunks: Uint8Array[]): AsyncIterable<Uint8Array> {
+      return (async function* () {
+        for (const chunk of chunks) {
+          yield await Promise.resolve(chunk);
+        }
+      })();
+    }
+
     function mockFetch(response: {
       ok?: boolean;
       status?: number;
       contentType?: string | null;
       contentLength?: string | null;
       body?: Buffer;
+      stream?: AsyncIterable<Uint8Array>;
     }) {
       const headers = new Map<string, string | null>();
       headers.set('content-type', response.contentType ?? null);
@@ -188,12 +270,9 @@ describe('EventImageBlobService', () => {
         ok: response.ok ?? true,
         status: response.status ?? 200,
         headers: { get: (h: string) => headers.get(h.toLowerCase()) ?? null },
-        arrayBuffer: () =>
-          Promise.resolve(
-            response.body
-              ? new Uint8Array(response.body).buffer
-              : new ArrayBuffer(0),
-          ),
+        body:
+          response.stream ??
+          toStream(response.body ? [new Uint8Array(response.body)] : []),
       });
       global.fetch = fetchMock as any;
       return fetchMock;
@@ -260,6 +339,37 @@ describe('EventImageBlobService', () => {
 
       expect(result).toBeNull();
       expect(uploadBlob).not.toHaveBeenCalled();
+    });
+
+    it('should abort mid-stream when a lying Content-Length hides an over-cap body', async () => {
+      // The server declares a small size, then streams far more than the 10MB
+      // cap. The download must stop as soon as the running total crosses the
+      // cap instead of buffering everything first.
+      const chunk = new Uint8Array(1024 * 1024); // 1MB per chunk
+      let yielded = 0;
+      const lyingStream: AsyncIterable<Uint8Array> = (async function* () {
+        for (let i = 0; i < 50; i++) {
+          yielded++;
+          yield await Promise.resolve(chunk);
+        }
+      })();
+      mockFetch({
+        contentType: 'image/png',
+        contentLength: '1000', // lie
+        stream: lyingStream,
+      });
+      const { agent, uploadBlob } = mockAgent();
+
+      const result = await service.uploadExternalImage(
+        agent,
+        'https://legacy.example.com/liar.png',
+      );
+
+      expect(result).toBeNull();
+      expect(uploadBlob).not.toHaveBeenCalled();
+      // Bailed right after crossing the 10MB cap (11 chunks), long before
+      // draining all 50MB.
+      expect(yielded).toBeLessThanOrEqual(11);
     });
 
     it('should return null (not throw) when the fetch fails', async () => {
