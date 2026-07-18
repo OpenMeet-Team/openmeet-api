@@ -73,12 +73,6 @@ class EnvironmentVariablesValidator {
   @IsString()
   @IsOptional()
   CLOUDFRONT_PRIVATE_KEY: string;
-
-  // Optional CDN/base URL fronting the PDS getBlob endpoint for federated event
-  // record images (e.g. https://media.openmeet.net). Driver-independent.
-  @IsString()
-  @IsOptional()
-  BLOB_PUBLIC_BASE_URL: string;
 }
 
 export default registerAs<FileConfig>('file', () => {
@@ -97,7 +91,6 @@ export default registerAs<FileConfig>('file', () => {
     cloudfrontDistributionDomain: process.env.CLOUDFRONT_DISTRIBUTION_DOMAIN,
     cloudfrontKeyPairId: process.env.CLOUDFRONT_KEY_PAIR_ID,
     cloudfrontPrivateKey: process.env.CLOUDFRONT_PRIVATE_KEY,
-    blobPublicBaseUrl: process.env.BLOB_PUBLIC_BASE_URL,
     maxFileSize: parseInt(process.env.AWS_S3_MAX_FILE_SIZE ?? '5242880', 10), // 5mb
   };
 });

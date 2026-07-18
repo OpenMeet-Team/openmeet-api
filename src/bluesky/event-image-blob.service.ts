@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Agent } from '@atproto/api';
 import { BlobRef } from '@atproto/lexicon';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -11,39 +10,51 @@ import { createFileS3Client } from '../file/s3-client.factory';
 export interface UploadedEventImage {
   /** The blob reference to embed in the record (pins the blob against GC). */
   blob: BlobRef;
-  /** The blob CID string, used to build the getBlob URL. */
+  /** The blob CID string (a stable content identifier for the uploaded blob). */
   cid: string;
   mimeType: string;
   size: number;
+  /** Final pixel width of the uploaded image, when it could be determined. */
+  width?: number;
+  /** Final pixel height of the uploaded image, when it could be determined. */
+  height?: number;
 }
 
 /**
- * Uploads event images to the event owner's PDS as content-addressed blobs and
- * builds the stable, federated `com.atproto.sync.getBlob` URL that goes into the
- * durable event record.
+ * Uploads event images to the event owner's PDS as content-addressed blobs so
+ * they can be referenced from the durable event record via the ecosystem
+ * `media[]` convention (`{ role, content: <blob>, aspect_ratio }`).
  *
  * Why blobs instead of an S3/CDN URL: the record lives immutably in the user's
  * PDS repo, so its image must live in the same portable substrate. The bytes are
  * uploaded to the owner's PDS (user-owned, travels with the repo) and referenced
- * by CID. getBlob is a public, unauthenticated, immutable endpoint, so the URL is
- * safe to cache at a CDN and needs no signing.
+ * by the blob ref pinned in the record. No URL is baked into the record at all --
+ * consumers build a getBlob/CDN URL at render time from the blob ref and the
+ * owner's DID, so the CDN becomes a display-side concern rather than record data.
  */
 @Injectable()
 export class EventImageBlobService {
   private readonly logger = new Logger(EventImageBlobService.name);
 
-  // Keep blobs comfortably under the PDS default blob-upload limit (5 MB) and
-  // avoid bloating user repos. Images above this are resized/re-encoded first.
-  private static readonly MAX_BLOB_BYTES = 4 * 1024 * 1024;
-  private static readonly MAX_EDGE = 2000;
+  // Upload byte-for-byte below this size (best fidelity, preserves small
+  // GIFs/PNGs exactly); above it, re-encode to WebP under this ceiling. Matches
+  // atmo's 900KB skip-if-small threshold.
+  private static readonly MAX_BLOB_BYTES = 900 * 1024;
+  private static readonly MAX_EDGE = 2048;
+  private static readonly LAST_RESORT_EDGE = 1280;
+  private static readonly QUALITY_START = 80;
+  private static readonly QUALITY_FLOOR = 45;
+  private static readonly LAST_RESORT_QUALITY = 70;
 
-  constructor(private readonly configService: ConfigService) {}
+  // Guards for re-hosting legacy full-URL images (see uploadExternalImage).
+  private static readonly EXTERNAL_MAX_BYTES = 10 * 1024 * 1024;
+  private static readonly EXTERNAL_TIMEOUT_MS = 10_000;
 
   /**
-   * Fetch the image bytes from object storage, shrink if needed, and upload as a
-   * blob to the repo the agent is authenticated for. Returns null on any failure
-   * so the caller can publish the record without an image rather than failing the
-   * whole publish.
+   * Fetch the image bytes from object storage, normalize if needed, and upload
+   * as a blob to the repo the agent is authenticated for. Returns null on any
+   * failure so the caller can publish the record without an image rather than
+   * failing the whole publish.
    */
   async uploadEventImage(
     agent: Agent,
@@ -52,20 +63,11 @@ export class EventImageBlobService {
     try {
       const fetched = await this.fetchObject(imageKey);
       if (!fetched) return null;
-
-      const { bytes, mimeType } = await this.normalizeForBlob(
+      return await this.normalizeAndUpload(
+        agent,
         fetched.bytes,
         fetched.mimeType,
       );
-
-      const res = await agent.uploadBlob(bytes, { encoding: mimeType });
-      const blob = res.data.blob;
-      return {
-        blob,
-        cid: blob.ref.toString(),
-        mimeType,
-        size: bytes.length,
-      };
     } catch (err) {
       this.logger.error(
         `Failed to upload event image blob for key "${imageKey}": ${
@@ -77,40 +79,51 @@ export class EventImageBlobService {
   }
 
   /**
-   * Build the getBlob URL to bake into the record. Uses the configured public
-   * base URL (a CDN fronting OpenMeet's PDS) only when the owner is on OpenMeet's
-   * own PDS; otherwise the owner's real PDS host is used so the blob resolves.
+   * Re-host a legacy/corrupted full-URL image as a PDS blob. Fetches the URL
+   * server-side (bounded by a timeout and size cap, image content-types only),
+   * runs it through the same normalize+upload pipeline, and returns null on any
+   * failure so the caller publishes without an image rather than baking the URL.
    */
-  buildGetBlobUrl(userPdsUrl: string, did: string, cid: string): string {
-    const host = this.resolveBlobHost(userPdsUrl).replace(/\/+$/, '');
-    return `${host}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(
-      did,
-    )}&cid=${encodeURIComponent(cid)}`;
-  }
-
-  /**
-   * The CDN base URL is only valid for blobs served by OpenMeet's own PDS (it
-   * origins there). For users on any other PDS, bake their real PDS host.
-   */
-  private resolveBlobHost(userPdsUrl: string): string {
-    const config = fileConfig() as FileConfig;
-    const cdnBase = config.blobPublicBaseUrl;
-    const openmeetPds = this.configService.get<string>('pds.url', {
-      infer: true,
-    });
-
-    if (cdnBase && openmeetPds && this.sameHost(userPdsUrl, openmeetPds)) {
-      return cdnBase;
-    }
-    return userPdsUrl;
-  }
-
-  private sameHost(a: string, b: string): boolean {
+  async uploadExternalImage(
+    agent: Agent,
+    url: string,
+  ): Promise<UploadedEventImage | null> {
     try {
-      return new URL(a).host === new URL(b).host;
-    } catch {
-      return false;
+      const fetched = await this.fetchExternalImage(url);
+      if (!fetched) return null;
+      return await this.normalizeAndUpload(
+        agent,
+        fetched.bytes,
+        fetched.mimeType,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to re-host external event image "${url}": ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
     }
+  }
+
+  private async normalizeAndUpload(
+    agent: Agent,
+    bytes: Buffer,
+    mimeType: string,
+  ): Promise<UploadedEventImage> {
+    const normalized = await this.normalizeForBlob(bytes, mimeType);
+    const res = await agent.uploadBlob(normalized.bytes, {
+      encoding: normalized.mimeType,
+    });
+    const blob = res.data.blob;
+    return {
+      blob,
+      cid: blob.ref.toString(),
+      mimeType: normalized.mimeType,
+      size: normalized.bytes.length,
+      width: normalized.width,
+      height: normalized.height,
+    };
   }
 
   private async fetchObject(
@@ -139,7 +152,9 @@ export class EventImageBlobService {
 
     // AWS SDK v3 stream helper -> Uint8Array
     const bytes = Buffer.from(
-      await (res.Body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray(),
+      await (
+        res.Body as { transformToByteArray: () => Promise<Uint8Array> }
+      ).transformToByteArray(),
     );
     const mimeType =
       res.ContentType || this.mimeFromKey(key) || 'application/octet-stream';
@@ -147,58 +162,142 @@ export class EventImageBlobService {
   }
 
   /**
-   * Ensure the blob fits comfortably under the PDS limit. Images already small
-   * enough are uploaded byte-for-byte (best fidelity); larger ones are resized
-   * and re-encoded.
+   * Fetch an image from an arbitrary http(s) URL for re-hosting. Rejects
+   * non-image responses and anything over the size cap, and aborts on timeout,
+   * returning null so the caller publishes without an image.
+   */
+  private async fetchExternalImage(
+    url: string,
+  ): Promise<{ bytes: Buffer; mimeType: string } | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      EventImageBlobService.EXTERNAL_TIMEOUT_MS,
+    );
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) {
+        this.logger.warn(
+          `External image fetch for "${url}" returned HTTP ${res.status}`,
+        );
+        return null;
+      }
+
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!contentType.toLowerCase().startsWith('image/')) {
+        this.logger.warn(
+          `External image fetch for "${url}" has non-image content-type "${contentType}"`,
+        );
+        return null;
+      }
+
+      const declaredLength = Number(res.headers.get('content-length') ?? '0');
+      if (declaredLength > EventImageBlobService.EXTERNAL_MAX_BYTES) {
+        this.logger.warn(
+          `External image "${url}" declares ${declaredLength}B, over the ${EventImageBlobService.EXTERNAL_MAX_BYTES}B cap`,
+        );
+        return null;
+      }
+
+      const bytes = Buffer.from(await res.arrayBuffer());
+      if (bytes.length > EventImageBlobService.EXTERNAL_MAX_BYTES) {
+        this.logger.warn(
+          `External image "${url}" is ${bytes.length}B, over the ${EventImageBlobService.EXTERNAL_MAX_BYTES}B cap`,
+        );
+        return null;
+      }
+
+      return { bytes, mimeType: contentType.split(';')[0].trim() };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Ensure the blob fits comfortably under the size ceiling and capture the
+   * final image dimensions for the media entry's aspect_ratio.
+   *
+   * Small images (<= MAX_BLOB_BYTES) are uploaded byte-for-byte (best fidelity;
+   * preserves small GIFs/PNGs exactly). Larger ones are auto-oriented, resized
+   * so the longest edge is <= 2048, and re-encoded to WebP (which handles alpha,
+   * so a single codec covers both opaque and transparent images), stepping the
+   * quality down until under the ceiling.
    */
   private async normalizeForBlob(
     bytes: Buffer,
     mimeType: string,
-  ): Promise<{ bytes: Buffer; mimeType: string }> {
+  ): Promise<{
+    bytes: Buffer;
+    mimeType: string;
+    width?: number;
+    height?: number;
+  }> {
     if (bytes.length <= EventImageBlobService.MAX_BLOB_BYTES) {
-      return { bytes, mimeType };
+      // Uploaded as-is; probe dimensions for aspect_ratio. If the probe fails
+      // (odd/unsupported format), omit dimensions rather than fail the upload.
+      let width: number | undefined;
+      let height: number | undefined;
+      try {
+        const meta = await sharp(bytes, { failOn: 'none' }).metadata();
+        width = meta.width;
+        height = meta.height;
+      } catch {
+        // leave width/height undefined
+      }
+      return { bytes, mimeType, width, height };
     }
 
-    const base = sharp(bytes, { failOn: 'none' }).rotate();
-    const meta = await base.metadata();
-    const resized = base.resize({
+    const pipeline = sharp(bytes, { failOn: 'none' }).rotate().resize({
       width: EventImageBlobService.MAX_EDGE,
       height: EventImageBlobService.MAX_EDGE,
       fit: 'inside',
       withoutEnlargement: true,
     });
 
-    // Preserve transparency where present; otherwise JPEG for best compression.
+    let quality = EventImageBlobService.QUALITY_START;
     let out: Buffer;
-    let outMime: string;
-    if (meta.hasAlpha) {
-      out = await resized.clone().png({ compressionLevel: 9 }).toBuffer();
-      outMime = 'image/png';
-    } else {
-      out = await resized.clone().jpeg({ quality: 82, mozjpeg: true }).toBuffer();
-      outMime = 'image/jpeg';
+    let info: sharp.OutputInfo;
+    for (;;) {
+      const result = await pipeline
+        .clone()
+        .webp({ quality })
+        .toBuffer({ resolveWithObject: true });
+      out = result.data;
+      info = result.info;
+      if (
+        out.length <= EventImageBlobService.MAX_BLOB_BYTES ||
+        quality <= EventImageBlobService.QUALITY_FLOOR
+      ) {
+        break;
+      }
+      quality = Math.max(EventImageBlobService.QUALITY_FLOOR, quality - 10);
     }
 
-    // Last-resort pass: guarantee we get under the limit even if it means
-    // dropping alpha, since an oversized blob would be rejected by the PDS.
+    // Last resort: guarantee we get under the ceiling by shrinking harder.
     if (out.length > EventImageBlobService.MAX_BLOB_BYTES) {
-      out = await sharp(bytes, { failOn: 'none' })
+      const result = await sharp(bytes, { failOn: 'none' })
         .rotate()
         .resize({
-          width: 1280,
-          height: 1280,
+          width: EventImageBlobService.LAST_RESORT_EDGE,
+          height: EventImageBlobService.LAST_RESORT_EDGE,
           fit: 'inside',
           withoutEnlargement: true,
         })
-        .jpeg({ quality: 78, mozjpeg: true })
-        .toBuffer();
-      outMime = 'image/jpeg';
+        .webp({ quality: EventImageBlobService.LAST_RESORT_QUALITY })
+        .toBuffer({ resolveWithObject: true });
+      out = result.data;
+      info = result.info;
     }
 
     this.logger.debug(
-      `Resized event image ${bytes.length}B (${mimeType}) -> ${out.length}B (${outMime})`,
+      `Normalized event image ${bytes.length}B (${mimeType}) -> ${out.length}B (image/webp, ${info.width}x${info.height})`,
     );
-    return { bytes: out, mimeType: outMime };
+    return {
+      bytes: out,
+      mimeType: 'image/webp',
+      width: info.width,
+      height: info.height,
+    };
   }
 
   private mimeFromKey(key: string): string | null {
