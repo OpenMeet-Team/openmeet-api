@@ -979,11 +979,12 @@ export class EventSeriesService {
         this.validateRecurrenceRule(updateEventSeriesDto.recurrenceRule);
       }
 
-      // Create an update object with the user relationship properly set
+      // Create an update object, preserving the original owner. Updating must
+      // NEVER transfer ownership: a non-owner group manager (MANAGE_EVENTS) may
+      // call update(), so the acting userId is not necessarily the owner.
       const updateData = {
         ...updateEventSeriesDto,
-        // Ensure the user relationship is maintained
-        user: { id: userId } as any,
+        user: series.user ? ({ id: series.user.id } as any) : series.user,
       };
 
       this.logger.log(

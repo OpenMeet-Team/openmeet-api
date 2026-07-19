@@ -106,7 +106,7 @@ describe('EventSeriesService — ownership guards', () => {
       expect(mockGroupMemberService.findGroupMemberByUserId).not.toHaveBeenCalled();
     });
 
-    it('allows a non-owner who holds MANAGE_EVENTS on the series group', async () => {
+    it('allows a non-owner who holds MANAGE_EVENTS, WITHOUT transferring ownership to them', async () => {
       stubSeries({ withGroup: true });
       mockGroupMemberService.findGroupMemberByUserId.mockResolvedValue(
         memberWith(['MANAGE_EVENTS']),
@@ -115,6 +115,11 @@ describe('EventSeriesService — ownership guards', () => {
         service.update('the-series', {} as any, OTHER_ID, 'test-tenant'),
       ).resolves.toBeDefined();
       expect(mockRepo.save).toHaveBeenCalled();
+      // The persisted series must keep the ORIGINAL owner — an admin editing it
+      // must never become the owner (which would grant permanent owner-fast-path
+      // access even after losing MANAGE_EVENTS / leaving the group).
+      const saved = mockRepo.save.mock.calls[0][0];
+      expect(saved.user).toEqual({ id: OWNER_ID });
     });
 
     it('rejects (403) a group member lacking MANAGE_EVENTS', async () => {
