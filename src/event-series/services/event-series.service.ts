@@ -5,7 +5,7 @@ import {
   Inject,
   forwardRef,
   Logger,
-  UnauthorizedException,
+  ForbiddenException,
   Scope,
 } from '@nestjs/common';
 import { EventSeriesEntity } from '../infrastructure/persistence/relational/entities/event-series.entity';
@@ -927,7 +927,7 @@ export class EventSeriesService {
 
       // Check if user has permission to update the series
       if (!series.user || series.user.id !== userId) {
-        throw new UnauthorizedException(
+        throw new ForbiddenException(
           'You do not have permission to update this series',
         );
       }
@@ -999,7 +999,7 @@ export class EventSeriesService {
 
       // Check if user has permission to delete the series
       if (!series.user || series.user.id !== userId) {
-        throw new UnauthorizedException(
+        throw new ForbiddenException(
           'You do not have permission to delete this series',
         );
       }
