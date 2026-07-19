@@ -1062,6 +1062,13 @@ export class EventSeriesOccurrenceService {
       // Get the series
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
 
+      // Owner, or a group admin/owner with MANAGE_EVENTS on the series' group.
+      await this.eventSeriesService.assertCanManageSeries(
+        series,
+        userId,
+        'update',
+      );
+
       // Get the template event
       const templateEvent = series.templateEventSlug
         ? await this.eventQueryService.findEventBySlug(series.templateEventSlug)

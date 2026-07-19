@@ -9,6 +9,7 @@ import { RecurrencePatternService } from './services/recurrence-pattern.service'
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { TenantModule } from '../tenant/tenant.module';
 import { UserModule } from '../user/user.module';
+import { GroupMemberModule } from '../group-member/group-member.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { UserModule } from '../user/user.module';
     forwardRef(() => EventModule),
     TenantModule,
     forwardRef(() => UserModule),
+    forwardRef(() => GroupMemberModule),
   ],
   controllers: [EventSeriesController],
   providers: [
