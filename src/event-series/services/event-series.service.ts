@@ -21,6 +21,8 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { CreateSeriesFromEventDto } from '../dto/create-series-from-event.dto';
 import { Repository } from 'typeorm';
 import { CreateEventDto } from '../../event/dto/create-event.dto';
+import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupPermission } from '../../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventSeriesService {
@@ -35,8 +37,52 @@ export class EventSeriesService {
     private readonly eventQueryService: EventQueryService,
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
+    @Inject(forwardRef(() => GroupMemberService))
+    private readonly groupMemberService: GroupMemberService,
   ) {
     // Initialize repository lazily when methods are called
+  }
+
+  /**
+   * Authorize a mutation of an existing series.
+   *
+   * The series owner may always manage it. For a series that belongs to a
+   * group, anyone holding MANAGE_EVENTS on that group may manage it too — the
+   * same group permission that governs event management, so group owners and
+   * admins can manage their group's series (not only the exact creator).
+   * Standalone (group-less) series remain owner-only.
+   *
+   * Throws ForbiddenException (403 — authenticated but not permitted) if none
+   * of these hold. It must be 403, not 401: a 401 makes the web client treat
+   * the response as an expired session and replay the request in a loop.
+   */
+  async assertCanManageSeries(
+    series: EventSeriesEntity,
+    userId: number,
+    action = 'modify',
+  ): Promise<void> {
+    // Series owner can always manage it.
+    if (series.user && series.user.id === userId) {
+      return;
+    }
+
+    // Group series: allow holders of MANAGE_EVENTS on the series' group.
+    if (series.group && series.group.id) {
+      const member = await this.groupMemberService.findGroupMemberByUserId(
+        series.group.id,
+        userId,
+      );
+      const groupPermissions = member?.groupRole?.groupPermissions || [];
+      if (
+        groupPermissions.some((p) => p.name === GroupPermission.ManageEvents)
+      ) {
+        return;
+      }
+    }
+
+    throw new ForbiddenException(
+      `You do not have permission to ${action} this series`,
+    );
   }
 
   @Trace('event-series.initializeRepository')
@@ -925,23 +971,20 @@ export class EventSeriesService {
       // Find the series by slug
       const series = await this.findBySlug(slug, tenantId);
 
-      // Check if user has permission to update the series
-      if (!series.user || series.user.id !== userId) {
-        throw new ForbiddenException(
-          'You do not have permission to update this series',
-        );
-      }
+      // Owner, or a group admin/owner with MANAGE_EVENTS on the series' group.
+      await this.assertCanManageSeries(series, userId, 'update');
 
       // If recurrence rule is provided, validate it
       if (updateEventSeriesDto.recurrenceRule) {
         this.validateRecurrenceRule(updateEventSeriesDto.recurrenceRule);
       }
 
-      // Create an update object with the user relationship properly set
+      // Create an update object, preserving the original owner. Updating must
+      // NEVER transfer ownership: a non-owner group manager (MANAGE_EVENTS) may
+      // call update(), so the acting userId is not necessarily the owner.
       const updateData = {
         ...updateEventSeriesDto,
-        // Ensure the user relationship is maintained
-        user: { id: userId } as any,
+        user: series.user ? ({ id: series.user.id } as any) : series.user,
       };
 
       this.logger.log(
@@ -997,12 +1040,8 @@ export class EventSeriesService {
       // Find the series by slug
       const series = await this.findBySlug(slug, tenantId);
 
-      // Check if user has permission to delete the series
-      if (!series.user || series.user.id !== userId) {
-        throw new ForbiddenException(
-          'You do not have permission to delete this series',
-        );
-      }
+      // Owner, or a group admin/owner with MANAGE_EVENTS on the series' group.
+      await this.assertCanManageSeries(series, userId, 'delete');
 
       if (deleteEvents) {
         // Get all events in the series
