@@ -367,7 +367,7 @@ describe('EventImageBlobService', () => {
     it('should map a configured legacy origin (retired CloudFront) back to a key', async () => {
       mockedFileConfig.mockReturnValue({
         ...baseFileConfig,
-        mediaAllowedLegacyOrigins: ['ds1xtylbemsat.cloudfront.net'],
+        mediaAllowedLegacyOrigins: ['d111legacy222.cloudfront.net'],
       } as any);
       const png = await smallImage(10, 10, 'png');
       const send = mockS3Returning({ bytes: png, contentType: 'image/png' });
@@ -375,7 +375,7 @@ describe('EventImageBlobService', () => {
 
       const result = await service.uploadEventImage(
         agent,
-        'https://ds1xtylbemsat.cloudfront.net/events/legacy.png',
+        'https://d111legacy222.cloudfront.net/events/legacy.png',
       );
 
       expect(result!.sourceKey).toBe('events/legacy.png');
