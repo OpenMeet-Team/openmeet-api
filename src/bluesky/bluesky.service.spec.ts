@@ -142,30 +142,24 @@ const mockAtprotoLexiconService = {
 };
 
 const mockEventImageBlobService = {
-  uploadEventImage: jest.fn().mockResolvedValue({
-    blob: {
-      ref: { toString: () => 'bafkreiblob' },
+  uploadEventImage: jest.fn().mockImplementation((_agent, ref) =>
+    Promise.resolve({
+      blob: {
+        ref: { toString: () => 'bafkreiblob' },
+        mimeType: 'image/webp',
+        size: 1234,
+      },
+      cid: 'bafkreiblob',
       mimeType: 'image/webp',
       size: 1234,
-    },
-    cid: 'bafkreiblob',
-    mimeType: 'image/webp',
-    size: 1234,
-    width: 800,
-    height: 600,
-  }),
-  uploadExternalImage: jest.fn().mockResolvedValue({
-    blob: {
-      ref: { toString: () => 'bafexternal' },
-      mimeType: 'image/webp',
-      size: 2000,
-    },
-    cid: 'bafexternal',
-    mimeType: 'image/webp',
-    size: 2000,
-    width: 1024,
-    height: 768,
-  }),
+      width: 800,
+      height: 600,
+      // The service records the resolved object key. For a raw-key input that
+      // is the input itself; the URL->key origin resolution is unit-tested in
+      // event-image-blob.service.spec.ts.
+      sourceKey: typeof ref === 'string' ? ref : undefined,
+    }),
+  ),
 };
 
 // Mock Agent implementation to return in tests
@@ -1493,6 +1487,24 @@ describe('BlueskyService', () => {
     });
 
     it('should re-host a legacy full-URL image as a blob rather than baking the URL', async () => {
+      // A legacy full-URL now flows through the single uploadEventImage entry
+      // point, which maps a recognized OpenMeet origin back to an object key and
+      // reads it from our own bucket (never fetching the URL -- SSRF-guarded and
+      // unit-tested in event-image-blob.service.spec.ts). The resolved key comes
+      // back as sourceKey.
+      mockEventImageBlobService.uploadEventImage.mockResolvedValueOnce({
+        blob: {
+          ref: { toString: () => 'bafrehosted' },
+          mimeType: 'image/webp',
+          size: 2000,
+        },
+        cid: 'bafrehosted',
+        mimeType: 'image/webp',
+        size: 2000,
+        width: 1024,
+        height: 768,
+        sourceKey: 'events/old.jpg',
+      });
       const event = {
         name: 'Test Event Legacy URL Image',
         description: 'Test Description',
@@ -1502,7 +1514,7 @@ describe('BlueskyService', () => {
         status: EventStatus.Published,
         createdAt: new Date('2023-11-01T00:00:00Z'),
         slug: 'test-event-legacy-url',
-        image: { path: 'https://legacy.cdn.example.com/old.jpg' },
+        image: { path: 'https://cdn.openmeet.net/events/old.jpg' },
       } as EventEntity;
 
       await service.createEventRecord(
@@ -1512,14 +1524,11 @@ describe('BlueskyService', () => {
         'test-tenant',
       );
 
-      // Full URLs go through the external re-host path, not the S3-key path.
-      expect(
-        mockEventImageBlobService.uploadExternalImage,
-      ).toHaveBeenCalledWith(
+      // One entry point for both keys and legacy URLs; no separate external path.
+      expect(mockEventImageBlobService.uploadEventImage).toHaveBeenCalledWith(
         expect.anything(),
-        'https://legacy.cdn.example.com/old.jpg',
+        'https://cdn.openmeet.net/events/old.jpg',
       );
-      expect(mockEventImageBlobService.uploadEventImage).not.toHaveBeenCalled();
 
       const putRecordCall =
         mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
@@ -1534,11 +1543,11 @@ describe('BlueskyService', () => {
       const thumbnail = (record.media as any[]).find(
         (m) => m.role === 'thumbnail',
       );
-      expect(thumbnail.content.ref.toString()).toBe('bafexternal');
+      expect(thumbnail.content.ref.toString()).toBe('bafrehosted');
       expect(thumbnail.aspect_ratio).toEqual({ width: 1024, height: 768 });
       expect(thumbnail.alt).toBe('Test Event Legacy URL Image');
-      // External re-host has no S3 source key.
-      expect(record.openMeetMeta).toBeUndefined();
+      // The resolved object key (not the URL) is recorded for dedup.
+      expect(record.openMeetMeta.imageSourceKey).toBe('events/old.jpg');
     });
 
     it('should publish without an image when the blob upload fails', async () => {
@@ -1568,6 +1577,59 @@ describe('BlueskyService', () => {
       ).toHaveBeenCalled();
       expect(result.record).not.toHaveProperty('media');
       expect(result.record.openMeetMeta).toBeUndefined();
+    });
+
+    it('should preserve an existing thumbnail and source key when a republish upload fails (transient)', async () => {
+      // Regression: a transient upload failure on republish must NOT unpin a
+      // previously published image. The event still has a local image (so this
+      // is a temporary dependency failure, not an image removal), and the record
+      // already carries our thumbnail + its source key -- both must survive.
+      mockEventImageBlobService.uploadEventImage.mockResolvedValueOnce(null);
+      const header = {
+        role: 'header',
+        content: { $type: 'blob', ref: { $link: 'bafheader' } },
+      };
+      const existingThumbnail = {
+        role: 'thumbnail',
+        content: { $type: 'blob', ref: { $link: 'bafgoodthumb' } },
+        aspect_ratio: { width: 800, height: 600 },
+        alt: 'Previously published',
+      };
+      const event = {
+        name: 'Test Event Transient Upload Failure',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-transient-fail',
+        image: { path: 'lsdfaopkljdfs/still-here.jpg' },
+        atprotoRecord: {
+          media: [header, existingThumbnail],
+          openMeetMeta: { imageSourceKey: 'lsdfaopkljdfs/still-here.jpg' },
+        },
+      } as unknown as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      const media = result.record.media as any[];
+      // The previously published thumbnail is kept verbatim (blob still pinned).
+      const thumbnails = media.filter((m) => m.role === 'thumbnail');
+      expect(thumbnails).toHaveLength(1);
+      expect(thumbnails[0]).toEqual(existingThumbnail);
+      // Foreign entries preserved too.
+      expect(media.find((m) => m.role === 'header')).toEqual(header);
+      // The source key that matches the preserved thumbnail survives.
+      expect((result.record.openMeetMeta as any).imageSourceKey).toBe(
+        'lsdfaopkljdfs/still-here.jpg',
+      );
     });
 
     // Bug 2: locationOnline should be normalized to include protocol

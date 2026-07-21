@@ -5,14 +5,17 @@ import sharp from 'sharp';
 import { EventImageBlobService } from './event-image-blob.service';
 import { createFileS3Client } from '../file/s3-client.factory';
 import fileConfig from '../file/config/file.config';
+import appConfig from '../config/app.config';
 
 jest.mock('../file/s3-client.factory');
 jest.mock('../file/config/file.config');
+jest.mock('../config/app.config');
 
 const mockedCreateS3 = createFileS3Client as jest.MockedFunction<
   typeof createFileS3Client
 >;
 const mockedFileConfig = fileConfig as jest.MockedFunction<typeof fileConfig>;
+const mockedAppConfig = appConfig as jest.MockedFunction<typeof appConfig>;
 
 const MAX_BLOB_BYTES = 900 * 1024;
 
@@ -82,6 +85,9 @@ describe('EventImageBlobService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockedFileConfig.mockReturnValue(baseFileConfig as any);
+    mockedAppConfig.mockReturnValue({
+      backendDomain: 'https://api.openmeet.net',
+    } as any);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [EventImageBlobService],
@@ -246,144 +252,137 @@ describe('EventImageBlobService', () => {
     });
   });
 
-  describe('uploadExternalImage', () => {
-    function toStream(chunks: Uint8Array[]): AsyncIterable<Uint8Array> {
-      return (async function* () {
-        for (const chunk of chunks) {
-          yield await Promise.resolve(chunk);
-        }
-      })();
-    }
+  describe('legacy full-URL image references (origin recognition, no SSRF)', () => {
+    // An OpenMeet-origin URL is mapped back to an object key and read from our
+    // own bucket via the S3 path; the backend never fetch()es the URL. An
+    // unrecognized/arbitrary URL is refused outright -- no fetch, no S3 read --
+    // so a stored URL cannot be used to reach loopback/private/metadata hosts.
 
-    function mockFetch(response: {
-      ok?: boolean;
-      status?: number;
-      contentType?: string | null;
-      contentLength?: string | null;
-      body?: Buffer;
-      stream?: AsyncIterable<Uint8Array>;
+    function mockS3Returning(body: {
+      bytes: Uint8Array;
+      contentType?: string;
     }) {
-      const headers = new Map<string, string | null>();
-      headers.set('content-type', response.contentType ?? null);
-      headers.set('content-length', response.contentLength ?? null);
-      const fetchMock = jest.fn().mockResolvedValue({
-        ok: response.ok ?? true,
-        status: response.status ?? 200,
-        headers: { get: (h: string) => headers.get(h.toLowerCase()) ?? null },
-        body:
-          response.stream ??
-          toStream(response.body ? [new Uint8Array(response.body)] : []),
+      const send = jest.fn().mockResolvedValue({
+        Body: {
+          transformToByteArray: jest.fn().mockResolvedValue(body.bytes),
+        },
+        ContentType: body.contentType,
       });
-      global.fetch = fetchMock as any;
-      return fetchMock;
+      mockedCreateS3.mockReturnValue({ send } as any);
+      return send;
     }
 
+    let fetchSpy: jest.Mock;
+    beforeEach(() => {
+      // Fail loudly if the service ever fetches an external URL.
+      fetchSpy = jest.fn();
+      global.fetch = fetchSpy as any;
+    });
     afterEach(() => {
       delete (global as any).fetch;
     });
 
-    it('should re-host a fetched external image as a PDS blob', async () => {
+    it('should map a virtual-hosted Spaces URL back to a key and read it from our bucket, never fetching', async () => {
       const png = await smallImage(30, 40, 'png');
-      const fetchMock = mockFetch({
-        contentType: 'image/png',
-        contentLength: String(png.length),
-        body: png,
-      });
-      const { agent, uploadBlob } = mockAgent('bafext');
+      const send = mockS3Returning({ bytes: png, contentType: 'image/png' });
+      const { agent, uploadBlob } = mockAgent('bafspaces');
 
-      const result = await service.uploadExternalImage(
+      const result = await service.uploadEventImage(
         agent,
-        'https://legacy.example.com/pic.png',
+        'https://openmeet-media.nyc3.digitaloceanspaces.com/events/pic.png',
       );
 
       expect(result).not.toBeNull();
-      expect(result!.cid).toBe('bafext');
-      expect(result!.width).toBe(30);
-      expect(result!.height).toBe(40);
+      expect(result!.cid).toBe('bafspaces');
+      expect(result!.sourceKey).toBe('events/pic.png');
       expect(uploadBlob).toHaveBeenCalledTimes(1);
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://legacy.example.com/pic.png',
-        expect.objectContaining({ signal: expect.anything() }),
-      );
-    });
-
-    it('should return null when the response is not an image', async () => {
-      mockFetch({
-        contentType: 'text/html',
-        body: Buffer.from('<html></html>'),
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0][0].input).toMatchObject({
+        Bucket: 'openmeet-media',
+        Key: 'events/pic.png',
       });
-      const { agent, uploadBlob } = mockAgent();
-
-      const result = await service.uploadExternalImage(
-        agent,
-        'https://legacy.example.com/notimage',
-      );
-
-      expect(result).toBeNull();
-      expect(uploadBlob).not.toHaveBeenCalled();
     });
 
-    it('should return null when the declared size exceeds the cap', async () => {
+    it('should strip the bucket segment from a path-style Spaces URL', async () => {
       const png = await smallImage(10, 10, 'png');
-      mockFetch({
-        contentType: 'image/png',
-        contentLength: String(20 * 1024 * 1024),
-        body: png,
-      });
-      const { agent, uploadBlob } = mockAgent();
+      const send = mockS3Returning({ bytes: png, contentType: 'image/png' });
+      const { agent } = mockAgent();
 
-      const result = await service.uploadExternalImage(
+      const result = await service.uploadEventImage(
         agent,
-        'https://legacy.example.com/huge.png',
+        'https://nyc3.digitaloceanspaces.com/openmeet-media/events/pic.png',
       );
 
-      expect(result).toBeNull();
-      expect(uploadBlob).not.toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result!.sourceKey).toBe('events/pic.png');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(send.mock.calls[0][0].input.Key).toBe('events/pic.png');
     });
 
-    it('should abort mid-stream when a lying Content-Length hides an over-cap body', async () => {
-      // The server declares a small size, then streams far more than the 10MB
-      // cap. The download must stop as soon as the running total crosses the
-      // cap instead of buffering everything first.
-      const chunk = new Uint8Array(1024 * 1024); // 1MB per chunk
-      let yielded = 0;
-      const lyingStream: AsyncIterable<Uint8Array> = (async function* () {
-        for (let i = 0; i < 50; i++) {
-          yielded++;
-          yield await Promise.resolve(chunk);
-        }
-      })();
-      mockFetch({
-        contentType: 'image/png',
-        contentLength: '1000', // lie
-        stream: lyingStream,
-      });
-      const { agent, uploadBlob } = mockAgent();
+    it('should ignore presigned query params when deriving the key', async () => {
+      const png = await smallImage(10, 10, 'png');
+      const send = mockS3Returning({ bytes: png, contentType: 'image/png' });
+      const { agent } = mockAgent();
 
-      const result = await service.uploadExternalImage(
+      const result = await service.uploadEventImage(
         agent,
-        'https://legacy.example.com/liar.png',
+        'https://openmeet-media.nyc3.digitaloceanspaces.com/events/pic.png?X-Amz-Signature=abc&X-Amz-Expires=3600',
       );
 
-      expect(result).toBeNull();
-      expect(uploadBlob).not.toHaveBeenCalled();
-      // Bailed right after crossing the 10MB cap (11 chunks), long before
-      // draining all 50MB.
-      expect(yielded).toBeLessThanOrEqual(11);
+      expect(result!.sourceKey).toBe('events/pic.png');
+      expect(send.mock.calls[0][0].input.Key).toBe('events/pic.png');
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('should return null (not throw) when the fetch fails', async () => {
-      global.fetch = jest
-        .fn()
-        .mockRejectedValue(new Error('network down')) as any;
+    it('should map a configured CloudFront-origin URL back to a key', async () => {
+      mockedFileConfig.mockReturnValue({
+        ...baseFileConfig,
+        cloudfrontDistributionDomain: 'cdn.openmeet.net',
+      } as any);
+      const png = await smallImage(10, 10, 'png');
+      const send = mockS3Returning({ bytes: png, contentType: 'image/png' });
+      const { agent } = mockAgent();
+
+      const result = await service.uploadEventImage(
+        agent,
+        'https://cdn.openmeet.net/events/pic.png',
+      );
+
+      expect(result!.sourceKey).toBe('events/pic.png');
+      expect(send.mock.calls[0][0].input.Key).toBe('events/pic.png');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('should refuse an unrecognized external URL without fetching or reading S3 (SSRF guard)', async () => {
+      const send = mockS3Returning({ bytes: await smallImage(10, 10) });
       const { agent, uploadBlob } = mockAgent();
 
-      const result = await service.uploadExternalImage(
+      const result = await service.uploadEventImage(
         agent,
         'https://legacy.example.com/pic.png',
       );
 
       expect(result).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      expect(uploadBlob).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'http://127.0.0.1/x.png',
+      'http://169.254.169.254/latest/meta-data/iam/security-credentials/',
+      'http://localhost:9000/openmeet-media/events/pic.png',
+      'http://[::1]/x.png',
+    ])('should refuse loopback/private/metadata target %s', async (url) => {
+      const send = mockS3Returning({ bytes: await smallImage(10, 10) });
+      const { agent, uploadBlob } = mockAgent();
+
+      const result = await service.uploadEventImage(agent, url);
+
+      expect(result).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
       expect(uploadBlob).not.toHaveBeenCalled();
     });
   });

@@ -17,10 +17,7 @@ import {
   BLUESKY_COLLECTIONS,
 } from './BlueskyTypes';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
-import {
-  EventImageBlobService,
-  UploadedEventImage,
-} from './event-image-blob.service';
+import { EventImageBlobService } from './event-image-blob.service';
 import { mergeArrayField } from './atproto-record-merge.utils';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
@@ -399,31 +396,25 @@ export class BlueskyService {
       let eventImageBlob: BlobRef | undefined;
       let eventImageAspectRatio: { width: number; height: number } | undefined;
       let eventImageSourceKey: string | undefined;
+      // Distinguishes "the event has no image" from "the event has an image but
+      // this publish could not upload it". The latter must NOT drop a
+      // previously published thumbnail (see the media[] block below).
+      let imageUploadFailed = false;
       if (event.image?.path) {
         const imagePath = event.image.path;
-        let uploaded: UploadedEventImage | null;
-        if (/^https?:\/\//i.test(imagePath)) {
-          // Legacy/corrupted rows store a full URL. Re-host it as a PDS blob
-          // rather than baking a non-portable URL into the record (mirrors
-          // atmo's handling of external images).
-          uploaded = await this.eventImageBlobService.uploadExternalImage(
-            agent,
-            imagePath,
-          );
-        } else {
-          // TODO(dedup): re-uploads on every publish. Safe (a fresh, valid
-          // BlobRef always re-pins the blob) but wasteful; a future optimization
-          // can reuse the prior blob when the source key is unchanged.
-          uploaded = await this.eventImageBlobService.uploadEventImage(
-            agent,
-            imagePath,
-          );
-          if (uploaded) {
-            eventImageSourceKey = imagePath;
-          }
-        }
+        // uploadEventImage handles a raw object key and also a legacy full-URL
+        // that points at a recognized OpenMeet origin (which it maps back to a
+        // key); it never fetches an unrecognized/arbitrary URL.
+        // TODO(dedup): re-uploads on every publish. Safe (a fresh, valid BlobRef
+        // always re-pins the blob) but wasteful; a future optimization can reuse
+        // the prior blob when the source key is unchanged.
+        const uploaded = await this.eventImageBlobService.uploadEventImage(
+          agent,
+          imagePath,
+        );
         if (uploaded) {
           eventImageBlob = uploaded.blob;
+          eventImageSourceKey = uploaded.sourceKey;
           if (uploaded.width != null && uploaded.height != null) {
             eventImageAspectRatio = {
               width: uploaded.width,
@@ -431,8 +422,12 @@ export class BlueskyService {
             };
           }
         } else {
+          // Transient failure (S3, image processing, or uploadBlob), or an
+          // unrecognized image origin. Preserve any image already on the record
+          // rather than mutating it away on a temporary problem.
+          imageUploadFailed = true;
           this.logger.warn(
-            'Failed to upload event image blob; publishing event without image',
+            'Failed to upload event image blob; preserving any previously published image',
             { eventId: event.id, imagePath },
           );
         }
@@ -516,15 +511,24 @@ export class BlueskyService {
       // array of { role, content: <blob>, aspect_ratio } entries. Preserve any
       // foreign entries another app may have written (e.g. a `header`) and
       // replace/append only the `thumbnail` entry we own -- same pattern as
-      // atmo's save.ts. When the event has no image, drop the thumbnail entry
-      // (we are the only writer of it) but leave foreign entries intact.
+      // atmo's save.ts.
+      //
+      // Three distinct cases, so a transient upload failure never destroys a
+      // previously published image:
+      //   (a) upload succeeded          -> replace our thumbnail with the new blob
+      //   (b) image present, upload FAILED -> keep the existing thumbnail as-is
+      //   (c) event has no image        -> drop our thumbnail (we are its only
+      //                                     writer), leaving foreign entries intact
       const existingMedia = Array.isArray(base.media)
         ? (base.media as Record<string, unknown>[])
         : [];
+      const existingThumbnail = existingMedia.find(
+        (m) => m?.role === 'thumbnail',
+      );
       const foreignMedia = existingMedia.filter((m) => m?.role !== 'thumbnail');
       if (eventImageBlob) {
-        // alt is optional in the ecosystem media shape; default it to the event
-        // name as an accessibility fallback (screen readers get something
+        // (a) alt is optional in the ecosystem media shape; default it to the
+        // event name as an accessibility fallback (screen readers get something
         // meaningful) until the product grows a dedicated alt-text field.
         const thumbnail: Record<string, unknown> = {
           role: 'thumbnail',
@@ -535,7 +539,11 @@ export class BlueskyService {
           thumbnail.aspect_ratio = eventImageAspectRatio;
         }
         recordData.media = [...foreignMedia, thumbnail];
+      } else if (imageUploadFailed && existingThumbnail) {
+        // (b) do not unpin a good blob over a temporary upload failure.
+        recordData.media = [...foreignMedia, existingThumbnail];
       } else if (foreignMedia.length > 0) {
+        // (c) no image (or a failure with nothing prior to preserve).
         recordData.media = foreignMedia;
       } else {
         delete recordData.media;
@@ -551,6 +559,15 @@ export class BlueskyService {
       }
       if (eventImageSourceKey) {
         openMeetMeta.imageSourceKey = eventImageSourceKey;
+      } else if (imageUploadFailed) {
+        // Preserve the prior source key alongside the preserved thumbnail
+        // (case b above) so the two stay consistent after a transient failure.
+        const priorSourceKey = (
+          base.openMeetMeta as Record<string, unknown> | undefined
+        )?.imageSourceKey;
+        if (typeof priorSourceKey === 'string') {
+          openMeetMeta.imageSourceKey = priorSourceKey;
+        }
       }
       if (Object.keys(openMeetMeta).length > 0) {
         recordData.openMeetMeta = openMeetMeta;

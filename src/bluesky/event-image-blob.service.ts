@@ -8,6 +8,8 @@ import sharp from 'sharp';
 import { FileConfig, FileDriver } from '../file/config/file-config.type';
 import fileConfig from '../file/config/file.config';
 import { createFileS3Client } from '../file/s3-client.factory';
+import { AppConfig } from '../config/app-config.type';
+import appConfig from '../config/app.config';
 
 export interface UploadedEventImage {
   /** The blob reference to embed in the record (pins the blob against GC). */
@@ -20,6 +22,8 @@ export interface UploadedEventImage {
   width?: number;
   /** Final pixel height of the uploaded image, when it could be determined. */
   height?: number;
+  /** The object key the image was read from (for republish/dedup tracking). */
+  sourceKey: string;
 }
 
 /**
@@ -62,31 +66,44 @@ export class EventImageBlobService {
     { edge: 640, quality: 50, flatten: true },
   ];
 
-  // Guards for re-hosting legacy full-URL images (see uploadExternalImage).
-  private static readonly EXTERNAL_MAX_BYTES = 10 * 1024 * 1024;
-  private static readonly EXTERNAL_TIMEOUT_MS = 10_000;
-
   /**
-   * Fetch the image bytes from object storage, normalize if needed, and upload
-   * as a blob to the repo the agent is authenticated for. Returns null on any
-   * failure so the caller can publish the record without an image rather than
-   * failing the whole publish.
+   * Fetch the image bytes from OpenMeet object storage, normalize if needed, and
+   * upload as a blob to the repo the agent is authenticated for.
+   *
+   * `imageRef` is normally a raw object key. It may also be a legacy full URL
+   * left in the DB by older code; such a URL is honored only when it points at a
+   * recognized OpenMeet origin (CloudFront distribution, the S3/Spaces bucket,
+   * or the backend domain), in which case it is mapped back to an object key and
+   * read from our own bucket. An unrecognized/arbitrary URL is refused: the
+   * backend never issues an outbound request to it, so a stored URL cannot be
+   * used to reach loopback, private-network, or cloud-metadata endpoints (SSRF).
+   *
+   * Returns null on any failure or refusal so the caller can preserve or skip
+   * the image rather than failing the whole publish.
    */
   async uploadEventImage(
     agent: Agent,
-    imageKey: string,
+    imageRef: string,
   ): Promise<UploadedEventImage | null> {
     try {
-      const fetched = await this.fetchObject(imageKey);
+      const key = this.resolveObjectKey(imageRef);
+      if (!key) {
+        this.logger.warn(
+          `Event image ref is not a recognized OpenMeet object; skipping image ("${imageRef}")`,
+        );
+        return null;
+      }
+      const fetched = await this.fetchObject(key);
       if (!fetched) return null;
-      return await this.normalizeAndUpload(
+      const uploaded = await this.normalizeAndUpload(
         agent,
         fetched.bytes,
         fetched.mimeType,
       );
+      return uploaded ? { ...uploaded, sourceKey: key } : null;
     } catch (err) {
       this.logger.error(
-        `Failed to upload event image blob for key "${imageKey}": ${
+        `Failed to upload event image blob for ref "${imageRef}": ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
@@ -95,29 +112,75 @@ export class EventImageBlobService {
   }
 
   /**
-   * Re-host a legacy/corrupted full-URL image as a PDS blob. Fetches the URL
-   * server-side (bounded by a timeout and size cap, image content-types only),
-   * runs it through the same normalize+upload pipeline, and returns null on any
-   * failure so the caller publishes without an image rather than baking the URL.
+   * Map an image reference to an object key in our own bucket, or null if it
+   * cannot be resolved safely. A bare key is returned as-is. A full http(s) URL
+   * is accepted only when its host is a recognized OpenMeet origin; its path
+   * (with a leading bucket segment stripped for path-style URLs) becomes the
+   * key. Any other URL returns null -- we never fetch it.
    */
-  async uploadExternalImage(
-    agent: Agent,
-    url: string,
-  ): Promise<UploadedEventImage | null> {
+  private resolveObjectKey(ref: string): string | null {
+    if (!/^https?:\/\//i.test(ref)) {
+      return ref; // already an object key
+    }
+    let url: URL;
     try {
-      const fetched = await this.fetchExternalImage(url);
-      if (!fetched) return null;
-      return await this.normalizeAndUpload(
-        agent,
-        fetched.bytes,
-        fetched.mimeType,
-      );
-    } catch (err) {
-      this.logger.warn(
-        `Failed to re-host external event image "${url}": ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
+      url = new URL(ref);
+    } catch {
+      return null;
+    }
+    if (!this.isOpenMeetOrigin(url.hostname)) {
+      return null;
+    }
+    const config = fileConfig() as FileConfig;
+    let path = decodeURIComponent(url.pathname).replace(/^\/+/, '');
+    // Path-style URLs (host is the endpoint, not <bucket>.<endpoint>) carry the
+    // bucket as the first path segment; strip it to leave the object key.
+    const bucket = config.awsDefaultS3Bucket;
+    if (bucket && (path === bucket || path.startsWith(`${bucket}/`))) {
+      path = path.slice(bucket.length).replace(/^\/+/, '');
+    }
+    return path.length > 0 ? path : null;
+  }
+
+  /**
+   * Hostnames trusted as OpenMeet-controlled media origins, derived from config:
+   * the CloudFront distribution, the S3/Spaces endpoint (path- and
+   * virtual-hosted-style), and the backend domain. A legacy stored URL is only
+   * mapped back to a key when its host matches one of these.
+   */
+  private isOpenMeetOrigin(hostname: string): boolean {
+    const config = fileConfig() as FileConfig;
+    const allowed = new Set<string>();
+    const add = (h?: string | null) => {
+      const parsed = this.hostOf(h);
+      if (parsed) allowed.add(parsed);
+    };
+
+    add(config.cloudfrontDistributionDomain);
+
+    const bucket = config.awsDefaultS3Bucket;
+    const endpointHost = this.hostOf(config.awsS3Endpoint);
+    if (endpointHost) {
+      allowed.add(endpointHost); // path-style: <endpoint>/<bucket>/<key>
+      if (bucket) allowed.add(`${bucket}.${endpointHost}`); // virtual-hosted
+    } else if (bucket && config.awsS3Region) {
+      // Default AWS endpoints when none is configured.
+      allowed.add(`s3.${config.awsS3Region}.amazonaws.com`);
+      allowed.add(`${bucket}.s3.${config.awsS3Region}.amazonaws.com`);
+    }
+
+    add((appConfig() as AppConfig).backendDomain);
+
+    return allowed.has(hostname.toLowerCase());
+  }
+
+  /** Normalize a bare host or a full URL down to a lowercase hostname. */
+  private hostOf(value?: string | null): string | null {
+    if (!value) return null;
+    try {
+      const withScheme = value.includes('://') ? value : `https://${value}`;
+      return new URL(withScheme).hostname.toLowerCase();
+    } catch {
       return null;
     }
   }
@@ -126,7 +189,7 @@ export class EventImageBlobService {
     agent: Agent,
     bytes: Buffer,
     mimeType: string,
-  ): Promise<UploadedEventImage | null> {
+  ): Promise<Omit<UploadedEventImage, 'sourceKey'> | null> {
     const normalized = await this.normalizeForBlob(bytes, mimeType);
     if (!normalized) return null;
     const res = await agent.uploadBlob(normalized.bytes, {
@@ -190,75 +253,6 @@ export class EventImageBlobService {
     const mimeType =
       res.ContentType || this.mimeFromKey(key) || 'application/octet-stream';
     return { bytes, mimeType };
-  }
-
-  /**
-   * Fetch an image from an arbitrary http(s) URL for re-hosting. Rejects
-   * non-image responses and anything over the size cap, and aborts on timeout,
-   * returning null so the caller publishes without an image.
-   */
-  private async fetchExternalImage(
-    url: string,
-  ): Promise<{ bytes: Buffer; mimeType: string } | null> {
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      EventImageBlobService.EXTERNAL_TIMEOUT_MS,
-    );
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) {
-        this.logger.warn(
-          `External image fetch for "${url}" returned HTTP ${res.status}`,
-        );
-        return null;
-      }
-
-      const contentType = res.headers.get('content-type') ?? '';
-      if (!contentType.toLowerCase().startsWith('image/')) {
-        this.logger.warn(
-          `External image fetch for "${url}" has non-image content-type "${contentType}"`,
-        );
-        return null;
-      }
-
-      const declaredLength = Number(res.headers.get('content-length') ?? '0');
-      if (declaredLength > EventImageBlobService.EXTERNAL_MAX_BYTES) {
-        this.logger.warn(
-          `External image "${url}" declares ${declaredLength}B, over the ${EventImageBlobService.EXTERNAL_MAX_BYTES}B cap`,
-        );
-        return null;
-      }
-
-      if (!res.body) {
-        this.logger.warn(`External image fetch for "${url}" returned no body`);
-        return null;
-      }
-
-      // Read the body incrementally so a server that omits or lies about
-      // Content-Length cannot force an arbitrarily large allocation: stop and
-      // abort the transfer the moment the running total exceeds the cap.
-      const chunks: Buffer[] = [];
-      let total = 0;
-      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-        total += chunk.byteLength;
-        if (total > EventImageBlobService.EXTERNAL_MAX_BYTES) {
-          controller.abort();
-          this.logger.warn(
-            `External image "${url}" exceeded the ${EventImageBlobService.EXTERNAL_MAX_BYTES}B cap mid-download; aborting`,
-          );
-          return null;
-        }
-        chunks.push(Buffer.from(chunk));
-      }
-
-      return {
-        bytes: Buffer.concat(chunks),
-        mimeType: contentType.split(';')[0].trim(),
-      };
-    } finally {
-      clearTimeout(timer);
-    }
   }
 
   /**
