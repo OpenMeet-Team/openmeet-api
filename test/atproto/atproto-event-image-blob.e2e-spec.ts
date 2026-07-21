@@ -36,7 +36,7 @@ import {
  * Run with: npm run test:e2e -- --testPathPattern=atproto-event-image-blob
  */
 
-jest.setTimeout(120000);
+jest.setTimeout(180000);
 
 describe('AT Protocol Event Image Blob Publishing (e2e)', () => {
   const app = TESTING_APP_URL;
@@ -46,22 +46,174 @@ describe('AT Protocol Event Image Blob Publishing (e2e)', () => {
   const eventName = `Image Blob Test Event ${testRunId}`;
   const seededImageKey = `e2e-image-blob/${testRunId}.png`;
   const seededImageFile = `./files/${testRunId}.png`;
+  // Source image: 1400x1050 (under the 2048 edge cap, so dimensions survive)
+  // and >900KB (so the publish path must re-encode to WebP).
+  const sourceWidth = 1400;
+  const sourceHeight = 1050;
 
-  let serverApp: ReturnType<typeof request.agent>;
-  let userToken: string;
   let userDid: string;
-  let imageFileId: number;
-  let imageBytes: Buffer;
-  let eventSlug: string;
   let eventRkey: string;
   let pgClient: Client | null = null;
+  // The published record + its thumbnail entry, fetched once in beforeAll and
+  // asserted on by the contract tests below.
+  let publishedRecord: any;
+  let thumbnail: any;
 
   const waitForBackend = (ms = 1000) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
-  beforeAll(() => {
-    serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
-  });
+  const getEventRecord = async () => {
+    const pdsResponse = await request(TESTING_PDS_URL)
+      .get(
+        `/xrpc/com.atproto.repo.getRecord?repo=${userDid}&collection=community.lexicon.calendar.event&rkey=${eventRkey}`,
+      )
+      .set('Accept', 'application/json');
+    expect(pdsResponse.status).toBe(200);
+    return pdsResponse.body.value;
+  };
+
+  // Full scenario setup: register a user, wait for the custodial PDS identity,
+  // seed an image fixture the local file driver can read, create+publish a
+  // public event with that image, then fetch the published record once. Kept in
+  // beforeAll so a setup failure surfaces as a setup failure (not a cascade of
+  // misleading assertion failures) and the tests below assert only the contract.
+  beforeAll(async () => {
+    const serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
+
+    // --- register, verify, and log in a new email user ---
+    const registerResponse = await serverApp
+      .post('/api/v1/auth/email/register')
+      .send({
+        email: newUserEmail,
+        password: newUserPassword,
+        firstName: 'ImageBlob',
+        lastName: `Test${testRunId}`,
+      });
+    expect(registerResponse.status).toBe(201);
+
+    await waitForBackend(2000);
+
+    const verificationEmail = await EmailVerificationTestHelpers.waitForEmail(
+      () => mailDevService.getEmails(),
+      (email) =>
+        email.to?.some(
+          (to) => to.address.toLowerCase() === newUserEmail.toLowerCase(),
+        ) &&
+        (email.subject?.includes('Code') || email.subject?.includes('Verify')),
+      30000,
+    );
+    expect(verificationEmail).toBeDefined();
+
+    const verificationCode =
+      EmailVerificationTestHelpers.extractVerificationCode(verificationEmail);
+    expect(verificationCode).toBeDefined();
+
+    const verifyResponse = await serverApp
+      .post('/api/v1/auth/verify-email-code')
+      .send({ email: newUserEmail, code: verificationCode });
+    expect(verifyResponse.status).toBe(200);
+
+    const loginResponse = await serverApp
+      .post('/api/v1/auth/email/login')
+      .send({ email: newUserEmail, password: newUserPassword });
+    expect(loginResponse.status).toBe(200);
+    expect(loginResponse.body.token).toBeDefined();
+    const userToken = loginResponse.body.token;
+
+    // --- wait for the async custodial PDS account to appear ---
+    let did: string | undefined;
+    for (let attempt = 0; attempt < 15 && !did; attempt++) {
+      await waitForBackend(2000);
+      const identityResponse = await serverApp
+        .get('/api/atproto/identity')
+        .set('Authorization', `Bearer ${userToken}`);
+      if (identityResponse.status === 200 && identityResponse.body?.did) {
+        did = identityResponse.body.did;
+      }
+    }
+    expect(did).toBeDefined();
+    expect(did).toMatch(/^did:(plc|web):/);
+    userDid = did as string;
+
+    // --- seed the image fixture the publish path can read ---
+    // A random-noise PNG over the 900KB normalization threshold (forces WebP
+    // re-encode) but under the 5MB upload cap.
+    const raw = randomBytes(sourceWidth * sourceHeight * 3);
+    const imageBytes = await sharp(raw, {
+      raw: { width: sourceWidth, height: sourceHeight, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+    expect(imageBytes.length).toBeGreaterThan(900 * 1024);
+    expect(imageBytes.length).toBeLessThan(5 * 1024 * 1024);
+
+    const file = await createFile(app, userToken, {
+      fileName: `image-blob-${testRunId}.png`,
+      fileSize: imageBytes.length,
+      mimeType: 'image/png',
+    });
+    const imageFileId = file.id;
+    expect(imageFileId).toBeDefined();
+
+    // The e2e harness has no object storage, so stage the bytes where the local
+    // file driver reads them (tests share the API container's filesystem) and
+    // point the record's stored path at that key.
+    await fs.mkdir('./files', { recursive: true });
+    await fs.writeFile(seededImageFile, imageBytes);
+
+    pgClient = new Client({
+      host: process.env.DATABASE_HOST,
+      port: parseInt(process.env.DATABASE_PORT || '5432', 10),
+      user: process.env.DATABASE_USERNAME,
+      password: process.env.DATABASE_PASSWORD,
+      database: process.env.DATABASE_NAME,
+    });
+    await pgClient.connect();
+    const updateResult = await pgClient.query(
+      `UPDATE "tenant_${TESTING_TENANT_ID}"."files" SET "path" = $1 WHERE "id" = $2`,
+      [seededImageKey, imageFileId],
+    );
+    expect(updateResult.rowCount).toBe(1);
+
+    // --- create a public event with the image and wait for it to publish ---
+    const event = await createEvent(app, userToken, {
+      name: eventName,
+      description: 'Event to verify image blob publishing',
+      type: EventType.InPerson,
+      location: 'Blob Test Location',
+      maxAttendees: 50,
+      visibility: EventVisibility.Public,
+      status: EventStatus.Published,
+      startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      endDate: new Date(
+        Date.now() + 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
+      ).toISOString(),
+      categories: [],
+      timeZone: 'America/New_York',
+      image: { id: imageFileId },
+    });
+    expect(event.slug).toBeDefined();
+
+    let rkey: string | undefined;
+    for (let attempt = 0; attempt < 15 && !rkey; attempt++) {
+      await waitForBackend(2000);
+      const eventResponse = await serverApp
+        .get(`/api/events/${event.slug}`)
+        .set('Authorization', `Bearer ${userToken}`);
+      expect(eventResponse.status).toBe(200);
+      if (eventResponse.body.atprotoRkey) {
+        rkey = eventResponse.body.atprotoRkey;
+      }
+    }
+    expect(rkey).toBeDefined();
+    eventRkey = rkey as string;
+
+    // --- fetch the published record once for the assertions below ---
+    publishedRecord = await getEventRecord();
+    thumbnail = (publishedRecord.media ?? []).find(
+      (m: any) => m.role === 'thumbnail',
+    );
+  }, 180000);
 
   afterAll(async () => {
     if (pgClient) {
@@ -70,227 +222,65 @@ describe('AT Protocol Event Image Blob Publishing (e2e)', () => {
     await fs.unlink(seededImageFile).catch(() => undefined);
   });
 
-  describe('1. User with AT Protocol identity', () => {
-    it('should register, verify, and log in a new email user', async () => {
-      const registerResponse = await serverApp
-        .post('/api/v1/auth/email/register')
-        .send({
-          email: newUserEmail,
-          password: newUserPassword,
-          firstName: 'ImageBlob',
-          lastName: `Test${testRunId}`,
-        });
-      expect(registerResponse.status).toBe(201);
+  it('should reference the image via a single media[] thumbnail blob with no URL baked into the record', () => {
+    expect(publishedRecord.name).toBe(eventName);
 
-      await waitForBackend(2000);
+    // Exactly one thumbnail entry, in the ecosystem media[] shape.
+    const thumbnails = (publishedRecord.media ?? []).filter(
+      (m: any) => m.role === 'thumbnail',
+    );
+    expect(thumbnails).toHaveLength(1);
 
-      const verificationEmail = await EmailVerificationTestHelpers.waitForEmail(
-        () => mailDevService.getEmails(),
-        (email) =>
-          email.to?.some(
-            (to) => to.address.toLowerCase() === newUserEmail.toLowerCase(),
-          ) &&
-          (email.subject?.includes('Code') ||
-            email.subject?.includes('Verify')),
-        30000,
-      );
-      expect(verificationEmail).toBeDefined();
+    // content is a real blob ref, re-encoded to WebP (source was >900KB) and
+    // under the size ceiling.
+    expect(thumbnail.content?.$type).toBe('blob');
+    expect(thumbnail.content?.ref?.$link).toBeTruthy();
+    expect(thumbnail.content?.mimeType).toBe('image/webp');
+    expect(thumbnail.content?.size).toBeGreaterThan(0);
+    expect(thumbnail.content?.size).toBeLessThanOrEqual(900 * 1024);
 
-      const verificationCode =
-        EmailVerificationTestHelpers.extractVerificationCode(verificationEmail);
-      expect(verificationCode).toBeDefined();
-
-      const verifyResponse = await serverApp
-        .post('/api/v1/auth/verify-email-code')
-        .send({ email: newUserEmail, code: verificationCode });
-      expect(verifyResponse.status).toBe(200);
-
-      const loginResponse = await serverApp
-        .post('/api/v1/auth/email/login')
-        .send({ email: newUserEmail, password: newUserPassword });
-      expect(loginResponse.status).toBe(200);
-      expect(loginResponse.body.token).toBeDefined();
-      userToken = loginResponse.body.token;
+    // alt defaults to the event name; aspect_ratio is the final dimensions
+    // (1400x1050 is under the 2048 edge cap, so unchanged).
+    expect(thumbnail.alt).toBe(eventName);
+    expect(thumbnail.aspect_ratio).toEqual({
+      width: sourceWidth,
+      height: sourceHeight,
     });
 
-    it('should have an AT Protocol identity (custodial PDS account)', async () => {
-      // PDS account creation is async; poll until the identity appears.
-      let did: string | undefined;
-      for (let attempt = 0; attempt < 15 && !did; attempt++) {
-        await waitForBackend(2000);
-        const identityResponse = await serverApp
-          .get('/api/atproto/identity')
-          .set('Authorization', `Bearer ${userToken}`);
-        if (identityResponse.status === 200 && identityResponse.body?.did) {
-          did = identityResponse.body.did;
-        }
-      }
+    // The source key lives in the openMeetMeta extension, not the media entry;
+    // the legacy bespoke field is gone.
+    expect(publishedRecord.openMeetMeta?.imageSourceKey).toBe(seededImageKey);
+    expect(publishedRecord.openMeetMedia).toBeUndefined();
 
-      expect(did).toBeDefined();
-      expect(did).toMatch(/^did:(plc|web):/);
-      userDid = did as string;
-      console.log(`User AT Protocol identity: ${userDid}`);
-    });
+    // No URL is baked into the record for the image.
+    const imageUri = (publishedRecord.uris ?? []).find(
+      (u: any) => u.name === 'Event Image',
+    );
+    expect(imageUri).toBeUndefined();
   });
 
-  describe('2. Seed an image fixture the publish path can read', () => {
-    it('should create a file record and stage the image bytes for the local driver', async () => {
-      // A random-noise PNG well over the 900KB normalization threshold (so the
-      // publish path must re-encode to WebP) but under the 5MB upload cap.
-      const width = 1400;
-      const height = 1050;
-      const raw = randomBytes(width * height * 3);
-      imageBytes = await sharp(raw, { raw: { width, height, channels: 3 } })
-        .png()
-        .toBuffer();
-      expect(imageBytes.length).toBeGreaterThan(900 * 1024);
-      expect(imageBytes.length).toBeLessThan(5 * 1024 * 1024);
+  it('should serve the bounded, decodable WebP blob back via com.atproto.sync.getBlob', async () => {
+    const cid = thumbnail.content.ref.$link;
 
-      const file = await createFile(app, userToken, {
-        fileName: `image-blob-${testRunId}.png`,
-        fileSize: imageBytes.length,
-        mimeType: 'image/png',
-      });
-      imageFileId = file.id;
-      expect(imageFileId).toBeDefined();
+    const blobResponse = await fetch(
+      `${TESTING_PDS_URL}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(
+        userDid,
+      )}&cid=${encodeURIComponent(cid)}`,
+    );
+    expect(blobResponse.status).toBe(200);
 
-      // The e2e harness has no object storage, so stage the bytes where the
-      // local file driver reads them (tests share the API container's
-      // filesystem) and point the record's stored path at that key.
-      await fs.mkdir('./files', { recursive: true });
-      await fs.writeFile(seededImageFile, imageBytes);
+    const blobBytes = Buffer.from(await blobResponse.arrayBuffer());
+    // Bounded: exactly the size the record advertises, and under the ceiling.
+    expect(blobBytes.length).toBe(thumbnail.content.size);
+    expect(blobBytes.length).toBeLessThanOrEqual(900 * 1024);
 
-      pgClient = new Client({
-        host: process.env.DATABASE_HOST,
-        port: parseInt(process.env.DATABASE_PORT || '5432', 10),
-        user: process.env.DATABASE_USERNAME,
-        password: process.env.DATABASE_PASSWORD,
-        database: process.env.DATABASE_NAME,
-      });
-      await pgClient.connect();
-      const updateResult = await pgClient.query(
-        `UPDATE "tenant_${TESTING_TENANT_ID}"."files" SET "path" = $1 WHERE "id" = $2`,
-        [seededImageKey, imageFileId],
-      );
-      expect(updateResult.rowCount).toBe(1);
-    });
-  });
-
-  describe('3. Publish an event with the image and verify the PDS record', () => {
-    it('should create a public event with the image and publish it to the PDS', async () => {
-      const event = await createEvent(app, userToken, {
-        name: eventName,
-        description: 'Event to verify image blob publishing',
-        type: EventType.InPerson,
-        location: 'Blob Test Location',
-        maxAttendees: 50,
-        visibility: EventVisibility.Public,
-        status: EventStatus.Published,
-        startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        endDate: new Date(
-          Date.now() + 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
-        ).toISOString(),
-        categories: [],
-        timeZone: 'America/New_York',
-        image: { id: imageFileId },
-      });
-      expect(event.slug).toBeDefined();
-      eventSlug = event.slug;
-
-      // Publishing runs during creation but poll to absorb any async lag.
-      let rkey: string | undefined;
-      for (let attempt = 0; attempt < 15 && !rkey; attempt++) {
-        await waitForBackend(2000);
-        const eventResponse = await serverApp
-          .get(`/api/events/${eventSlug}`)
-          .set('Authorization', `Bearer ${userToken}`);
-        expect(eventResponse.status).toBe(200);
-        if (eventResponse.body.atprotoRkey) {
-          rkey = eventResponse.body.atprotoRkey;
-        }
-      }
-
-      expect(rkey).toBeDefined();
-      eventRkey = rkey as string;
-      console.log(`Event published to PDS with rkey: ${eventRkey}`);
-    });
-
-    it('should reference the image via a media[] thumbnail blob with no URL baked in', async () => {
-      const pdsResponse = await request(TESTING_PDS_URL)
-        .get(
-          `/xrpc/com.atproto.repo.getRecord?repo=${userDid}&collection=community.lexicon.calendar.event&rkey=${eventRkey}`,
-        )
-        .set('Accept', 'application/json');
-      expect(pdsResponse.status).toBe(200);
-
-      const record = pdsResponse.body.value;
-      expect(record.name).toBe(eventName);
-
-      // media[]: exactly one thumbnail entry in the ecosystem shape.
-      expect(Array.isArray(record.media)).toBe(true);
-      const thumbnails = record.media.filter(
-        (m: any) => m.role === 'thumbnail',
-      );
-      expect(thumbnails).toHaveLength(1);
-      const thumbnail = thumbnails[0];
-
-      // content is a real blob ref, re-encoded to WebP (source was >900KB) and
-      // under the size ceiling.
-      expect(thumbnail.content?.$type).toBe('blob');
-      expect(thumbnail.content?.ref?.$link).toBeTruthy();
-      expect(thumbnail.content?.mimeType).toBe('image/webp');
-      expect(thumbnail.content?.size).toBeGreaterThan(0);
-      expect(thumbnail.content?.size).toBeLessThanOrEqual(900 * 1024);
-
-      // alt defaults to the event name; aspect_ratio is the final dimensions
-      // (1400x1050 is under the 2048 edge cap, so unchanged).
-      expect(thumbnail.alt).toBe(eventName);
-      expect(thumbnail.aspect_ratio).toEqual({ width: 1400, height: 1050 });
-
-      // The source key lives in the openMeetMeta extension, not the media
-      // entry; the legacy bespoke field is gone.
-      expect(record.openMeetMeta?.imageSourceKey).toBe(seededImageKey);
-      expect(record.openMeetMedia).toBeUndefined();
-
-      // No URL is baked into the record for the image.
-      const imageUri = (record.uris ?? []).find(
-        (u: any) => u.name === 'Event Image',
-      );
-      expect(imageUri).toBeUndefined();
-    });
-
-    it('should serve the blob bytes back via com.atproto.sync.getBlob', async () => {
-      const pdsResponse = await request(TESTING_PDS_URL)
-        .get(
-          `/xrpc/com.atproto.repo.getRecord?repo=${userDid}&collection=community.lexicon.calendar.event&rkey=${eventRkey}`,
-        )
-        .set('Accept', 'application/json');
-      expect(pdsResponse.status).toBe(200);
-      const thumbnail = pdsResponse.body.value.media.find(
-        (m: any) => m.role === 'thumbnail',
-      );
-      const cid = thumbnail.content.ref.$link;
-
-      const blobResponse = await fetch(
-        `${TESTING_PDS_URL}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(
-          userDid,
-        )}&cid=${encodeURIComponent(cid)}`,
-      );
-      expect(blobResponse.status).toBe(200);
-
-      const blobBytes = Buffer.from(await blobResponse.arrayBuffer());
-      expect(blobBytes.length).toBeGreaterThan(0);
-      expect(blobBytes.length).toBe(thumbnail.content.size);
-
-      // WebP magic bytes: RIFF....WEBP -- the blob really is the re-encoded
-      // WebP image, independent of whatever content-type header the PDS sets.
-      expect(blobBytes.subarray(0, 4).toString('ascii')).toBe('RIFF');
-      expect(blobBytes.subarray(8, 12).toString('ascii')).toBe('WEBP');
-      console.log(
-        `getBlob served ${blobBytes.length}B webp (content-type: ${blobResponse.headers.get(
-          'content-type',
-        )})`,
-      );
-    });
+    // Decodable WebP: RIFF....WEBP magic bytes, and sharp can read its
+    // dimensions back (independent of the PDS content-type header).
+    expect(blobBytes.subarray(0, 4).toString('ascii')).toBe('RIFF');
+    expect(blobBytes.subarray(8, 12).toString('ascii')).toBe('WEBP');
+    const meta = await sharp(blobBytes).metadata();
+    expect(meta.format).toBe('webp');
+    expect(meta.width).toBe(sourceWidth);
+    expect(meta.height).toBe(sourceHeight);
   });
 });

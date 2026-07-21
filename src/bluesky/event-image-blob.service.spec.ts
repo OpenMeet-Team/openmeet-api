@@ -53,16 +53,28 @@ async function oversizedImage(width: number, height: number): Promise<Buffer> {
 }
 
 /**
- * A high-entropy RGBA image: WebP encodes the alpha channel LOSSLESSLY, so
- * noise transparency keeps the encode oversized at any lossy quality until the
- * fallback ladder flattens the alpha away. Reproduces the over-ceiling bug the
- * bounded ladder fixes.
+ * A DETERMINISTIC high-entropy RGBA image (xorshift32 fill, fixed seed). WebP
+ * encodes the alpha channel LOSSLESSLY, so noise transparency keeps the encode
+ * oversized at any lossy quality until the fallback ladder flattens the alpha
+ * away. Deterministic bytes mean the ladder's outcome is fixed run-to-run, so
+ * the test can assert a single expected result instead of "success or null".
  */
-async function oversizedAlphaImage(
+async function deterministicAlphaNoise(
   width: number,
   height: number,
+  seed = 0x9e3779b9,
 ): Promise<Buffer> {
-  const raw = randomBytes(width * height * 4);
+  const raw = Buffer.alloc(width * height * 4);
+  let state = seed >>> 0;
+  for (let i = 0; i < raw.length; i++) {
+    // xorshift32: cheap, high-entropy, fully deterministic.
+    state ^= state << 13;
+    state >>>= 0;
+    state ^= state >> 17;
+    state ^= state << 5;
+    state >>>= 0;
+    raw[i] = state & 0xff;
+  }
   return sharp(raw, { raw: { width, height, channels: 4 } })
     .png()
     .toBuffer();
@@ -178,26 +190,24 @@ describe('EventImageBlobService', () => {
       expect(opts).toEqual({ encoding: 'image/webp' });
     }, 30000);
 
-    it('should never upload an over-ceiling blob for high-entropy RGBA input (ladder or skip)', async () => {
-      // WebP stores alpha losslessly, so noise transparency can defeat the
-      // lossy quality loop entirely; the bounded fallback ladder must either
-      // produce something under the ceiling (flattening the alpha) or give up
-      // with null -- never return oversized bytes.
-      const rgba = await oversizedAlphaImage(1500, 1500);
+    it('should flatten alpha via the fallback ladder to fit high-entropy RGBA under the ceiling', async () => {
+      // WebP stores alpha losslessly, so noise transparency defeats the lossy
+      // quality loop; the bounded fallback ladder must flatten the alpha away
+      // and land under the ceiling. The input is deterministic, so the ladder
+      // resolves to one fixed outcome: a WebP blob under the ceiling (never a
+      // skip, never oversized bytes).
+      const rgba = await deterministicAlphaNoise(1500, 1500);
       expect(rgba.length).toBeGreaterThan(MAX_BLOB_BYTES);
       mockS3Returning({ bytes: rgba, contentType: 'image/png' });
       const { agent, uploadBlob } = mockAgent('bafalpha');
 
       const result = await service.uploadEventImage(agent, 'tenant/alpha.png');
 
-      if (result === null) {
-        expect(uploadBlob).not.toHaveBeenCalled();
-      } else {
-        expect(result.size).toBeLessThanOrEqual(MAX_BLOB_BYTES);
-        expect(result.mimeType).toBe('image/webp');
-        const [bytesArg] = uploadBlob.mock.calls[0];
-        expect(bytesArg.length).toBeLessThanOrEqual(MAX_BLOB_BYTES);
-      }
+      expect(result).not.toBeNull();
+      expect(result!.mimeType).toBe('image/webp');
+      expect(result!.size).toBeLessThanOrEqual(MAX_BLOB_BYTES);
+      const [bytesArg] = uploadBlob.mock.calls[0];
+      expect(bytesArg.length).toBeLessThanOrEqual(MAX_BLOB_BYTES);
     }, 60000);
 
     it('should return null (not throw) when the object cannot be fetched', async () => {
