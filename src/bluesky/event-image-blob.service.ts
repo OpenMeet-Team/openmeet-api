@@ -263,13 +263,14 @@ export class EventImageBlobService {
    * Ensure the blob fits under the size ceiling and capture the final image
    * dimensions for the media entry's aspect_ratio.
    *
-   * Small images (<= MAX_BLOB_BYTES) are uploaded byte-for-byte (best fidelity;
-   * preserves small GIFs/PNGs exactly). Larger ones are auto-oriented, resized
-   * so the longest edge is <= 2048, and re-encoded to WebP (which handles alpha,
-   * so a single codec covers both opaque and transparent images), stepping the
-   * quality down until under the ceiling, then walking a bounded fallback
-   * ladder of smaller sizes. Returns null if nothing fits -- the caller then
-   * publishes without an image rather than uploading an over-ceiling blob.
+   * Small images (<= MAX_BLOB_BYTES) are validated and uploaded byte-for-byte
+   * (best fidelity; preserves small GIFs/PNGs exactly). Larger ones are
+   * auto-oriented, resized so the longest edge is <= 2048, and re-encoded to
+   * WebP (which handles alpha, so a single codec covers both opaque and
+   * transparent images), stepping the quality down until under the ceiling,
+   * then walking a bounded fallback ladder of smaller sizes. Returns null if
+   * the object is not a decodable raster image, or nothing fits under the
+   * ceiling -- the caller then publishes without an image.
    */
   private async normalizeForBlob(
     bytes: Buffer,
@@ -281,18 +282,37 @@ export class EventImageBlobService {
     height?: number;
   } | null> {
     if (bytes.length <= EventImageBlobService.MAX_BLOB_BYTES) {
-      // Uploaded as-is; probe dimensions for aspect_ratio. If the probe fails
-      // (odd/unsupported format), omit dimensions rather than fail the upload.
-      let width: number | undefined;
-      let height: number | undefined;
+      // Validate the object really is a decodable raster image before uploading
+      // it byte-for-byte. The presigned upload flow trusts the client-supplied
+      // filename/size/content-type, so the stored object could be arbitrary or
+      // corrupted bytes; publishing those as an image blob would hand consumers
+      // an "image" they cannot decode. Derive the MIME from the detected format
+      // rather than trusting the (unvalidated) stored content-type.
+      let meta: sharp.Metadata;
       try {
-        const meta = await sharp(bytes, { failOn: 'none' }).metadata();
-        width = meta.width;
-        height = meta.height;
+        meta = await sharp(bytes).metadata();
       } catch {
-        // leave width/height undefined
+        this.logger.warn(
+          `Object is not a decodable image (${bytes.length}B); skipping image`,
+        );
+        return null;
       }
-      return { bytes, mimeType, width, height };
+      const detectedMime = this.mimeFromSharpFormat(meta.format);
+      if (!detectedMime || !meta.width || !meta.height) {
+        this.logger.warn(
+          `Object is not a supported raster image (format=${
+            meta.format ?? 'unknown'
+          }, ${meta.width ?? '?'}x${meta.height ?? '?'}); skipping image`,
+        );
+        return null;
+      }
+      // Validated raster preserved byte-for-byte, with a format-derived MIME.
+      return {
+        bytes,
+        mimeType: detectedMime,
+        width: meta.width,
+        height: meta.height,
+      };
     }
 
     const pipeline = sharp(bytes, { failOn: 'none' }).rotate().resize({
@@ -375,6 +395,28 @@ export class EventImageBlobService {
         return 'image/webp';
       case 'gif':
         return 'image/gif';
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Map a sharp-detected format to the MIME we publish, restricted to supported
+   * raster images. Vector (svg) and unrecognized/undetected formats return null
+   * so the object is rejected rather than published as an undecodable image.
+   */
+  private mimeFromSharpFormat(format?: string): string | null {
+    switch (format) {
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      case 'avif':
+        return 'image/avif';
       default:
         return null;
     }

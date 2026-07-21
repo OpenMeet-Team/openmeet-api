@@ -154,8 +154,11 @@ describe('EventImageBlobService', () => {
       expect(opts).toEqual({ encoding: 'image/png' });
     });
 
-    it('should omit dimensions when the passthrough image cannot be probed', async () => {
-      // Not a decodable image, but under the threshold => uploaded as-is.
+    it('should reject a non-image object under the size threshold (no upload)', async () => {
+      // The presigned flow trusts the client-supplied content-type/filename, so
+      // an object can be arbitrary bytes. Even under the passthrough threshold it
+      // must be validated as a real image and skipped otherwise -- never
+      // published as an undecodable image blob.
       mockS3Returning({
         bytes: new Uint8Array([1, 2, 3, 4]),
         contentType: 'image/gif',
@@ -164,11 +167,8 @@ describe('EventImageBlobService', () => {
 
       const result = await service.uploadEventImage(agent, 'tenant/odd.gif');
 
-      expect(result).not.toBeNull();
-      expect(result!.mimeType).toBe('image/gif');
-      expect(result!.width).toBeUndefined();
-      expect(result!.height).toBeUndefined();
-      expect(uploadBlob).toHaveBeenCalledTimes(1);
+      expect(result).toBeNull();
+      expect(uploadBlob).not.toHaveBeenCalled();
     });
 
     it('should resize and re-encode oversized images to WebP, capturing final dimensions', async () => {
@@ -224,13 +224,27 @@ describe('EventImageBlobService', () => {
       expect(agent.uploadBlob).not.toHaveBeenCalled();
     });
 
-    it('should infer mime type from the key when the object has no ContentType', async () => {
+    it('should derive the uploaded mime from the detected format when the object has no ContentType', async () => {
       const png = await smallImage(5, 5, 'png');
       mockS3Returning({ bytes: png });
       const { agent, uploadBlob } = mockAgent('bafpng');
 
       await service.uploadEventImage(agent, 'tenant/logo.png');
 
+      expect(uploadBlob.mock.calls[0][1]).toEqual({ encoding: 'image/png' });
+    });
+
+    it('should correct a mismatched content-type from the detected image format', async () => {
+      // Valid PNG bytes stored with a bogus content-type are published as the
+      // detected format (image/png), never the untrusted stored type.
+      const png = await smallImage(6, 6, 'png');
+      mockS3Returning({ bytes: png, contentType: 'text/html' });
+      const { agent, uploadBlob } = mockAgent('bafmismatch');
+
+      const result = await service.uploadEventImage(agent, 'tenant/evil.png');
+
+      expect(result).not.toBeNull();
+      expect(result!.mimeType).toBe('image/png');
       expect(uploadBlob.mock.calls[0][1]).toEqual({ encoding: 'image/png' });
     });
 
