@@ -16,5 +16,10 @@ export type FileConfig = {
   cloudfrontDistributionDomain?: string;
   cloudfrontKeyPairId?: string;
   cloudfrontPrivateKey?: string;
+  // Extra hostnames trusted as OpenMeet-controlled media origins when mapping a
+  // legacy full-URL image reference back to an object key (e.g. a retired
+  // CloudFront distribution kept alive for images baked into old records). Read
+  // only -- the object is still fetched from our own bucket, never these hosts.
+  mediaAllowedLegacyOrigins?: string[];
   maxFileSize: number;
 };

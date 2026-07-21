@@ -6,6 +6,7 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { Agent } from '@atproto/api';
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { TID } from '@atproto/common-web';
+import { BlobRef } from '@atproto/lexicon';
 import { instanceToPlain } from 'class-transformer';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
@@ -16,6 +17,7 @@ import {
   BLUESKY_COLLECTIONS,
 } from './BlueskyTypes';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
+import { EventImageBlobService } from './event-image-blob.service';
 import { mergeArrayField } from './atproto-record-merge.utils';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
@@ -68,6 +70,7 @@ export class BlueskyService {
     private readonly blueskyIdentityService: BlueskyIdentityService,
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
     private readonly atprotoLexiconService: AtprotoLexiconService,
+    private readonly eventImageBlobService: EventImageBlobService,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -76,37 +79,6 @@ export class BlueskyService {
       this.configService,
       this.elasticacheService,
     );
-  }
-
-  /**
-   * Build a full URL for an image path.
-   * If the path is already a full URL, return it as-is.
-   * Otherwise, construct from CloudFront or backend domain config.
-   */
-  private buildImageUrl(path: string): string {
-    // Already a full URL
-    if (/^https?:\/\//i.test(path)) {
-      return path;
-    }
-
-    const cloudfrontDomain = this.configService.get<string>(
-      'file.cloudfrontDistributionDomain',
-      { infer: true },
-    );
-    if (cloudfrontDomain) {
-      return `https://${cloudfrontDomain}/${path}`;
-    }
-
-    const backendDomain =
-      this.configService.get<string>('app.backendDomain', { infer: true }) ||
-      this.configService.get<string>('BACKEND_DOMAIN', { infer: true });
-    if (backendDomain) {
-      const separator = path.startsWith('/') ? '' : '/';
-      return `${backendDomain}${separator}${path}`;
-    }
-
-    // Last resort: prepend https://
-    return `https://${path}`;
   }
 
   async resumeSession(tenantId: string, did: string): Promise<Agent> {
@@ -414,19 +386,51 @@ export class BlueskyService {
         );
       }
 
-      // Prepare uris array with image if it exists
+      // Upload the event image to the owner's PDS as a content-addressed blob
+      // and reference it from the record via the ecosystem media[] convention
+      // (below). The bytes live in the same portable substrate as the immutable
+      // record; the blob ref pins them against PDS garbage collection. No URL is
+      // baked into the record -- consumers build a getBlob/CDN URL at render time
+      // from the blob ref and the owner's DID.
       const uris: BlueskyEventUri[] = [];
+      let eventImageBlob: BlobRef | undefined;
+      let eventImageAspectRatio: { width: number; height: number } | undefined;
+      let eventImageSourceKey: string | undefined;
+      // Distinguishes "the event has no image" from "the event has an image but
+      // this publish could not upload it". The latter must NOT drop a
+      // previously published thumbnail (see the media[] block below).
+      let imageUploadFailed = false;
       if (event.image?.path) {
-        // Build the full image URL from the raw DB path.
-        // instanceToPlain may not fire @Transform on plain objects, so we
-        // construct the URL using config -- the same approach as embed.service.ts.
-        const imageUrl = this.buildImageUrl(event.image.path);
-        uris.push({
-          $type: 'community.lexicon.calendar.event#uri',
-          uri: imageUrl,
-          name: 'Event Image',
-          source: sourceId,
-        });
+        const imagePath = event.image.path;
+        // uploadEventImage handles a raw object key and also a legacy full-URL
+        // that points at a recognized OpenMeet origin (which it maps back to a
+        // key); it never fetches an unrecognized/arbitrary URL.
+        // TODO(dedup): re-uploads on every publish. Safe (a fresh, valid BlobRef
+        // always re-pins the blob) but wasteful; a future optimization can reuse
+        // the prior blob when the source key is unchanged.
+        const uploaded = await this.eventImageBlobService.uploadEventImage(
+          agent,
+          imagePath,
+        );
+        if (uploaded) {
+          eventImageBlob = uploaded.blob;
+          eventImageSourceKey = uploaded.sourceKey;
+          if (uploaded.width != null && uploaded.height != null) {
+            eventImageAspectRatio = {
+              width: uploaded.width,
+              height: uploaded.height,
+            };
+          }
+        } else {
+          // Transient failure (S3, image processing, or uploadBlob), or an
+          // unrecognized image origin. Preserve any image already on the record
+          // rather than mutating it away on a temporary problem.
+          imageUploadFailed = true;
+          this.logger.warn(
+            'Failed to upload event image blob; preserving any previously published image',
+            { eventId: event.id, imagePath },
+          );
+        }
       } else if (event.image) {
         // Log a warning if we have an image but no path
         this.logger.warn('Event has image but no path', {
@@ -503,12 +507,70 @@ export class BlueskyService {
         uris: mergeArrayField(base.uris as any[], uris, sourceId),
       });
 
-      // Add openmeet-specific metadata in record, or clean up if event left series
-      if (event.series) {
-        recordData.openMeetMeta = {
-          seriesSlug: event.series.slug,
-          isRecurring: true,
+      // Reference the event image via the ecosystem media[] convention: an
+      // array of { role, content: <blob>, aspect_ratio } entries. Preserve any
+      // foreign entries another app may have written (e.g. a `header`) and
+      // replace/append only the `thumbnail` entry we own -- same pattern as
+      // atmo's save.ts.
+      //
+      // Three distinct cases, so a transient upload failure never destroys a
+      // previously published image:
+      //   (a) upload succeeded          -> replace our thumbnail with the new blob
+      //   (b) image present, upload FAILED -> keep the existing thumbnail as-is
+      //   (c) event has no image        -> drop our thumbnail (we are its only
+      //                                     writer), leaving foreign entries intact
+      const existingMedia = Array.isArray(base.media)
+        ? (base.media as Record<string, unknown>[])
+        : [];
+      const existingThumbnail = existingMedia.find(
+        (m) => m?.role === 'thumbnail',
+      );
+      const foreignMedia = existingMedia.filter((m) => m?.role !== 'thumbnail');
+      if (eventImageBlob) {
+        // (a) alt is optional in the ecosystem media shape; default it to the
+        // event name as an accessibility fallback (screen readers get something
+        // meaningful) until the product grows a dedicated alt-text field.
+        const thumbnail: Record<string, unknown> = {
+          role: 'thumbnail',
+          content: eventImageBlob,
+          alt: event.name,
         };
+        if (eventImageAspectRatio) {
+          thumbnail.aspect_ratio = eventImageAspectRatio;
+        }
+        recordData.media = [...foreignMedia, thumbnail];
+      } else if (imageUploadFailed && existingThumbnail) {
+        // (b) do not unpin a good blob over a temporary upload failure.
+        recordData.media = [...foreignMedia, existingThumbnail];
+      } else if (foreignMedia.length > 0) {
+        // (c) no image (or a failure with nothing prior to preserve).
+        recordData.media = foreignMedia;
+      } else {
+        delete recordData.media;
+      }
+
+      // OpenMeet-namespaced metadata: series info plus the S3 source key of the
+      // uploaded image (kept out of the media entry, used for future re-upload
+      // dedup). Reconstructed fresh each publish; removed if empty.
+      const openMeetMeta: Record<string, unknown> = {};
+      if (event.series) {
+        openMeetMeta.seriesSlug = event.series.slug;
+        openMeetMeta.isRecurring = true;
+      }
+      if (eventImageSourceKey) {
+        openMeetMeta.imageSourceKey = eventImageSourceKey;
+      } else if (imageUploadFailed) {
+        // Preserve the prior source key alongside the preserved thumbnail
+        // (case b above) so the two stay consistent after a transient failure.
+        const priorSourceKey = (
+          base.openMeetMeta as Record<string, unknown> | undefined
+        )?.imageSourceKey;
+        if (typeof priorSourceKey === 'string') {
+          openMeetMeta.imageSourceKey = priorSourceKey;
+        }
+      }
+      if (Object.keys(openMeetMeta).length > 0) {
+        recordData.openMeetMeta = openMeetMeta;
       } else {
         delete recordData.openMeetMeta;
       }

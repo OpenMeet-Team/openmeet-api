@@ -14,6 +14,7 @@ import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { AtprotoLexiconService } from './atproto-lexicon.service';
+import { EventImageBlobService } from './event-image-blob.service';
 
 // Mock modules first before creating mock implementations
 jest.mock('@atproto/api', () => ({
@@ -94,6 +95,7 @@ const mockBlueskyIdentityService = {
   resolveProfile: jest.fn().mockResolvedValue({
     did: 'did:plc:test-resolved',
     handle: 'test.user',
+    pdsUrl: 'https://pds.opnmt.me',
     displayName: 'Test User',
     avatar: 'https://example.com/avatar.jpg',
     followersCount: 100,
@@ -137,6 +139,27 @@ const mockRequest = {
 
 const mockAtprotoLexiconService = {
   validate: jest.fn().mockReturnValue({ success: true, value: {} }),
+};
+
+const mockEventImageBlobService = {
+  uploadEventImage: jest.fn().mockImplementation((_agent, ref) =>
+    Promise.resolve({
+      blob: {
+        ref: { toString: () => 'bafkreiblob' },
+        mimeType: 'image/webp',
+        size: 1234,
+      },
+      cid: 'bafkreiblob',
+      mimeType: 'image/webp',
+      size: 1234,
+      width: 800,
+      height: 600,
+      // The service records the resolved object key. For a raw-key input that
+      // is the input itself; the URL->key origin resolution is unit-tested in
+      // event-image-blob.service.spec.ts.
+      sourceKey: typeof ref === 'string' ? ref : undefined,
+    }),
+  ),
 };
 
 // Mock Agent implementation to return in tests
@@ -217,6 +240,10 @@ describe('BlueskyService', () => {
         {
           provide: AtprotoLexiconService,
           useValue: mockAtprotoLexiconService,
+        },
+        {
+          provide: EventImageBlobService,
+          useValue: mockEventImageBlobService,
         },
       ],
     }).compile();
@@ -1322,8 +1349,8 @@ describe('BlueskyService', () => {
       expect(result.rkey).toBe(sourceDataRkey);
     });
 
-    // Bug 1: Image URI should be a full URL, not raw DB path
-    it('should transform image path to a full URL using instanceToPlain', async () => {
+    // Image is uploaded as a PDS blob and referenced via the media[] convention
+    it('should reference the image blob via a media[] thumbnail entry with aspect_ratio', async () => {
       // Arrange - event with a raw DB path (tenantId/filename.jpg)
       const event = {
         name: 'Test Event with Image',
@@ -1346,18 +1373,262 @@ describe('BlueskyService', () => {
       // Act
       await service.createEventRecord(event, did, handle, tenantId);
 
-      // Assert - the image URI should NOT be the raw DB path
+      // The image should have been uploaded as a blob from its raw DB key
+      expect(mockEventImageBlobService.uploadEventImage).toHaveBeenCalledWith(
+        expect.anything(),
+        'lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg',
+      );
+
       const putRecordCall =
         mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
-      const imageUri = putRecordCall.record.uris.find(
+      const record = putRecordCall.record;
+
+      // No URL is baked into the record at all -- no "Event Image" uri entry.
+      const imageUri = (record.uris as any[]).find(
         (u: any) => u.name === 'Event Image',
       );
-      expect(imageUri).toBeDefined();
-      // The raw path should have been transformed - it should NOT be the bare DB value
-      expect(imageUri.uri).not.toBe('lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg');
-      // It should be a full CloudFront URL
-      expect(imageUri.uri).toBe(
-        'https://cdn.example.com/lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg',
+      expect(imageUri).toBeUndefined();
+
+      // The blob is referenced via the ecosystem media[] convention.
+      expect(Array.isArray(record.media)).toBe(true);
+      const thumbnail = (record.media as any[]).find(
+        (m) => m.role === 'thumbnail',
+      );
+      expect(thumbnail).toBeDefined();
+      expect(thumbnail.content).toBeDefined();
+      expect(thumbnail.content.ref.toString()).toBe('bafkreiblob');
+      expect(thumbnail.aspect_ratio).toEqual({ width: 800, height: 600 });
+      // Accessibility default: the event name stands in for alt text until a
+      // dedicated alt-text field exists.
+      expect(thumbnail.alt).toBe('Test Event with Image');
+
+      // The old bespoke openMeetMedia field is gone.
+      expect(record.openMeetMedia).toBeUndefined();
+
+      // The S3 source key is stored in openMeetMeta (not the media entry).
+      expect(record.openMeetMeta.imageSourceKey).toBe(
+        'lsdfaopkljdfs/f1fd62ebcddf53472a2ab.jpg',
+      );
+    });
+
+    it('should preserve foreign media entries and replace only the thumbnail on republish', async () => {
+      const header = {
+        role: 'header',
+        content: { $type: 'blob', ref: { $link: 'bafheader' } },
+      };
+      const oldThumbnail = {
+        role: 'thumbnail',
+        content: { $type: 'blob', ref: { $link: 'bafoldthumb' } },
+        aspect_ratio: { width: 1, height: 1 },
+      };
+      const event = {
+        name: 'Test Event with Foreign Media',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-foreign-media',
+        image: { path: 'lsdfaopkljdfs/new-image.jpg' },
+        atprotoRecord: { media: [header, oldThumbnail] },
+      } as unknown as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      const media = result.record.media as any[];
+      // Foreign header entry survives.
+      expect(media.find((m) => m.role === 'header')).toEqual(header);
+      // Exactly one thumbnail, and it's the freshly uploaded blob (not the old one).
+      const thumbnails = media.filter((m) => m.role === 'thumbnail');
+      expect(thumbnails).toHaveLength(1);
+      expect(thumbnails[0].content.ref.toString()).toBe('bafkreiblob');
+      expect(thumbnails[0].alt).toBe('Test Event with Foreign Media');
+    });
+
+    it('should drop the thumbnail but keep foreign media when the event has no image', async () => {
+      const header = {
+        role: 'header',
+        content: { $type: 'blob', ref: { $link: 'bafheader' } },
+      };
+      const oldThumbnail = {
+        role: 'thumbnail',
+        content: { $type: 'blob', ref: { $link: 'bafoldthumb' } },
+      };
+      const event = {
+        name: 'Test Event No Image',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-no-image',
+        atprotoRecord: { media: [header, oldThumbnail] },
+      } as unknown as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      const media = result.record.media as any[];
+      expect(media).toEqual([header]);
+      expect(mockEventImageBlobService.uploadEventImage).not.toHaveBeenCalled();
+    });
+
+    it('should re-host a legacy full-URL image as a blob rather than baking the URL', async () => {
+      // A legacy full-URL now flows through the single uploadEventImage entry
+      // point, which maps a recognized OpenMeet origin back to an object key and
+      // reads it from our own bucket (never fetching the URL -- SSRF-guarded and
+      // unit-tested in event-image-blob.service.spec.ts). The resolved key comes
+      // back as sourceKey.
+      mockEventImageBlobService.uploadEventImage.mockResolvedValueOnce({
+        blob: {
+          ref: { toString: () => 'bafrehosted' },
+          mimeType: 'image/webp',
+          size: 2000,
+        },
+        cid: 'bafrehosted',
+        mimeType: 'image/webp',
+        size: 2000,
+        width: 1024,
+        height: 768,
+        sourceKey: 'events/old.jpg',
+      });
+      const event = {
+        name: 'Test Event Legacy URL Image',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-legacy-url',
+        image: { path: 'https://cdn.openmeet.net/events/old.jpg' },
+      } as EventEntity;
+
+      await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+      );
+
+      // One entry point for both keys and legacy URLs; no separate external path.
+      expect(mockEventImageBlobService.uploadEventImage).toHaveBeenCalledWith(
+        expect.anything(),
+        'https://cdn.openmeet.net/events/old.jpg',
+      );
+
+      const putRecordCall =
+        mockAgentImplementation.com.atproto.repo.putRecord.mock.calls[0][0];
+      const record = putRecordCall.record;
+
+      // The URL is not baked anywhere.
+      const imageUri = (record.uris as any[]).find(
+        (u: any) => u.name === 'Event Image',
+      );
+      expect(imageUri).toBeUndefined();
+
+      const thumbnail = (record.media as any[]).find(
+        (m) => m.role === 'thumbnail',
+      );
+      expect(thumbnail.content.ref.toString()).toBe('bafrehosted');
+      expect(thumbnail.aspect_ratio).toEqual({ width: 1024, height: 768 });
+      expect(thumbnail.alt).toBe('Test Event Legacy URL Image');
+      // The resolved object key (not the URL) is recorded for dedup.
+      expect(record.openMeetMeta.imageSourceKey).toBe('events/old.jpg');
+    });
+
+    it('should publish without an image when the blob upload fails', async () => {
+      mockEventImageBlobService.uploadEventImage.mockResolvedValueOnce(null);
+      const event = {
+        name: 'Test Event Image Upload Fails',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-image-fail',
+        image: { path: 'lsdfaopkljdfs/broken.jpg' },
+      } as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+      );
+
+      // Still published, just without an image reference.
+      expect(
+        mockAgentImplementation.com.atproto.repo.putRecord,
+      ).toHaveBeenCalled();
+      expect(result.record).not.toHaveProperty('media');
+      expect(result.record.openMeetMeta).toBeUndefined();
+    });
+
+    it('should preserve an existing thumbnail and source key when a republish upload fails (transient)', async () => {
+      // Regression: a transient upload failure on republish must NOT unpin a
+      // previously published image. The event still has a local image (so this
+      // is a temporary dependency failure, not an image removal), and the record
+      // already carries our thumbnail + its source key -- both must survive.
+      mockEventImageBlobService.uploadEventImage.mockResolvedValueOnce(null);
+      const header = {
+        role: 'header',
+        content: { $type: 'blob', ref: { $link: 'bafheader' } },
+      };
+      const existingThumbnail = {
+        role: 'thumbnail',
+        content: { $type: 'blob', ref: { $link: 'bafgoodthumb' } },
+        aspect_ratio: { width: 800, height: 600 },
+        alt: 'Previously published',
+      };
+      const event = {
+        name: 'Test Event Transient Upload Failure',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.InPerson,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+        slug: 'test-event-transient-fail',
+        image: { path: 'lsdfaopkljdfs/still-here.jpg' },
+        atprotoRecord: {
+          media: [header, existingThumbnail],
+          openMeetMeta: { imageSourceKey: 'lsdfaopkljdfs/still-here.jpg' },
+        },
+      } as unknown as EventEntity;
+
+      const result = await service.createEventRecord(
+        event,
+        'test-did',
+        'test.handle',
+        'test-tenant',
+        mockAgentImplementation as any,
+      );
+
+      const media = result.record.media as any[];
+      // The previously published thumbnail is kept verbatim (blob still pinned).
+      const thumbnails = media.filter((m) => m.role === 'thumbnail');
+      expect(thumbnails).toHaveLength(1);
+      expect(thumbnails[0]).toEqual(existingThumbnail);
+      // Foreign entries preserved too.
+      expect(media.find((m) => m.role === 'header')).toEqual(header);
+      // The source key that matches the preserved thumbnail survives.
+      expect((result.record.openMeetMeta as any).imageSourceKey).toBe(
+        'lsdfaopkljdfs/still-here.jpg',
       );
     });
 
