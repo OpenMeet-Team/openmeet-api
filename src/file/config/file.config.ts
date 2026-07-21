@@ -73,6 +73,13 @@ class EnvironmentVariablesValidator {
   @IsString()
   @IsOptional()
   CLOUDFRONT_PRIVATE_KEY: string;
+
+  // Comma-separated hostnames trusted as OpenMeet media origins when mapping a
+  // legacy full-URL image back to an object key (e.g. a retired CloudFront
+  // distribution). Optional; applies under any driver.
+  @IsString()
+  @IsOptional()
+  MEDIA_ALLOWED_LEGACY_ORIGINS: string;
 }
 
 export default registerAs<FileConfig>('file', () => {
@@ -91,6 +98,10 @@ export default registerAs<FileConfig>('file', () => {
     cloudfrontDistributionDomain: process.env.CLOUDFRONT_DISTRIBUTION_DOMAIN,
     cloudfrontKeyPairId: process.env.CLOUDFRONT_KEY_PAIR_ID,
     cloudfrontPrivateKey: process.env.CLOUDFRONT_PRIVATE_KEY,
+    mediaAllowedLegacyOrigins: (process.env.MEDIA_ALLOWED_LEGACY_ORIGINS ?? '')
+      .split(',')
+      .map((h) => h.trim())
+      .filter((h) => h.length > 0),
     maxFileSize: parseInt(process.env.AWS_S3_MAX_FILE_SIZE ?? '5242880', 10), // 5mb
   };
 });

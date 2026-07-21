@@ -56,6 +56,11 @@ AWS_DEFAULT_S3_BUCKET=None
 # Optional: path-style addressing (endpoint/bucket/key). Leave "false" for
 # providers that support virtual-hosted-style buckets without dots.
 # AWS_S3_FORCE_PATH_STYLE=false
+# Optional: comma-separated hostnames trusted as OpenMeet media origins when a
+# legacy full-URL image reference is mapped back to an object key (e.g. a
+# retired CloudFront distribution kept alive for images in old records). The
+# object is still read from our own bucket -- these hosts are never fetched.
+# MEDIA_ALLOWED_LEGACY_ORIGINS=abcd1234.cloudfront.net
 
 # MAIL_HOST is for API inside Docker (container-to-container)
 MAIL_HOST=maildev

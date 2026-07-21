@@ -364,6 +364,25 @@ describe('EventImageBlobService', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
+    it('should map a configured legacy origin (retired CloudFront) back to a key', async () => {
+      mockedFileConfig.mockReturnValue({
+        ...baseFileConfig,
+        mediaAllowedLegacyOrigins: ['ds1xtylbemsat.cloudfront.net'],
+      } as any);
+      const png = await smallImage(10, 10, 'png');
+      const send = mockS3Returning({ bytes: png, contentType: 'image/png' });
+      const { agent } = mockAgent();
+
+      const result = await service.uploadEventImage(
+        agent,
+        'https://ds1xtylbemsat.cloudfront.net/events/legacy.png',
+      );
+
+      expect(result!.sourceKey).toBe('events/legacy.png');
+      expect(send.mock.calls[0][0].input.Key).toBe('events/legacy.png');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
     it('should refuse an unrecognized external URL without fetching or reading S3 (SSRF guard)', async () => {
       const send = mockS3Returning({ bytes: await smallImage(10, 10) });
       const { agent, uploadBlob } = mockAgent();

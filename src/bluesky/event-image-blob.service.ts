@@ -158,6 +158,10 @@ export class EventImageBlobService {
 
     add(config.cloudfrontDistributionDomain);
 
+    // Retired-but-retained media origins (e.g. an old CloudFront distribution
+    // still serving images baked into legacy records).
+    config.mediaAllowedLegacyOrigins?.forEach((h) => add(h));
+
     const bucket = config.awsDefaultS3Bucket;
     const endpointHost = this.hostOf(config.awsS3Endpoint);
     if (endpointHost) {
