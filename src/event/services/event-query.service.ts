@@ -1657,6 +1657,9 @@ export class EventQueryService {
       .where('event.sourceType = :sourceType', { sourceType })
       .andWhere('event.sourceId = :sourceId', { sourceId })
       .leftJoinAndSelect('event.user', 'user')
+      // 'group' is loaded so the ingestion RSVP gate can check membership on
+      // members-only events; do not drop it.
+      .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.image', 'image')
       .leftJoinAndSelect('event.series', 'series');
@@ -1683,7 +1686,9 @@ export class EventQueryService {
 
     const events = await eventRepo.find({
       where: { atprotoUri },
-      relations: ['user', 'categories', 'image', 'series'],
+      // 'group' is loaded so the ingestion RSVP gate can check membership on
+      // members-only NATIVE events; do not drop it.
+      relations: ['user', 'group', 'categories', 'image', 'series'],
     });
 
     this.logger.debug(`Found ${events.length} events by atprotoUri`);
