@@ -47,11 +47,6 @@ jobs:
 
       - name: Run e2e tests
         id: relational
-        env:
-          # TEMP (revert before merge): scope the e2e job to the ingestion RSVP
-          # membership-gate spec while validating it. Restore the full suite
-          # (delete this env block) once it is green.
-          TEST_PATH_PATTERN: atproto-rsvp-membership-gate
         run: >-
           docker compose
           -f docker-compose.relational.ci.yaml
