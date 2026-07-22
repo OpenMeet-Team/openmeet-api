@@ -616,11 +616,19 @@ export class BlueskyService {
         errorObject: error,
       });
 
-      // Enhance error message for debugging
+      // Enhance error message for debugging, but preserve the underlying XRPC
+      // signal so callers can still classify recoverable failures after this
+      // re-wrap. In particular the optimistic-concurrency conflict (swapRecord
+      // mismatch) arrives as an XRPCError with error code 'InvalidSwap' and
+      // message 'Record was at <cid>' — neither survives a bare
+      // `new Error(msg)`, which is why AtprotoSyncScheduler retried it forever
+      // instead of dead-lettering.
       const enhancedError = new Error(
         `Failed to create Bluesky event "${event.name}": ${error.message}`,
-      );
+      ) as Error & { status?: unknown; error?: string };
       enhancedError.stack = error.stack;
+      enhancedError.status = error.status;
+      enhancedError.error = error.error;
       throw enhancedError;
     }
   }
