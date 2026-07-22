@@ -552,6 +552,44 @@ describe('AtprotoPublisherService', () => {
       expect(result.action).toBe('conflict');
     });
 
+    // Regression for the InvalidSwap retry-loop: reproduce the error exactly
+    // as it reaches this service in production. BlueskyService re-wraps
+    // the XRPCError, so the message is 'Failed to create Bluesky event "…":
+    // Record was at <cid>' (no 'InvalidSwap' substring) and @atproto maps the
+    // HTTP 409 to status 400 (not 409) — the only reliable signal is the
+    // preserved XRPC error code. The old detection matched neither field, so
+    // the conflict re-threw and the scheduler retried the same doomed swap
+    // forever. Detection must key on the error code.
+    it('should return conflict for a re-wrapped InvalidSwap where only the error code survives', async () => {
+      const event = createMockEvent();
+      const mockIdentity = {
+        id: 1,
+        userUlid: 'user-ulid-123',
+        did: 'did:plc:testuser123',
+      } as UserAtprotoIdentityEntity;
+
+      atprotoIdentityService.ensureIdentityForUser.mockResolvedValue(
+        mockIdentity,
+      );
+      pdsSessionService.getSessionForUser.mockResolvedValue(mockSessionResult);
+
+      const conflictError = Object.assign(
+        new Error(
+          'Failed to create Bluesky event "WA Beaches and Backroads": ' +
+            'Record was at bafyreibqcjzzelrtosahftdlxtn2cznknazxokzuccfihgxhygxkog25bm',
+        ),
+        // Shape BlueskyService.createEventRecord now produces: the XRPC status
+        // (409 → 400 after @atproto's httpResponseCodeToEnum) and error code
+        // survive the re-wrap. Message deliberately lacks 'InvalidSwap'.
+        { status: 400, error: 'InvalidSwap' },
+      );
+      blueskyService.createEventRecord.mockRejectedValue(conflictError);
+
+      const result = await service.publishEvent(event, tenantId);
+
+      expect(result.action).toBe('conflict');
+    });
+
     it('should re-throw non-validation errors from BlueskyService', async () => {
       const event = createMockEvent();
       const mockIdentity = {

@@ -874,6 +874,55 @@ describe('BlueskyService', () => {
       ).rejects.toThrow();
     });
 
+    it('should preserve the XRPC error code when putRecord fails with InvalidSwap', async () => {
+      // A swapRecord mismatch surfaces as an XRPCError: @atproto maps the HTTP
+      // 409 to status 400, the code lives in `.error`, and the human message
+      // is 'Record was at <cid>' (no 'InvalidSwap' substring). This re-wrap
+      // must carry that code through so AtprotoPublisherService can classify
+      // the conflict and the sync scheduler can dead-letter instead of looping
+      // the same doomed swap forever.
+      const event = {
+        name: 'WA Beaches and Backroads',
+        description: 'Test Description',
+        startDate: new Date('2023-12-01T12:00:00Z'),
+        endDate: new Date('2023-12-01T14:00:00Z'),
+        type: EventType.Hybrid,
+        status: EventStatus.Published,
+        createdAt: new Date('2023-11-01T00:00:00Z'),
+      } as EventEntity;
+
+      const did = 'test-did';
+      const handle = 'test.handle';
+      const tenantId = 'test-tenant';
+
+      mockAgentImplementation.com.atproto.repo.getRecord.mockRejectedValueOnce({
+        status: 404,
+      });
+      const invalidSwap = Object.assign(
+        new Error(
+          'Record was at bafyreibqcjzzelrtosahftdlxtn2cznknazxokzuccfihgxhygxkog25bm',
+        ),
+        { status: 400, error: 'InvalidSwap' },
+      );
+      mockAgentImplementation.com.atproto.repo.putRecord.mockRejectedValueOnce(
+        invalidSwap,
+      );
+
+      let thrown: any;
+      try {
+        await service.createEventRecord(event, did, handle, tenantId);
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(thrown).toBeDefined();
+      expect(thrown.message).toContain('Failed to create Bluesky event');
+      expect(thrown.message).toContain('Record was at');
+      // The conflict signal must survive the re-wrap.
+      expect(thrown.error).toBe('InvalidSwap');
+      expect(thrown.status).toBe(400);
+    });
+
     it('should use correct ATProto schema for geo locations ($type, latitude/longitude as strings, name)', async () => {
       // Arrange
       const event = {

@@ -331,10 +331,17 @@ export class AtprotoPublisherService {
       cid = result.cid;
       publishedRecord = result.record;
     } catch (error) {
-      // Handle swapRecord conflict (409 InvalidSwap)
+      // Handle swapRecord conflict (InvalidSwap). The PDS rejects an
+      // optimistic-concurrency mismatch with XRPC error code 'InvalidSwap' —
+      // match on that code, it is the only reliable signal. @atproto maps the
+      // HTTP 409 to ResponseType.InvalidRequest (400), so `.status === 409`
+      // never holds, and the human message is 'Record was at <cid>' (no
+      // 'InvalidSwap' substring). The status/message checks are kept only as
+      // defensive fallbacks.
       if (
         error instanceof Error &&
-        ((error as any).status === 409 ||
+        ((error as any).error === 'InvalidSwap' ||
+          (error as any).status === 409 ||
           error.message?.includes('InvalidSwap'))
       ) {
         this.logger.warn(
