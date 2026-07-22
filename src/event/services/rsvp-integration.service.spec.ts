@@ -489,5 +489,157 @@ describe('RsvpIntegrationService', () => {
         expect.objectContaining({ status: EventAttendeeStatus.Pending }),
       );
     });
+
+    it('should NOT revoke an organizer-approved (Confirmed) attendee when an approval-required RSVP is replayed', async () => {
+      // Regression: after an organizer approves an external RSVP, a retry /
+      // resync / metadata update for the unchanged "going" record must not flip
+      // the Confirmed attendee back to Pending.
+      const approvalEvent = {
+        id: 43,
+        requireGroupMembership: false,
+        requireApproval: true,
+      } as unknown as EventEntity;
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        approvalEvent,
+      ]);
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue({
+        id: 77,
+        status: EventAttendeeStatus.Confirmed,
+        role: { name: EventAttendeeRole.Participant },
+      } as unknown as EventAttendeesEntity);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.updateEventAttendee).toHaveBeenCalledWith(
+        77,
+        expect.objectContaining({ status: EventAttendeeStatus.Confirmed }),
+      );
+      expect(eventAttendeeService.updateEventAttendee).not.toHaveBeenCalledWith(
+        77,
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
+    });
+
+    it('should still hold a not-yet-approved (Pending) attendee as Pending on replay of an approval-required RSVP', async () => {
+      // A replay before the organizer has decided must stay Pending — the gate
+      // only preserves an approval that was actually granted (Confirmed).
+      const approvalEvent = {
+        id: 43,
+        requireGroupMembership: false,
+        requireApproval: true,
+      } as unknown as EventEntity;
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        approvalEvent,
+      ]);
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue({
+        id: 78,
+        status: EventAttendeeStatus.Pending,
+        role: { name: EventAttendeeRole.Participant },
+      } as unknown as EventAttendeesEntity);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.updateEventAttendee).toHaveBeenCalledWith(
+        78,
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
+    });
+
+    it('should re-hold an approved attendee who has since lost group membership (membership still rechecked)', async () => {
+      // Approval preservation must NOT override the membership recheck: a
+      // members-only event whose confirmed attendee is no longer a member is
+      // held again, matching the web path's re-deny of a non-member.
+      const membersOnlyApprovalEvent = {
+        id: 45,
+        requireGroupMembership: true,
+        requireApproval: true,
+        group: { id: groupId },
+      } as unknown as EventEntity;
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        membersOnlyApprovalEvent,
+      ]);
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue(null);
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue({
+        id: 79,
+        status: EventAttendeeStatus.Confirmed,
+        role: { name: EventAttendeeRole.Participant },
+      } as unknown as EventAttendeesEntity);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.updateEventAttendee).toHaveBeenCalledWith(
+        79,
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
+    });
+
+    it('should keep an eligible member Confirmed on re-sync of a members-only event (idempotent, no churn)', async () => {
+      // Happy-path idempotency for the membership branch: a still-eligible
+      // member who is already Confirmed stays Confirmed on replay.
+      const membersOnlyEvent2 = {
+        id: 46,
+        requireGroupMembership: true,
+        requireApproval: false,
+        group: { id: groupId },
+      } as unknown as EventEntity;
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        membersOnlyEvent2,
+      ]);
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue({
+        groupRole: { name: 'member' },
+      } as any);
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue({
+        id: 80,
+        status: EventAttendeeStatus.Confirmed,
+        role: { name: EventAttendeeRole.Participant },
+      } as unknown as EventAttendeesEntity);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.updateEventAttendee).toHaveBeenCalledWith(
+        80,
+        expect.objectContaining({ status: EventAttendeeStatus.Confirmed }),
+      );
+    });
+
+    it('should re-hold a previously cancelled attendee as Pending when they re-RSVP going to an approval-required event', async () => {
+      // A cancelled -> going transition is a genuinely new affirmative request,
+      // not a replay of an approved one, so it goes back through approval.
+      const approvalEvent = {
+        id: 43,
+        requireGroupMembership: false,
+        requireApproval: true,
+      } as unknown as EventEntity;
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        approvalEvent,
+      ]);
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue({
+        id: 81,
+        status: EventAttendeeStatus.Cancelled,
+        role: { name: EventAttendeeRole.Participant },
+      } as unknown as EventAttendeesEntity);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.updateEventAttendee).toHaveBeenCalledWith(
+        81,
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
+    });
   });
 });

@@ -60,6 +60,26 @@ export class RsvpIntegrationService {
    * gated; Maybe / Cancelled / unknown never grant access and pass through
    * unchanged.
    *
+   * IDEMPOTENCE — ingestion re-fires the same RSVP on every resync / metadata
+   * update / retry, so `existingStatus` (the attendee's current stored status)
+   * lets the gate stay stable across replays. The two checks handle a replay
+   * DIFFERENTLY by design — do not collapse them into one rule:
+   *
+   *  - Membership is a LIVE eligibility check, re-evaluated every ingest. A
+   *    Confirmed attendee who currently fails it is re-held; that is the whole
+   *    point of this gate — a member who has since been removed from the group
+   *    must not stay Confirmed on a members-only event — and it matches the web
+   *    path re-denying a non-member on re-RSVP. So it deliberately ignores
+   *    `existingStatus`. (A non-member can only ever be Confirmed here via an
+   *    organizer's explicit override; the correct way to admit them permanently
+   *    is to add them to the group, after which this recheck passes.)
+   *
+   *  - Approval is a ONE-TIME organizer decision. Its Pending means "awaiting a
+   *    human"; once approved (Confirmed) a replay must not re-open that decision.
+   *    So the approval hold is skipped when `existingStatus` is already Confirmed
+   *    — mirroring the web path, which returns an already-active attendee
+   *    unchanged instead of re-holding it.
+   *
    * NOTE: this relies on the event being loaded WITH its `group` relation —
    * see EventQueryService.findBySourceAttributes / findByAtprotoUri.
    */
@@ -68,12 +88,15 @@ export class RsvpIntegrationService {
     userId: number,
     status: EventAttendeeStatus,
     tenantId: string,
+    existingStatus?: EventAttendeeStatus,
   ): Promise<EventAttendeeStatus> {
     if (status !== EventAttendeeStatus.Confirmed) {
       return status;
     }
 
     // Members-only event: hold a non-member or guest instead of confirming.
+    // Rechecked on every ingest (including resyncs) so a previously confirmed
+    // attendee who has since lost eligibility is held, matching the web path.
     if (event.requireGroupMembership && event.group) {
       const groupMember =
         await this.groupMemberQueryService.findGroupMemberByUserId(
@@ -90,8 +113,14 @@ export class RsvpIntegrationService {
       }
     }
 
-    // Approval-required event: hold every RSVP, matching the web path.
-    if (event.requireApproval) {
+    // Approval-required event: hold a new RSVP for organizer review, but never
+    // revoke an approval already granted. A replay / resync of an unchanged
+    // `going` record must not flip an organizer-approved (Confirmed) attendee
+    // back to Pending.
+    if (
+      event.requireApproval &&
+      existingStatus !== EventAttendeeStatus.Confirmed
+    ) {
       return EventAttendeeStatus.Pending;
     }
 
@@ -179,23 +208,27 @@ export class RsvpIntegrationService {
       const mappedStatus =
         statusMap[rsvpData.status] || EventAttendeeStatus.Pending;
 
-      // Gate the ingested RSVP through the same membership/approval rules the
-      // web path enforces. Without this an external non-member bypasses access
-      // control on a members-only event. Applied before both the
-      // create and update branches so a re-synced non-member is held too.
-      const status = await this.gateIngestionAttendanceStatus(
-        event,
-        user.id,
-        mappedStatus,
-        tenantId,
-      );
-
-      // Find existing attendee record
+      // Find existing attendee record (loaded before gating so the gate can
+      // see a prior organizer decision and stay idempotent across resyncs).
       const existingAttendee =
         await this.eventAttendeeService.findEventAttendeeByUserId(
           event.id,
           user.id,
         );
+
+      // Gate the ingested RSVP through the same membership/approval rules the
+      // web path enforces. Without this an external non-member bypasses access
+      // control on a members-only event. Applied before both the create and
+      // update branches so a re-synced non-member is held too — but the current
+      // stored status is passed so a replay never revokes an approval already
+      // granted (see gateIngestionAttendanceStatus).
+      const status = await this.gateIngestionAttendanceStatus(
+        event,
+        user.id,
+        mappedStatus,
+        tenantId,
+        existingAttendee?.status,
+      );
 
       // Get participant role
       const participantRole = await this.eventRoleService.getRoleByName(
