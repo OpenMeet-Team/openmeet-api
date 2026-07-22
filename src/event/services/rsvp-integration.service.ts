@@ -1,6 +1,8 @@
 import {
   Injectable,
   Logger,
+  Inject,
+  forwardRef,
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
@@ -15,11 +17,14 @@ import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
 import {
   EventAttendeeStatus,
   EventAttendeeRole,
+  GroupRole,
 } from '../../core/constants/constant';
 import { Trace } from '../../utils/trace.decorator';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
+import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 
 @Injectable()
 export class RsvpIntegrationService {
@@ -33,11 +38,65 @@ export class RsvpIntegrationService {
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
     private readonly blueskyIdService: BlueskyIdService,
+    @Inject(forwardRef(() => GroupMemberQueryService))
+    private readonly groupMemberQueryService: GroupMemberQueryService,
     @InjectMetric('rsvp_integration_processed_total')
     private readonly processedCounter: Counter<string>,
     @InjectMetric('rsvp_integration_processing_duration_seconds')
     private readonly processingDuration: Histogram<string>,
   ) {}
+
+  /**
+   * Enforce the same access gate the interactive RSVP path applies
+   * (EventManagementService.attendEvent). The ingestion path (firehose /
+   * contrail sink -> POST /api/integration/rsvps) otherwise reaches
+   * createFromIngestion with no membership/approval check, so an external
+   * non-member could land a Confirmed RSVP on a members-only event.
+   *
+   * A service-key intake can't return a 403 to the remote RSVP-er, so instead
+   * of throwing (as the web path does) we SOFT-HOLD: a blocked or approval-
+   * gated RSVP is persisted as Pending (mirrors requireApproval) for an
+   * organizer to resolve. Only affirmative attendance (going -> Confirmed) is
+   * gated; Maybe / Cancelled / unknown never grant access and pass through
+   * unchanged.
+   *
+   * NOTE: this relies on the event being loaded WITH its `group` relation —
+   * see EventQueryService.findBySourceAttributes / findByAtprotoUri.
+   */
+  private async gateIngestionAttendanceStatus(
+    event: EventEntity,
+    userId: number,
+    status: EventAttendeeStatus,
+    tenantId: string,
+  ): Promise<EventAttendeeStatus> {
+    if (status !== EventAttendeeStatus.Confirmed) {
+      return status;
+    }
+
+    // Members-only event: hold a non-member or guest instead of confirming.
+    if (event.requireGroupMembership && event.group) {
+      const groupMember =
+        await this.groupMemberQueryService.findGroupMemberByUserId(
+          event.group.id,
+          userId,
+          tenantId,
+        );
+
+      if (!groupMember || groupMember.groupRole?.name === GroupRole.Guest) {
+        this.logger.warn(
+          `Holding ingested RSVP as Pending: user ${userId} is not an eligible member of group ${event.group.id} for members-only event ${event.id}`,
+        );
+        return EventAttendeeStatus.Pending;
+      }
+    }
+
+    // Approval-required event: hold every RSVP, matching the web path.
+    if (event.requireApproval) {
+      return EventAttendeeStatus.Pending;
+    }
+
+    return EventAttendeeStatus.Confirmed;
+  }
 
   /**
    * Process an external RSVP and create or update attendance record
@@ -117,7 +176,19 @@ export class RsvpIntegrationService {
         notgoing: EventAttendeeStatus.Cancelled,
       };
 
-      const status = statusMap[rsvpData.status] || EventAttendeeStatus.Pending;
+      const mappedStatus =
+        statusMap[rsvpData.status] || EventAttendeeStatus.Pending;
+
+      // Gate the ingested RSVP through the same membership/approval rules the
+      // web path enforces. Without this an external non-member bypasses access
+      // control on a members-only event. Applied before both the
+      // create and update branches so a re-synced non-member is held too.
+      const status = await this.gateIngestionAttendanceStatus(
+        event,
+        user.id,
+        mappedStatus,
+        tenantId,
+      );
 
       // Find existing attendee record
       const existingAttendee =

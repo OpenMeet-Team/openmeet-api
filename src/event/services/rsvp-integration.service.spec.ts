@@ -9,10 +9,12 @@ import { EventAttendeeService } from '../../event-attendee/event-attendee.servic
 import { EventRoleService } from '../../event-role/event-role.service';
 import { UserService } from '../../user/user.service';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { EventSourceType } from '../../core/constants/source-type.constant';
 import {
   EventAttendeeStatus,
   EventAttendeeRole,
+  GroupRole,
 } from '../../core/constants/constant';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -34,6 +36,7 @@ describe('RsvpIntegrationService', () => {
   let service: RsvpIntegrationService;
   let eventQueryService: jest.Mocked<EventQueryService>;
   let eventAttendeeService: jest.Mocked<EventAttendeeService>;
+  let groupMemberQueryService: jest.Mocked<GroupMemberQueryService>;
 
   const mockEvent = { id: 1, name: 'Test Event' } as unknown as EventEntity;
   const mockUser = { id: 2, firstName: 'Test User' } as unknown as UserEntity;
@@ -99,6 +102,12 @@ describe('RsvpIntegrationService', () => {
           useValue: { parseUri: jest.fn() },
         },
         {
+          provide: GroupMemberQueryService,
+          useValue: {
+            findGroupMemberByUserId: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
           provide: 'PROM_METRIC_RSVP_INTEGRATION_PROCESSED_TOTAL',
           useValue: { inc: jest.fn() },
         },
@@ -116,6 +125,9 @@ describe('RsvpIntegrationService', () => {
     eventAttendeeService = module.get(
       EventAttendeeService,
     ) as jest.Mocked<EventAttendeeService>;
+    groupMemberQueryService = module.get(
+      GroupMemberQueryService,
+    ) as jest.Mocked<GroupMemberQueryService>;
   });
 
   it('should be defined', () => {
@@ -328,6 +340,154 @@ describe('RsvpIntegrationService', () => {
         'test-tenant',
       );
       expect(eventAttendeeService.createFromIngestion).toHaveBeenCalled();
+    });
+  });
+
+  describe('processExternalRsvp - membership/approval gate', () => {
+    const groupId = 10;
+    const membersOnlyEvent = {
+      id: 42,
+      name: 'Members Only Event',
+      requireGroupMembership: true,
+      requireApproval: false,
+      group: { id: groupId },
+    } as unknown as EventEntity;
+
+    beforeEach(() => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        membersOnlyEvent,
+      ]);
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue(null);
+      eventAttendeeService.createFromIngestion.mockResolvedValue({
+        id: 1,
+      } as unknown as EventAttendeesEntity);
+    });
+
+    it('should hold a non-member "going" RSVP to a members-only event as Pending', async () => {
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue(null);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      // Membership is checked against the loaded group relation, not a stale undefined
+      expect(
+        groupMemberQueryService.findGroupMemberByUserId,
+      ).toHaveBeenCalledWith(groupId, mockUser.id, 'test-tenant');
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
+    });
+
+    it('should confirm a real group member RSVP to a members-only event', async () => {
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue({
+        groupRole: { name: 'member' },
+      } as any);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
+        expect.objectContaining({ status: EventAttendeeStatus.Confirmed }),
+      );
+    });
+
+    it('should hold a guest RSVP to a members-only event as Pending', async () => {
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue({
+        groupRole: { name: GroupRole.Guest },
+      } as any);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
+    });
+
+    it('should hold an approval-required RSVP as Pending even for a member', async () => {
+      const approvalEvent = {
+        id: 43,
+        requireGroupMembership: true,
+        requireApproval: true,
+        group: { id: groupId },
+      } as unknown as EventEntity;
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        approvalEvent,
+      ]);
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue({
+        groupRole: { name: 'member' },
+      } as any);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
+    });
+
+    it('should confirm a "going" RSVP to an open event without a membership lookup', async () => {
+      const openEvent = {
+        id: 44,
+        requireGroupMembership: false,
+        requireApproval: false,
+      } as unknown as EventEntity;
+      eventQueryService.findBySourceAttributes.mockResolvedValue([openEvent]);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
+        expect.objectContaining({ status: EventAttendeeStatus.Confirmed }),
+      );
+      expect(
+        groupMemberQueryService.findGroupMemberByUserId,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should not gate a non-affirmative status ("interested" -> Maybe) and should skip the lookup', async () => {
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue(null);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'interested' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.createFromIngestion).toHaveBeenCalledWith(
+        expect.objectContaining({ status: EventAttendeeStatus.Maybe }),
+      );
+      expect(
+        groupMemberQueryService.findGroupMemberByUserId,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should re-hold an already-present non-member attendee as Pending on re-sync (update path gated)', async () => {
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue(null);
+      eventAttendeeService.findEventAttendeeByUserId.mockResolvedValue({
+        id: 99,
+        status: EventAttendeeStatus.Confirmed,
+        role: { name: EventAttendeeRole.Participant },
+      } as unknown as EventAttendeesEntity);
+
+      await service.processExternalRsvp(
+        { ...mockRsvpDto, status: 'going' },
+        'test-tenant',
+      );
+
+      expect(eventAttendeeService.updateEventAttendee).toHaveBeenCalledWith(
+        99,
+        expect.objectContaining({ status: EventAttendeeStatus.Pending }),
+      );
     });
   });
 });
