@@ -661,16 +661,24 @@ export class EventIntegrationService {
 
     // Geocode only now that the row exists, applying lat/lon as a targeted
     // follow-up update (both columns are nullable and nothing in the create
-    // path reads them after this point).
+    // path reads them after this point). Best-effort: a failure here must not
+    // gate the event.ingested emit below — the row is already committed, and
+    // skipping the emit would strand it with no creation activity.
     if (addressToGeocode) {
-      const coords = await this.geocodeAddress(addressToGeocode);
-      if (coords) {
-        await eventRepository.update(savedEvent.id, {
-          lat: coords.lat,
-          lon: coords.lon,
-        });
-        savedEvent.lat = coords.lat;
-        savedEvent.lon = coords.lon;
+      try {
+        const coords = await this.geocodeAddress(addressToGeocode);
+        if (coords) {
+          await eventRepository.update(savedEvent.id, {
+            lat: coords.lat,
+            lon: coords.lon,
+          });
+          savedEvent.lat = coords.lat;
+          savedEvent.lon = coords.lon;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Geocoding follow-up failed for event ${savedEvent.id} (tenant ${tenantId}), continuing without coordinates: ${error.message}`,
+        );
       }
     }
 
