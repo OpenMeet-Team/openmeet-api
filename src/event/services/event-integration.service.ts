@@ -100,7 +100,10 @@ export class EventIntegrationService {
           is_duplicate: 'true',
         });
 
-        return this.updateExistingEvent(
+        // await so a rejection is routed through the catch below — a bare
+        // return hands the promise past the try/catch and skips the failure
+        // counter and error timer
+        return await this.updateExistingEvent(
           existingEvent,
           eventData,
           eventRepository,
@@ -119,13 +122,15 @@ export class EventIntegrationService {
         is_duplicate: 'false',
       });
 
-      return this.createNewEvent(eventData, eventRepository, tenantId);
+      return await this.createNewEvent(eventData, eventRepository, tenantId);
     } catch (error) {
       // Record the error
       this.deduplicationFailuresCounter.inc({
         tenant: tenantId,
         source_type: eventData.source.type,
-        error: error.message || 'unknown',
+        // Fixed code, never error.message — a raw message here is an
+        // unbounded Prometheus label cardinality leak
+        error: 'process_exception',
       });
 
       // Stop the timer for error case
@@ -502,6 +507,22 @@ export class EventIntegrationService {
   }
 
   /**
+   * Postgres unique_violation (23505), surfaced directly or wrapped in a
+   * TypeORM QueryFailedError (which copies the driver's `code` onto itself,
+   * but older driver versions only expose it via `driverError`).
+   */
+  private isUniqueViolation(error: unknown): boolean {
+    const code = (error as any)?.code ?? (error as any)?.driverError?.code;
+    return (
+      code === '23505' ||
+      (error instanceof Error &&
+        error.message.includes(
+          'duplicate key value violates unique constraint',
+        ))
+    );
+  }
+
+  /**
    * Create a new event from external data
    */
   private async createNewEvent(
@@ -527,7 +548,11 @@ export class EventIntegrationService {
     newEvent.status = eventData.status || EventStatus.Published;
     newEvent.visibility = eventData.visibility || EventVisibility.Public;
 
-    // Handle location
+    // Handle location. Geocoding is deferred until after the row is
+    // persisted: the Nominatim rate-limit sleep (1.1s per retry) otherwise
+    // sits between find-by-sourceId and INSERT, holding open the window in
+    // which a concurrent writer inserts a second row for the same sourceId.
+    let addressToGeocode: string | null = null;
     if (eventData.location) {
       if (eventData.location.description) {
         newEvent.location = eventData.location.description;
@@ -536,14 +561,7 @@ export class EventIntegrationService {
         newEvent.lat = eventData.location.lat;
         newEvent.lon = eventData.location.lon;
       } else if (eventData.location.description) {
-        // Try to geocode the address if we have a description but no coordinates
-        const coords = await this.geocodeAddress(
-          eventData.location.description,
-        );
-        if (coords) {
-          newEvent.lat = coords.lat;
-          newEvent.lon = coords.lon;
-        }
+        addressToGeocode = eventData.location.description;
       }
       if (eventData.location.url) {
         newEvent.locationOnline = eventData.location.url;
@@ -608,10 +626,61 @@ export class EventIntegrationService {
         imageId: newEvent.image?.id,
       })}`,
     );
-    const savedEvent = await eventRepository.save(newEvent);
+    let savedEvent: EventEntity;
+    try {
+      savedEvent = await eventRepository.save(newEvent);
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        // Lost an insert race to a concurrent writer: resolve idempotently by
+        // returning the row the winner created. Must not fall through to the
+        // event.ingested emit below, or the duplicate event row would be
+        // traded for a duplicate activity-feed entry.
+        this.logger.warn(
+          `Unique violation inserting event for sourceId ${eventData.source.id} (tenant ${tenantId}); resolving to the existing row`,
+        );
+        const winners = await this.eventQueryService.findBySourceAttributes(
+          eventData.source.id,
+          eventData.source.type,
+          tenantId,
+        );
+        if (winners.length > 0) {
+          this.deduplicationCounter.inc({
+            tenant: tenantId,
+            source_type: eventData.source.type,
+            method: 'unique_violation_recovery',
+          });
+          return winners[0];
+        }
+        // The violation was on some other constraint — surface it.
+      }
+      throw error;
+    }
     this.logger.debug(
       `Created new event with ID ${savedEvent.id} for tenant ${tenantId}, image: ${savedEvent.image ? savedEvent.image.id : 'none'}`,
     );
+
+    // Geocode only now that the row exists, applying lat/lon as a targeted
+    // follow-up update (both columns are nullable and nothing in the create
+    // path reads them after this point). Best-effort: a failure here must not
+    // gate the event.ingested emit below — the row is already committed, and
+    // skipping the emit would strand it with no creation activity.
+    if (addressToGeocode) {
+      try {
+        const coords = await this.geocodeAddress(addressToGeocode);
+        if (coords) {
+          await eventRepository.update(savedEvent.id, {
+            lat: coords.lat,
+            lon: coords.lon,
+          });
+          savedEvent.lat = coords.lat;
+          savedEvent.lon = coords.lon;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Geocoding follow-up failed for event ${savedEvent.id} (tenant ${tenantId}), continuing without coordinates: ${error.message}`,
+        );
+      }
+    }
 
     // Emit event.ingested for activity feed and other listeners
     // Note: we use 'event.ingested' instead of 'event.created' to distinguish

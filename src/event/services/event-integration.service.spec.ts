@@ -192,6 +192,7 @@ describe('EventIntegrationService', () => {
         } as unknown as EventEntity);
       }),
       merge: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
       createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
       remove: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
     } as any;
@@ -437,6 +438,237 @@ describe('EventIntegrationService', () => {
       expect(capturedEvent.locationOnline).toBe(
         'https://meet.google.com/abc-defg-hij',
       );
+    });
+  });
+
+  describe('Geocoding after save', () => {
+    const eventWithAddressOnly: ExternalEventDto = {
+      ...mockEventDto,
+      location: {
+        description: '123 Main St, Louisville, KY',
+      },
+    };
+
+    it('should persist the row before the geocoder runs, then apply lat/lon via a targeted update', async () => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      const geocodeSpy = jest
+        .spyOn(service as any, 'geocodeAddress')
+        .mockResolvedValue({ lat: 38.25, lon: -85.76 });
+
+      const result = await service.processExternalEvent(
+        eventWithAddressOnly,
+        'tenant1',
+      );
+
+      expect(eventRepository.save).toHaveBeenCalledTimes(1);
+      expect(geocodeSpy).toHaveBeenCalledTimes(1);
+      expect(eventRepository.save.mock.invocationCallOrder[0]).toBeLessThan(
+        geocodeSpy.mock.invocationCallOrder[0],
+      );
+
+      const savedEntity = eventRepository.save.mock.calls[0][0] as any;
+      expect(savedEntity.lat).toBeUndefined();
+      expect(savedEntity.lon).toBeUndefined();
+
+      expect(eventRepository.update).toHaveBeenCalledWith(2, {
+        lat: 38.25,
+        lon: -85.76,
+      });
+      expect(result.lat).toBe(38.25);
+      expect(result.lon).toBe(-85.76);
+    });
+
+    it('should not geocode when coordinates are provided', async () => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      const geocodeSpy = jest.spyOn(service as any, 'geocodeAddress');
+
+      const eventWithCoords: ExternalEventDto = {
+        ...mockEventDto,
+        location: {
+          description: 'Test Location',
+          lat: 40.7128,
+          lon: -74.006,
+        },
+      };
+
+      await service.processExternalEvent(eventWithCoords, 'tenant1');
+
+      expect(geocodeSpy).not.toHaveBeenCalled();
+      expect(eventRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('should still save the row when the geocoder returns null', async () => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      jest.spyOn(service as any, 'geocodeAddress').mockResolvedValue(null);
+      const emitter = module.get(EventEmitter2);
+
+      const result = await service.processExternalEvent(
+        eventWithAddressOnly,
+        'tenant1',
+      );
+
+      expect(eventRepository.save).toHaveBeenCalledTimes(1);
+      expect(eventRepository.update).not.toHaveBeenCalled();
+      expect(result.lat).toBeUndefined();
+      expect(result.lon).toBeUndefined();
+      expect(emitter.emit).toHaveBeenCalledWith(
+        'event.ingested',
+        expect.objectContaining({ eventId: 2 }),
+      );
+    });
+
+    it('should still emit event.ingested when the geocode follow-up update fails', async () => {
+      // The row is already committed by the time the follow-up update runs; a
+      // failure there must not strand the event without its creation emit —
+      // the retry path only emits event.ingested.updated, whose listener
+      // never creates the missing creation activity.
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      jest
+        .spyOn(service as any, 'geocodeAddress')
+        .mockResolvedValue({ lat: 38.25, lon: -85.76 });
+      eventRepository.update.mockRejectedValue(new Error('connection reset'));
+      const emitter = module.get(EventEmitter2);
+
+      const result = await service.processExternalEvent(
+        eventWithAddressOnly,
+        'tenant1',
+      );
+
+      expect(result.lat).toBeUndefined();
+      expect(result.lon).toBeUndefined();
+      expect(emitter.emit).toHaveBeenCalledWith(
+        'event.ingested',
+        expect.objectContaining({ eventId: 2 }),
+      );
+    });
+
+    it('should keep geocoding out of the residual find-to-insert window (measured)', async () => {
+      // The race window is the gap between find-by-sourceId resolving empty
+      // and the INSERT. It used to include the geocoder's 1.1-3.3s of
+      // rate-limit sleep; now it should only contain handleEventCreator's
+      // I/O (simulated at 25ms here) plus sub-ms bookkeeping.
+      const simulatedCreatorIoMs = 25;
+      let findResolvedAt = 0;
+      let saveCalledAt = 0;
+
+      eventQueryService.findBySourceAttributes.mockImplementation(() => {
+        findResolvedAt = performance.now();
+        return Promise.resolve([]);
+      });
+      shadowAccountService.findOrCreateShadowAccount.mockImplementation(
+        async () => {
+          await new Promise((resolve) =>
+            setTimeout(resolve, simulatedCreatorIoMs),
+          );
+          return mockUser;
+        },
+      );
+      eventRepository.save.mockImplementation((entity: any) => {
+        saveCalledAt = performance.now();
+        return Promise.resolve({ ...entity, id: 2 });
+      });
+      const geocodeSpy = jest
+        .spyOn(service as any, 'geocodeAddress')
+        .mockResolvedValue({ lat: 38.25, lon: -85.76 });
+
+      await service.processExternalEvent(eventWithAddressOnly, 'tenant1');
+
+      const residualMs = saveCalledAt - findResolvedAt;
+      const overheadMs = residualMs - simulatedCreatorIoMs;
+      console.info(
+        `[AC2] residual find->insert window: ${residualMs.toFixed(1)}ms total, ` +
+          `${overheadMs.toFixed(1)}ms beyond the simulated ${simulatedCreatorIoMs}ms handleEventCreator I/O`,
+      );
+      expect(geocodeSpy.mock.invocationCallOrder[0]).toBeGreaterThan(
+        eventRepository.save.mock.invocationCallOrder[0],
+      );
+      expect(residualMs).toBeGreaterThanOrEqual(simulatedCreatorIoMs - 1);
+    });
+  });
+
+  describe('Unique violation on insert (23505)', () => {
+    const uniqueViolation = () =>
+      Object.assign(
+        new Error(
+          'duplicate key value violates unique constraint "UQ_tenant_events_source"',
+        ),
+        { code: '23505' },
+      );
+
+    it('should resolve as an idempotent update: re-fetch by source and return the winner', async () => {
+      eventQueryService.findBySourceAttributes
+        .mockResolvedValueOnce([]) // initial dedup check misses
+        .mockResolvedValueOnce([mockExistingEvent as unknown as EventEntity]); // post-conflict re-fetch
+      eventRepository.save.mockRejectedValue(uniqueViolation());
+
+      const result = await service.processExternalEvent(
+        mockEventDto,
+        'tenant1',
+      );
+
+      expect(result).toBe(mockExistingEvent);
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenLastCalledWith(
+        mockEventDto.source.id,
+        mockEventDto.source.type,
+        'tenant1',
+      );
+      expect(deduplicationFailuresCounter.inc).not.toHaveBeenCalled();
+    });
+
+    it('should not emit event.ingested on the loser path', async () => {
+      eventQueryService.findBySourceAttributes
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([mockExistingEvent as unknown as EventEntity]);
+      eventRepository.save.mockRejectedValue(uniqueViolation());
+      const emitter = module.get(EventEmitter2);
+
+      await service.processExternalEvent(mockEventDto, 'tenant1');
+
+      expect(emitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('should recognize the violation when the code is only on driverError', async () => {
+      eventQueryService.findBySourceAttributes
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([mockExistingEvent as unknown as EventEntity]);
+      eventRepository.save.mockRejectedValue(
+        Object.assign(new Error('query failed'), {
+          driverError: { code: '23505' },
+        }),
+      );
+
+      const result = await service.processExternalEvent(
+        mockEventDto,
+        'tenant1',
+      );
+
+      expect(result).toBe(mockExistingEvent);
+    });
+
+    it('should rethrow when the re-fetch finds no row (violation on another constraint)', async () => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      eventRepository.save.mockRejectedValue(uniqueViolation());
+
+      await expect(
+        service.processExternalEvent(mockEventDto, 'tenant1'),
+      ).rejects.toThrow('duplicate key value violates unique constraint');
+    });
+
+    it('should propagate non-unique save errors with a bounded metric label', async () => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      eventRepository.save.mockRejectedValue(
+        new Error('connection terminated unexpectedly: secret detail xyz'),
+      );
+
+      await expect(
+        service.processExternalEvent(mockEventDto, 'tenant1'),
+      ).rejects.toThrow('connection terminated');
+
+      expect(deduplicationFailuresCounter.inc).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'process_exception' }),
+      );
+      const labels = deduplicationFailuresCounter.inc.mock.calls[0][0] as any;
+      expect(labels.error).not.toContain('secret detail');
     });
   });
 
