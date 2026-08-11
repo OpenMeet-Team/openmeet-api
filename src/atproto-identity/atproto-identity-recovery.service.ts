@@ -232,7 +232,8 @@ export class AtprotoIdentityRecoveryService {
     }
     if (!identity.isCustodial) {
       throw new BadRequestException(
-        'User already owns their AT Protocol identity',
+        'You already own this AT Protocol account. There is nothing left for ' +
+          'OpenMeet to hand over.',
       );
     }
 
