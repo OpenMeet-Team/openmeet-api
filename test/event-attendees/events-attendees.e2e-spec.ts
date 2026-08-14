@@ -103,18 +103,28 @@ describe('EventAttendeeController (e2e)', () => {
     // First attend the event to make sure we have an attendance record
     await attendEvent(token, testEvent.slug);
 
-    const getMyEventsResponse = await request(TESTING_APP_URL)
-      .get('/api/events/dashboard')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID);
+    // Every e2e suite logs in as the same admin user, so the dashboard also
+    // contains events created by concurrently running suites — and it sorts
+    // by startDate ascending, which puts this test's far-future event last.
+    // Page through instead of assuming the event lands on page 1.
+    let foundEvent: { slug: string } | undefined;
+    for (let page = 1; page <= 50 && !foundEvent; page++) {
+      const getMyEventsResponse = await request(TESTING_APP_URL)
+        .get('/api/events/dashboard')
+        .query({ page, limit: 50 })
+        .set('Authorization', `Bearer ${token}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
 
-    expect(getMyEventsResponse.status).toBe(200);
-    expect(Array.isArray(getMyEventsResponse.body.data)).toBe(true);
+      expect(getMyEventsResponse.status).toBe(200);
+      expect(Array.isArray(getMyEventsResponse.body.data)).toBe(true);
 
-    // Find the created test event in the dashboard response
-    const foundEvent = getMyEventsResponse.body.data.find(
-      (e: { slug: string }) => e.slug === testEvent.slug,
-    );
+      foundEvent = getMyEventsResponse.body.data.find(
+        (e: { slug: string }) => e.slug === testEvent.slug,
+      );
+      if (getMyEventsResponse.body.data.length === 0) {
+        break;
+      }
+    }
     expect(foundEvent).toBeDefined();
   });
 
