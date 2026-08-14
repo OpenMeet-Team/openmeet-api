@@ -338,12 +338,14 @@ export class PdsSessionService {
           password,
         );
       } catch (error) {
-        // A definitive 401 means the PDS password no longer matches the
-        // stored credentials. The only flow that changes a custodial
-        // account's password is the user's own email-token reset (take-
-        // ownership step 1), so this is an ownership handoff that never got
-        // recorded — finish it. Strictly 401 only: network errors and 5xx
-        // must not end custody.
+        // A 401 here MAY mean the user reset the PDS password themselves
+        // (take-ownership step 1) and custody was never ended. But a 401
+        // alone is ambiguous: the PDS returns the identical 401 for unknown
+        // accounts to prevent enumeration, so wrong PDS URL, incomplete PDS
+        // restore, or a deleted account all look the same. Only identities
+        // that recorded a pending handoff before their reset may have
+        // custody ended here — completeOrphanedTakeOwnership checks the
+        // marker. Strictly 401 only: network errors and 5xx never qualify.
         if (error instanceof PdsApiError && error.statusCode === 401) {
           await this.completeOrphanedTakeOwnership(tenantId, identity.did);
         }
@@ -377,11 +379,14 @@ export class PdsSessionService {
   }
 
   /**
-   * Finish a take-ownership handoff that was never recorded: clear the stale
-   * credentials, mark the identity non-custodial, and drop any cached
-   * session. Called when stored custodial credentials are definitively
-   * rejected by the PDS — those credentials can never work again, so leaving
-   * them keeps the account failing silently on every publish attempt.
+   * Finish a take-ownership handoff that was recorded but never completed:
+   * clear the stale credentials, mark the identity non-custodial, and drop
+   * any cached session.
+   *
+   * Guarded by the takeOwnershipPendingAt marker, which resetPdsPassword
+   * writes before submitting the reset to the PDS. Identities without the
+   * marker are left untouched no matter what the PDS said — a 401 without
+   * recorded provenance is not evidence of a handoff.
    *
    * Never throws: repair failure must not mask the original session error.
    */
@@ -394,13 +399,18 @@ export class PdsSessionService {
         tenantId,
         did,
       );
-      if (!identity || !identity.isCustodial) {
+      if (
+        !identity ||
+        !identity.isCustodial ||
+        !identity.takeOwnershipPendingAt
+      ) {
         return;
       }
 
       await this.userAtprotoIdentityService.update(tenantId, identity.id, {
         pdsCredentials: null,
         isCustodial: false,
+        takeOwnershipPendingAt: null,
       });
       await this.invalidateSession(tenantId, did);
 

@@ -537,13 +537,15 @@ describe('AtprotoIdentityRecoveryService', () => {
       // Act
       await service.completeTakeOwnership('test-tenant', mockUser.ulid);
 
-      // Assert - credentials cleared and marked as non-custodial
+      // Assert - credentials cleared, marked non-custodial, pending-handoff
+      // marker resolved in the same write
       expect(userAtprotoIdentityService.update).toHaveBeenCalledWith(
         'test-tenant',
         mockIdentityEntity.id,
         {
           pdsCredentials: null,
           isCustodial: false,
+          takeOwnershipPendingAt: null,
         },
       );
 

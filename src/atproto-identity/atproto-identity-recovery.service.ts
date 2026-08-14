@@ -279,10 +279,12 @@ export class AtprotoIdentityRecoveryService {
       return;
     }
 
-    // Clear credentials and mark as non-custodial
+    // Clear credentials and mark as non-custodial; the pending-handoff
+    // marker is resolved by the same write
     await this.userAtprotoIdentityService.update(tenantId, identity.id, {
       pdsCredentials: null,
       isCustodial: false,
+      takeOwnershipPendingAt: null,
     });
 
     // The cached session was minted from the credentials we just cleared

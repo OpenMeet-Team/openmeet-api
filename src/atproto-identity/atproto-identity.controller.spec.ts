@@ -75,6 +75,7 @@ describe('AtprotoIdentityController', () => {
   beforeEach(async () => {
     const mockIdentityService = {
       findByUserUlid: jest.fn(),
+      update: jest.fn(),
     };
 
     const mockAtprotoIdentityService = {
@@ -660,6 +661,11 @@ describe('AtprotoIdentityController', () => {
         'valid-reset-token',
         'new-secure-password-123',
       );
+      // The pending handoff is recorded before the PDS write so repair
+      // paths have provenance for this identity
+      expect(identityService.update).toHaveBeenCalledWith('test-tenant', 1, {
+        takeOwnershipPendingAt: expect.any(Date),
+      });
       // Custody ends server-side, not via a later client call
       expect(recoveryService.completeTakeOwnership).toHaveBeenCalledWith(
         'test-tenant',
@@ -752,8 +758,14 @@ describe('AtprotoIdentityController', () => {
         }),
       ).rejects.toThrow(BadRequestException);
 
-      // A failed reset must leave custody untouched
+      // A failed reset must leave custody untouched and withdraw the
+      // pending-handoff marker it recorded before the PDS call
       expect(recoveryService.completeTakeOwnership).not.toHaveBeenCalled();
+      expect(identityService.update).toHaveBeenLastCalledWith(
+        'test-tenant',
+        1,
+        { takeOwnershipPendingAt: null },
+      );
     });
   });
 

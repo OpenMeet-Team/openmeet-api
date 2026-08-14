@@ -91,6 +91,19 @@ export class UserAtprotoIdentityEntity extends EntityRelationalHelper {
   @Column({ type: 'boolean', default: true })
   isCustodial: boolean;
 
+  /**
+   * Set immediately before a take-ownership PDS password reset is submitted;
+   * cleared when the reset fails or custody is ended.
+   *
+   * This is the provenance record for repair paths: a PDS login 401 alone is
+   * ambiguous (the PDS returns the same 401 for unknown accounts to prevent
+   * enumeration, so wrong PDS URL / incomplete restore / deleted account all
+   * look like a bad password). Only identities carrying this marker may have
+   * custody ended in response to a 401.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  takeOwnershipPendingAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 

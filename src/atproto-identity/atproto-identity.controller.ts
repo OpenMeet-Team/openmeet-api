@@ -342,10 +342,31 @@ export class AtprotoIdentityController {
       );
     }
 
+    // Record the pending handoff BEFORE the PDS write. A later PDS login 401
+    // is only trustworthy proof of a completed reset for identities carrying
+    // this marker — the PDS returns the same 401 for unknown accounts, so
+    // without provenance a systemic failure (wrong PDS URL, incomplete
+    // restore) would read as mass ownership handoffs.
+    await this.userAtprotoIdentityService.update(tenantId, identity.id, {
+      takeOwnershipPendingAt: new Date(),
+    });
+
     // Call PDS to reset password
     try {
       await this.pdsAccountService.resetPassword(dto.token, dto.password);
     } catch (error) {
+      // The reset did not happen — withdraw the pending marker (best effort;
+      // a lingering marker only matters if this identity later draws a 401)
+      try {
+        await this.userAtprotoIdentityService.update(tenantId, identity.id, {
+          takeOwnershipPendingAt: null,
+        });
+      } catch (clearError) {
+        this.logger.warn(
+          `Failed to clear pending take-ownership marker for user ${user.ulid} after failed reset`,
+          { tenantId, error: clearError.message },
+        );
+      }
       if (error instanceof PdsApiError) {
         throw new BadRequestException(error.message);
       }

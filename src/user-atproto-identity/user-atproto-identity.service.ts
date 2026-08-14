@@ -142,6 +142,7 @@ export class UserAtprotoIdentityService {
       pdsUrl: string;
       pdsCredentials: string | null;
       isCustodial: boolean;
+      takeOwnershipPendingAt: Date | null;
     }>,
   ): Promise<NullableType<UserAtprotoIdentityEntity>> {
     await this.getTenantRepository(tenantId);

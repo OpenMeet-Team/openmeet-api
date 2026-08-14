@@ -389,10 +389,10 @@ describe('PdsSessionService', () => {
         return custodialIdentity;
       };
 
-      it('should finish take-ownership when the PDS definitively rejects stored credentials', async () => {
+      it('should finish take-ownership on 401 when a pending handoff was recorded', async () => {
         const custodialIdentity = arrangeCustodialSessionAttempt();
         mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
-          custodialIdentity,
+          createMockIdentity({ takeOwnershipPendingAt: new Date() }),
         );
         mockPdsAccountService.createSession.mockRejectedValue(
           new PdsApiError(
@@ -406,17 +406,36 @@ describe('PdsSessionService', () => {
 
         // Session still fails this cycle...
         expect(result).toBeNull();
-        // ...but the unrecorded handoff is completed
+        // ...but the recorded handoff is completed
         expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
           tenantId,
           custodialIdentity.id,
           {
             pdsCredentials: null,
             isCustodial: false,
+            takeOwnershipPendingAt: null,
           },
         );
         // ...and the cached session is invalidated
         expect(mockElastiCacheService.del).toHaveBeenCalled();
+      });
+
+      it('should not end custody on 401 without a recorded pending handoff', async () => {
+        // The PDS returns the same 401 for unknown accounts (anti-
+        // enumeration), so a systemic failure like a wrong PDS URL or an
+        // incomplete PDS restore must never convert custodial identities
+        arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          createMockIdentity({ takeOwnershipPendingAt: null }),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Invalid identifier or password', 401),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
       });
 
       it('should not end custody on a non-401 PDS error', async () => {
@@ -459,9 +478,9 @@ describe('PdsSessionService', () => {
       });
 
       it('should still return null when the repair itself fails', async () => {
-        const custodialIdentity = arrangeCustodialSessionAttempt();
+        arrangeCustodialSessionAttempt();
         mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
-          custodialIdentity,
+          createMockIdentity({ takeOwnershipPendingAt: new Date() }),
         );
         mockUserAtprotoIdentityService.update.mockRejectedValue(
           new Error('DB write failed'),
