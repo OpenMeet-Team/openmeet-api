@@ -2,7 +2,10 @@ import { Injectable, Inject, Scope } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
-import { UserAtprotoIdentityEntity } from './infrastructure/persistence/relational/entities/user-atproto-identity.entity';
+import {
+  TakeOwnershipStatus,
+  UserAtprotoIdentityEntity,
+} from './infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { NullableType } from '../utils/types/nullable.type';
 
 /**
@@ -142,7 +145,7 @@ export class UserAtprotoIdentityService {
       pdsUrl: string;
       pdsCredentials: string | null;
       isCustodial: boolean;
-      takeOwnershipPendingAt: Date | null;
+      takeOwnershipStatus: TakeOwnershipStatus | null;
     }>,
   ): Promise<NullableType<UserAtprotoIdentityEntity>> {
     await this.getTenantRepository(tenantId);

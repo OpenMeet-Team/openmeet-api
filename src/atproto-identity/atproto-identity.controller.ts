@@ -11,6 +11,7 @@ import {
   UseGuards,
   NotFoundException,
   BadRequestException,
+  BadGatewayException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -311,6 +312,11 @@ export class AtprotoIdentityController {
     description: 'User has no custodial identity or invalid token',
   })
   @ApiResponse({
+    status: HttpStatus.BAD_GATEWAY,
+    description:
+      'The PDS did not confirm the reset (timeout or server error); safe to retry',
+  })
+  @ApiResponse({
     status: HttpStatus.TOO_MANY_REQUESTS,
     description: 'Rate limit exceeded - max 3 reset attempts per hour',
   })
@@ -343,34 +349,80 @@ export class AtprotoIdentityController {
     }
 
     // Record the pending handoff BEFORE the PDS write. A later PDS login 401
-    // is only trustworthy proof of a completed reset for identities carrying
-    // this marker — the PDS returns the same 401 for unknown accounts, so
-    // without provenance a systemic failure (wrong PDS URL, incomplete
-    // restore) would read as mass ownership handoffs.
-    await this.userAtprotoIdentityService.update(tenantId, identity.id, {
-      takeOwnershipPendingAt: new Date(),
-    });
+    // is only trustworthy proof of a completed reset for identities whose
+    // marker shows the PDS actually saw a reset ('ambiguous' or 'confirmed')
+    // — the PDS returns the same 401 for unknown accounts, so without
+    // provenance a systemic failure (wrong PDS URL, incomplete restore)
+    // would read as mass ownership handoffs.
+    //
+    // The marker only ever advances toward stronger evidence here (pending
+    // -> ambiguous -> confirmed); rejections never withdraw it, because a
+    // rejected retry may have been refused precisely because an earlier
+    // attempt consumed the token when it committed. Only proof removes the
+    // marker: the custody flip, or a later successful login with the stored
+    // credentials (which shows no reset committed — PdsSessionService
+    // clears 'pending'/'ambiguous' then).
+    const priorStatus = identity.takeOwnershipStatus;
+    if (priorStatus === 'ambiguous' || priorStatus === 'confirmed') {
+      this.logger.warn(
+        `Password reset requested for user ${user.ulid} while a prior reset attempt is still '${priorStatus}'; keeping that marker`,
+        { tenantId },
+      );
+    } else {
+      await this.userAtprotoIdentityService.update(tenantId, identity.id, {
+        takeOwnershipStatus: 'pending',
+      });
+    }
 
     // Call PDS to reset password
     try {
       await this.pdsAccountService.resetPassword(dto.token, dto.password);
     } catch (error) {
-      // The reset did not happen — withdraw the pending marker (best effort;
-      // a lingering marker only matters if this identity later draws a 401)
-      try {
-        await this.userAtprotoIdentityService.update(tenantId, identity.id, {
-          takeOwnershipPendingAt: null,
-        });
-      } catch (clearError) {
-        this.logger.warn(
-          `Failed to clear pending take-ownership marker for user ${user.ulid} after failed reset`,
-          { tenantId, error: clearError.message },
-        );
-      }
-      if (error instanceof PdsApiError) {
+      if (this.isDefinitivePdsRejection(error)) {
+        // The PDS evaluated this request and refused it, so THIS attempt
+        // did not change the password. A marker this request wrote stays
+        // 'pending', which the session-401 repair ignores and a later
+        // successful login sweeps away.
         throw new BadRequestException(error.message);
       }
-      throw error;
+
+      // No definitive answer from the PDS (timeout, connection loss, 5xx):
+      // the reset may have committed with the response lost. Upgrade the
+      // marker so the session-401 repair may finish the handoff if it did.
+      if (priorStatus !== 'confirmed') {
+        try {
+          await this.userAtprotoIdentityService.update(tenantId, identity.id, {
+            takeOwnershipStatus: 'ambiguous',
+          });
+        } catch (markError) {
+          this.logger.error(
+            `Failed to mark ambiguous password reset for user ${user.ulid}; marker stays 'pending' and needs manual triage if the reset committed`,
+            { tenantId, error: markError.message },
+          );
+        }
+      }
+      this.logger.error(
+        `PDS gave no definitive answer to a password reset for user ${user.ulid}`,
+        { tenantId, error: error.message },
+      );
+      throw new BadGatewayException(
+        'The PDS did not confirm the password reset. Please try again.',
+      );
+    }
+
+    // The PDS acknowledged the reset — record that durably FIRST. If ending
+    // custody below fails, the 'confirmed' marker is what lets the client's
+    // take-ownership/complete retry or the session-401 repair finish the
+    // handoff later.
+    try {
+      await this.userAtprotoIdentityService.update(tenantId, identity.id, {
+        takeOwnershipStatus: 'confirmed',
+      });
+    } catch (markError) {
+      this.logger.error(
+        `Failed to record confirmed password reset for user ${user.ulid}`,
+        { tenantId, error: markError.message },
+      );
     }
 
     // The user now owns the password they just set, so custody ends here, in
@@ -394,6 +446,21 @@ export class AtprotoIdentityController {
     }
 
     return { success: true };
+  }
+
+  /**
+   * True when the PDS itself evaluated the request and refused it (any 4xx
+   * response, e.g. an invalid or expired token) — proof that this attempt
+   * changed nothing. Network failures, timeouts, and 5xx responses are NOT
+   * definitive: the reset may have committed with the response lost.
+   */
+  private isDefinitivePdsRejection(error: unknown): error is PdsApiError {
+    return (
+      error instanceof PdsApiError &&
+      typeof error.statusCode === 'number' &&
+      error.statusCode >= 400 &&
+      error.statusCode < 500
+    );
   }
 
   /**

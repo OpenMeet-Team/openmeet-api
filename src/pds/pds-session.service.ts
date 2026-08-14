@@ -14,6 +14,7 @@ import {
   CreateSessionResponse,
 } from './pds-account.service';
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
+import { TakeOwnershipStatus } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { PdsApiError, SessionUnavailableError } from './pds.errors';
@@ -207,11 +208,13 @@ export class PdsSessionService {
   private async getSessionForIdentity(
     tenantId: string,
     identity: {
+      id: number;
       did: string;
       handle: string | null;
       pdsUrl: string;
       pdsCredentials: string | null;
       isCustodial: boolean;
+      takeOwnershipStatus: TakeOwnershipStatus | null;
     },
   ): Promise<SessionResult | null> {
     // Case 1: OAuth user (non-custodial) - delegate to BlueskyService
@@ -230,10 +233,12 @@ export class PdsSessionService {
     // Case 3: Custodial account with credentials
     // TypeScript knows pdsCredentials is not null at this point
     return this.handleCustodialSession(tenantId, {
+      id: identity.id,
       did: identity.did,
       handle: identity.handle,
       pdsUrl: identity.pdsUrl,
       pdsCredentials: identity.pdsCredentials,
+      takeOwnershipStatus: identity.takeOwnershipStatus,
     });
   }
 
@@ -273,10 +278,12 @@ export class PdsSessionService {
   private async handleCustodialSession(
     tenantId: string,
     identity: {
+      id: number;
       did: string;
       handle: string | null;
       pdsUrl: string;
       pdsCredentials: string;
+      takeOwnershipStatus: TakeOwnershipStatus | null;
     },
   ): Promise<SessionResult | null> {
     const cacheKey = this.getCacheKey(tenantId, identity.did);
@@ -318,10 +325,12 @@ export class PdsSessionService {
   private async createFreshCustodialSession(
     tenantId: string,
     identity: {
+      id: number;
       did: string;
       handle: string | null;
       pdsUrl: string;
       pdsCredentials: string;
+      takeOwnershipStatus: TakeOwnershipStatus | null;
     },
   ): Promise<SessionResult | null> {
     try {
@@ -343,13 +352,45 @@ export class PdsSessionService {
         // alone is ambiguous: the PDS returns the identical 401 for unknown
         // accounts to prevent enumeration, so wrong PDS URL, incomplete PDS
         // restore, or a deleted account all look the same. Only identities
-        // that recorded a pending handoff before their reset may have
-        // custody ended here — completeOrphanedTakeOwnership checks the
-        // marker. Strictly 401 only: network errors and 5xx never qualify.
+        // whose marker shows the PDS actually saw a reset may have custody
+        // ended here — completeOrphanedTakeOwnership checks the marker.
+        // Strictly 401 only: network errors and 5xx never qualify.
         if (error instanceof PdsApiError && error.statusCode === 401) {
           await this.completeOrphanedTakeOwnership(tenantId, identity.did);
         }
         throw error;
+      }
+
+      // The stored credentials just authenticated, which is proof that no
+      // password reset committed. Sweep away a leftover marker from a reset
+      // attempt that was prepared but never confirmed ('pending') or whose
+      // outcome was lost ('ambiguous') — without this, a stale marker would
+      // keep the identity eligible for the 401 repair indefinitely.
+      // 'confirmed' is NOT swept: the PDS acknowledged that reset, so a
+      // still-working old password is an anomaly to investigate, not proof.
+      if (
+        identity.takeOwnershipStatus === 'pending' ||
+        identity.takeOwnershipStatus === 'ambiguous'
+      ) {
+        try {
+          await this.userAtprotoIdentityService.update(tenantId, identity.id, {
+            takeOwnershipStatus: null,
+          });
+          this.logger.log(
+            `Cleared stale '${identity.takeOwnershipStatus}' take-ownership marker for DID ${identity.did}: stored credentials still authenticate`,
+            { tenantId },
+          );
+        } catch (sweepError) {
+          this.logger.warn(
+            `Failed to clear stale take-ownership marker for DID ${identity.did}`,
+            { tenantId, error: sweepError.message },
+          );
+        }
+      } else if (identity.takeOwnershipStatus === 'confirmed') {
+        this.logger.error(
+          `Stored credentials for DID ${identity.did} still authenticate despite a 'confirmed' password reset — possible PDS restore from backup; leaving the marker`,
+          { tenantId },
+        );
       }
 
       // Cache the session
@@ -383,10 +424,13 @@ export class PdsSessionService {
    * clear the stale credentials, mark the identity non-custodial, and drop
    * any cached session.
    *
-   * Guarded by the takeOwnershipPendingAt marker, which resetPdsPassword
-   * writes before submitting the reset to the PDS. Identities without the
-   * marker are left untouched no matter what the PDS said — a 401 without
-   * recorded provenance is not evidence of a handoff.
+   * Guarded by the takeOwnershipStatus marker: only 'ambiguous' (the PDS
+   * gave no definitive answer to a reset) or 'confirmed' (the PDS
+   * acknowledged a reset but custody was never flipped) qualify. A bare
+   * 'pending' records intent only — the reset may never have reached the
+   * PDS, so a 401 against it proves nothing. Identities without a
+   * qualifying marker are left untouched no matter what the PDS said — a
+   * 401 without recorded provenance is not evidence of a handoff.
    *
    * Never throws: repair failure must not mask the original session error.
    */
@@ -402,7 +446,8 @@ export class PdsSessionService {
       if (
         !identity ||
         !identity.isCustodial ||
-        !identity.takeOwnershipPendingAt
+        (identity.takeOwnershipStatus !== 'ambiguous' &&
+          identity.takeOwnershipStatus !== 'confirmed')
       ) {
         return;
       }
@@ -410,7 +455,7 @@ export class PdsSessionService {
       await this.userAtprotoIdentityService.update(tenantId, identity.id, {
         pdsCredentials: null,
         isCustodial: false,
-        takeOwnershipPendingAt: null,
+        takeOwnershipStatus: null,
       });
       await this.invalidateSession(tenantId, did);
 

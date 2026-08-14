@@ -545,7 +545,7 @@ describe('AtprotoIdentityRecoveryService', () => {
         {
           pdsCredentials: null,
           isCustodial: false,
-          takeOwnershipPendingAt: null,
+          takeOwnershipStatus: null,
         },
       );
 

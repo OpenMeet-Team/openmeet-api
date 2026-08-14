@@ -284,7 +284,7 @@ export class AtprotoIdentityRecoveryService {
     await this.userAtprotoIdentityService.update(tenantId, identity.id, {
       pdsCredentials: null,
       isCustodial: false,
-      takeOwnershipPendingAt: null,
+      takeOwnershipStatus: null,
     });
 
     // The cached session was minted from the credentials we just cleared
