@@ -29,6 +29,7 @@ describe('PdsSessionService', () => {
     findByUserUlid: jest.Mock;
     findByDid: jest.Mock;
     update: jest.Mock;
+    transitionTakeOwnershipStatus: jest.Mock;
   };
   let mockPdsCredentialService: {
     decrypt: jest.Mock;
@@ -84,6 +85,7 @@ describe('PdsSessionService', () => {
       findByUserUlid: jest.fn(),
       findByDid: jest.fn(),
       update: jest.fn(),
+      transitionTakeOwnershipStatus: jest.fn().mockResolvedValue(true),
     };
 
     mockPdsCredentialService = {
@@ -390,10 +392,10 @@ describe('PdsSessionService', () => {
         return custodialIdentity;
       };
 
-      it("should finish take-ownership on 401 when a reset's outcome was ambiguous", async () => {
+      it('should finish take-ownership on 401 when a reset was confirmed but custody never flipped', async () => {
         const custodialIdentity = arrangeCustodialSessionAttempt();
         mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
-          createMockIdentity({ takeOwnershipStatus: 'ambiguous' }),
+          createMockIdentity({ takeOwnershipStatus: 'confirmed' }),
         );
         mockPdsAccountService.createSession.mockRejectedValue(
           new PdsApiError(
@@ -421,10 +423,14 @@ describe('PdsSessionService', () => {
         expect(mockElastiCacheService.del).toHaveBeenCalled();
       });
 
-      it('should finish take-ownership on 401 when a reset was confirmed but custody never flipped', async () => {
-        const custodialIdentity = arrangeCustodialSessionAttempt();
+      it("should not auto-repair on 401 when the marker is only 'ambiguous'", async () => {
+        // Ambiguity includes "the reset request never reached the PDS", so
+        // this 401 could still be systemic (wrong PDS URL, incomplete
+        // restore). Destroying credentials needs the certainty of
+        // 'confirmed'; ambiguous cases are surfaced for reconciliation
+        arrangeCustodialSessionAttempt();
         mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
-          createMockIdentity({ takeOwnershipStatus: 'confirmed' }),
+          createMockIdentity({ takeOwnershipStatus: 'ambiguous' }),
         );
         mockPdsAccountService.createSession.mockRejectedValue(
           new PdsApiError('Invalid identifier or password', 401),
@@ -433,15 +439,7 @@ describe('PdsSessionService', () => {
         const result = await service.getSessionForUser(tenantId, userUlid);
 
         expect(result).toBeNull();
-        expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
-          tenantId,
-          custodialIdentity.id,
-          {
-            pdsCredentials: null,
-            isCustodial: false,
-            takeOwnershipStatus: null,
-          },
-        );
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
       });
 
       it('should not end custody on 401 without a recorded marker', async () => {
@@ -522,7 +520,7 @@ describe('PdsSessionService', () => {
       it('should still return null when the repair itself fails', async () => {
         arrangeCustodialSessionAttempt();
         mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
-          createMockIdentity({ takeOwnershipStatus: 'ambiguous' }),
+          createMockIdentity({ takeOwnershipStatus: 'confirmed' }),
         );
         mockUserAtprotoIdentityService.update.mockRejectedValue(
           new Error('DB write failed'),
@@ -567,10 +565,15 @@ describe('PdsSessionService', () => {
         const result = await service.getSessionForUser(tenantId, userUlid);
 
         expect(result).not.toBeNull();
-        expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
+        // Compare-and-set against exactly the state that was read, so the
+        // sweep loses if the marker advanced while the login was in flight
+        expect(
+          mockUserAtprotoIdentityService.transitionTakeOwnershipStatus,
+        ).toHaveBeenCalledWith(
           tenantId,
           custodialIdentity.id,
-          { takeOwnershipStatus: null },
+          ['pending'],
+          null,
         );
       });
 
@@ -580,10 +583,13 @@ describe('PdsSessionService', () => {
         const result = await service.getSessionForUser(tenantId, userUlid);
 
         expect(result).not.toBeNull();
-        expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
+        expect(
+          mockUserAtprotoIdentityService.transitionTakeOwnershipStatus,
+        ).toHaveBeenCalledWith(
           tenantId,
           custodialIdentity.id,
-          { takeOwnershipStatus: null },
+          ['ambiguous'],
+          null,
         );
       });
 
@@ -595,7 +601,9 @@ describe('PdsSessionService', () => {
         const result = await service.getSessionForUser(tenantId, userUlid);
 
         expect(result).not.toBeNull();
-        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+        expect(
+          mockUserAtprotoIdentityService.transitionTakeOwnershipStatus,
+        ).not.toHaveBeenCalled();
       });
 
       it('should not touch identities without a marker', async () => {
@@ -604,12 +612,26 @@ describe('PdsSessionService', () => {
         const result = await service.getSessionForUser(tenantId, userUlid);
 
         expect(result).not.toBeNull();
-        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+        expect(
+          mockUserAtprotoIdentityService.transitionTakeOwnershipStatus,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('should still return the session when the sweep loses the compare-and-set race', async () => {
+        arrangeSuccessfulFreshSession('pending');
+        mockUserAtprotoIdentityService.transitionTakeOwnershipStatus.mockResolvedValue(
+          false,
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).not.toBeNull();
+        expect(result!.source).toBe('fresh');
       });
 
       it('should still return the session when the sweep write fails', async () => {
         arrangeSuccessfulFreshSession('pending');
-        mockUserAtprotoIdentityService.update.mockRejectedValue(
+        mockUserAtprotoIdentityService.transitionTakeOwnershipStatus.mockRejectedValue(
           new Error('DB write failed'),
         );
 

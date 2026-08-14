@@ -362,24 +362,39 @@ export class PdsSessionService {
       }
 
       // The stored credentials just authenticated, which is proof that no
-      // password reset committed. Sweep away a leftover marker from a reset
-      // attempt that was prepared but never confirmed ('pending') or whose
-      // outcome was lost ('ambiguous') — without this, a stale marker would
-      // keep the identity eligible for the 401 repair indefinitely.
-      // 'confirmed' is NOT swept: the PDS acknowledged that reset, so a
-      // still-working old password is an anomaly to investigate, not proof.
+      // password reset had committed when this identity was read. Sweep
+      // away a leftover marker from a reset attempt that was prepared but
+      // never confirmed ('pending') or whose outcome was lost ('ambiguous')
+      // — without this, a stale marker would linger indefinitely. The
+      // compare-and-set only clears the exact state that was read: if the
+      // marker advanced while this login was in flight (e.g. the reset
+      // confirmed meanwhile), the proof predates the change and the
+      // stronger marker survives. 'confirmed' is never swept: the PDS
+      // acknowledged that reset, so a still-working old password is an
+      // anomaly to investigate, not proof.
       if (
         identity.takeOwnershipStatus === 'pending' ||
         identity.takeOwnershipStatus === 'ambiguous'
       ) {
         try {
-          await this.userAtprotoIdentityService.update(tenantId, identity.id, {
-            takeOwnershipStatus: null,
-          });
-          this.logger.log(
-            `Cleared stale '${identity.takeOwnershipStatus}' take-ownership marker for DID ${identity.did}: stored credentials still authenticate`,
-            { tenantId },
-          );
+          const swept =
+            await this.userAtprotoIdentityService.transitionTakeOwnershipStatus(
+              tenantId,
+              identity.id,
+              [identity.takeOwnershipStatus],
+              null,
+            );
+          if (swept) {
+            this.logger.log(
+              `Cleared stale '${identity.takeOwnershipStatus}' take-ownership marker for DID ${identity.did}: stored credentials still authenticate`,
+              { tenantId },
+            );
+          } else {
+            this.logger.warn(
+              `Take-ownership marker for DID ${identity.did} advanced past '${identity.takeOwnershipStatus}' during login; keeping the stronger state`,
+              { tenantId },
+            );
+          }
         } catch (sweepError) {
           this.logger.warn(
             `Failed to clear stale take-ownership marker for DID ${identity.did}`,
@@ -424,11 +439,12 @@ export class PdsSessionService {
    * clear the stale credentials, mark the identity non-custodial, and drop
    * any cached session.
    *
-   * Guarded by the takeOwnershipStatus marker: only 'ambiguous' (the PDS
-   * gave no definitive answer to a reset) or 'confirmed' (the PDS
-   * acknowledged a reset but custody was never flipped) qualify. A bare
-   * 'pending' records intent only — the reset may never have reached the
-   * PDS, so a 401 against it proves nothing. Identities without a
+   * Guarded by the takeOwnershipStatus marker: only 'confirmed' — the PDS
+   * acknowledged a reset but custody was never flipped — authorizes this
+   * destructive repair. 'pending' records intent only, and even 'ambiguous'
+   * includes "the request never reached the PDS", so a 401 against either
+   * could still be systemic (wrong PDS URL, incomplete restore);
+   * 'ambiguous' is logged for reconciliation instead. Identities without a
    * qualifying marker are left untouched no matter what the PDS said — a
    * 401 without recorded provenance is not evidence of a handoff.
    *
@@ -443,12 +459,21 @@ export class PdsSessionService {
         tenantId,
         did,
       );
-      if (
-        !identity ||
-        !identity.isCustodial ||
-        (identity.takeOwnershipStatus !== 'ambiguous' &&
-          identity.takeOwnershipStatus !== 'confirmed')
-      ) {
+      if (!identity || !identity.isCustodial) {
+        return;
+      }
+      if (identity.takeOwnershipStatus === 'ambiguous') {
+        // Ambiguity includes "the reset request never reached the PDS", so
+        // this 401 could still be systemic (wrong PDS URL, incomplete
+        // restore) rather than proof of a committed reset. Destroying
+        // credentials needs certainty; flag for reconciliation instead.
+        this.logger.error(
+          `Custodial login 401 for DID ${did} with an 'ambiguous' take-ownership marker; not auto-repairing — needs reconciliation (the reset may have committed, or the 401 may be systemic)`,
+          { tenantId },
+        );
+        return;
+      }
+      if (identity.takeOwnershipStatus !== 'confirmed') {
         return;
       }
 

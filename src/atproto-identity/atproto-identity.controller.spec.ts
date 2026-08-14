@@ -78,6 +78,7 @@ describe('AtprotoIdentityController', () => {
     const mockIdentityService = {
       findByUserUlid: jest.fn(),
       update: jest.fn(),
+      transitionTakeOwnershipStatus: jest.fn().mockResolvedValue(true),
     };
 
     const mockAtprotoIdentityService = {
@@ -665,13 +666,18 @@ describe('AtprotoIdentityController', () => {
       );
       // The pending handoff is recorded before the PDS write so repair
       // paths have provenance for this identity...
-      expect(identityService.update).toHaveBeenCalledWith('test-tenant', 1, {
-        takeOwnershipStatus: 'pending',
-      });
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledWith('test-tenant', 1, [null, 'pending'], 'pending');
       // ...and upgraded to 'confirmed' once the PDS acknowledges the reset
-      expect(identityService.update).toHaveBeenCalledWith('test-tenant', 1, {
-        takeOwnershipStatus: 'confirmed',
-      });
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledWith(
+        'test-tenant',
+        1,
+        [null, 'pending', 'ambiguous', 'confirmed'],
+        'confirmed',
+      );
       // Custody ends server-side, not via a later client call
       expect(recoveryService.completeTakeOwnership).toHaveBeenCalledWith(
         'test-tenant',
@@ -702,10 +708,13 @@ describe('AtprotoIdentityController', () => {
       expect(result).toEqual({ success: true });
       // The 'confirmed' marker survives so the session-401 repair can also
       // finish the handoff if the client never completes
-      expect(identityService.update).toHaveBeenLastCalledWith(
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenLastCalledWith(
         'test-tenant',
         1,
-        { takeOwnershipStatus: 'confirmed' },
+        [null, 'pending', 'ambiguous', 'confirmed'],
+        'confirmed',
       );
     });
 
@@ -775,10 +784,12 @@ describe('AtprotoIdentityController', () => {
       // stays 'pending' (never withdrawn, never upgraded): 'pending' is
       // inert for the 401 repair and a later successful login sweeps it
       expect(recoveryService.completeTakeOwnership).not.toHaveBeenCalled();
-      expect(identityService.update).toHaveBeenCalledTimes(1);
-      expect(identityService.update).toHaveBeenCalledWith('test-tenant', 1, {
-        takeOwnershipStatus: 'pending',
-      });
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledWith('test-tenant', 1, [null, 'pending'], 'pending');
     });
 
     it("should mark the reset 'ambiguous' and throw BadGatewayException when the PDS gives no definitive answer", async () => {
@@ -800,10 +811,13 @@ describe('AtprotoIdentityController', () => {
       ).rejects.toThrow(BadGatewayException);
 
       expect(recoveryService.completeTakeOwnership).not.toHaveBeenCalled();
-      expect(identityService.update).toHaveBeenLastCalledWith(
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenLastCalledWith(
         'test-tenant',
         1,
-        { takeOwnershipStatus: 'ambiguous' },
+        [null, 'pending'],
+        'ambiguous',
       );
     });
 
@@ -825,21 +839,29 @@ describe('AtprotoIdentityController', () => {
         }),
       ).rejects.toThrow(BadGatewayException);
 
-      expect(identityService.update).toHaveBeenLastCalledWith(
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenLastCalledWith(
         'test-tenant',
         1,
-        { takeOwnershipStatus: 'ambiguous' },
+        [null, 'pending'],
+        'ambiguous',
       );
     });
 
     it("should not downgrade an existing 'ambiguous' marker when a retry is definitively rejected", async () => {
       // Arrange - an earlier attempt ended ambiguous; this retry's token is
       // rejected, which proves nothing about the earlier attempt (it may
-      // have been rejected precisely because that attempt consumed it)
+      // have been rejected precisely because that attempt consumed it).
+      // The compare-and-set refuses the 'pending' write against the
+      // stronger stored state
       jest.spyOn(identityService, 'findByUserUlid').mockResolvedValue({
         ...mockIdentityEntity,
         takeOwnershipStatus: 'ambiguous',
       } as UserAtprotoIdentityEntity);
+      jest
+        .spyOn(identityService, 'transitionTakeOwnershipStatus')
+        .mockResolvedValue(false);
       jest
         .spyOn(pdsAccountService, 'resetPassword')
         .mockRejectedValue(
@@ -854,7 +876,14 @@ describe('AtprotoIdentityController', () => {
         }),
       ).rejects.toThrow(BadRequestException);
 
-      // No marker writes at all: 'ambiguous' must survive the rejection
+      // Only the pending transition was attempted, and its expected-state
+      // list can never overwrite 'ambiguous' or 'confirmed'
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledWith('test-tenant', 1, [null, 'pending'], 'pending');
       expect(identityService.update).not.toHaveBeenCalled();
     });
 
@@ -865,6 +894,12 @@ describe('AtprotoIdentityController', () => {
         ...mockIdentityEntity,
         takeOwnershipStatus: 'ambiguous',
       } as UserAtprotoIdentityEntity);
+      // The 'pending' transition loses against the stored 'ambiguous'; the
+      // 'confirmed' transition applies from any state
+      jest
+        .spyOn(identityService, 'transitionTakeOwnershipStatus')
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
       jest.spyOn(pdsAccountService, 'resetPassword').mockResolvedValue();
       jest
         .spyOn(recoveryService, 'completeTakeOwnership')
@@ -878,10 +913,14 @@ describe('AtprotoIdentityController', () => {
 
       // Assert
       expect(result).toEqual({ success: true });
-      expect(identityService.update).toHaveBeenCalledTimes(1);
-      expect(identityService.update).toHaveBeenCalledWith('test-tenant', 1, {
-        takeOwnershipStatus: 'confirmed',
-      });
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenLastCalledWith(
+        'test-tenant',
+        1,
+        [null, 'pending', 'ambiguous', 'confirmed'],
+        'confirmed',
+      );
       expect(recoveryService.completeTakeOwnership).toHaveBeenCalled();
     });
   });
