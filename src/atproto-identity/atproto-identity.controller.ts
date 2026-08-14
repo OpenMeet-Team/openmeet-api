@@ -334,7 +334,8 @@ export class AtprotoIdentityController {
     }
     if (!identity.isCustodial) {
       throw new BadRequestException(
-        'User already owns their AT Protocol identity',
+        'You already own this AT Protocol account, so OpenMeet can no longer ' +
+          'change its password. Reset it directly with your PDS provider.',
       );
     }
 
