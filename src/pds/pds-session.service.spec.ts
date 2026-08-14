@@ -9,7 +9,7 @@ import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructu
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { Agent } from '@atproto/api';
-import { SessionUnavailableError } from './pds.errors';
+import { PdsApiError, SessionUnavailableError } from './pds.errors';
 
 // Mock the @atproto/api Agent and CredentialSession
 const mockResumeSession = jest.fn().mockResolvedValue(undefined);
@@ -28,6 +28,7 @@ describe('PdsSessionService', () => {
   let mockUserAtprotoIdentityService: {
     findByUserUlid: jest.Mock;
     findByDid: jest.Mock;
+    update: jest.Mock;
   };
   let mockPdsCredentialService: {
     decrypt: jest.Mock;
@@ -81,6 +82,7 @@ describe('PdsSessionService', () => {
     mockUserAtprotoIdentityService = {
       findByUserUlid: jest.fn(),
       findByDid: jest.fn(),
+      update: jest.fn(),
     };
 
     mockPdsCredentialService = {
@@ -368,6 +370,107 @@ describe('PdsSessionService', () => {
           new Error('Invalid credentials'),
         );
 
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        // A plain error is not a definitive PDS rejection - no repair
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('orphaned take-ownership repair', () => {
+      const arrangeCustodialSessionAttempt = () => {
+        const custodialIdentity = createMockIdentity();
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+          custodialIdentity,
+        );
+        mockElastiCacheService.get.mockResolvedValue(null);
+        mockPdsCredentialService.decrypt.mockReturnValue(decryptedPassword);
+        return custodialIdentity;
+      };
+
+      it('should finish take-ownership when the PDS definitively rejects stored credentials', async () => {
+        const custodialIdentity = arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          custodialIdentity,
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError(
+            'Invalid identifier or password',
+            401,
+            'AuthenticationRequired',
+          ),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        // Session still fails this cycle...
+        expect(result).toBeNull();
+        // ...but the unrecorded handoff is completed
+        expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
+          tenantId,
+          custodialIdentity.id,
+          {
+            pdsCredentials: null,
+            isCustodial: false,
+          },
+        );
+        // ...and the cached session is invalidated
+        expect(mockElastiCacheService.del).toHaveBeenCalled();
+      });
+
+      it('should not end custody on a non-401 PDS error', async () => {
+        arrangeCustodialSessionAttempt();
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Bad gateway', 502),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it('should not end custody on a PDS error with no status (network failure)', async () => {
+        arrangeCustodialSessionAttempt();
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('socket hang up'),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it('should skip repair when the identity is already non-custodial at lookup', async () => {
+        arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          createMockIdentity({ isCustodial: false, pdsCredentials: null }),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Invalid identifier or password', 401),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it('should still return null when the repair itself fails', async () => {
+        const custodialIdentity = arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          custodialIdentity,
+        );
+        mockUserAtprotoIdentityService.update.mockRejectedValue(
+          new Error('DB write failed'),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Invalid identifier or password', 401),
+        );
+
+        // Must not throw: repair failure cannot mask the session failure
         const result = await service.getSessionForUser(tenantId, userUlid);
 
         expect(result).toBeNull();

@@ -16,7 +16,7 @@ import {
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
-import { SessionUnavailableError } from './pds.errors';
+import { PdsApiError, SessionUnavailableError } from './pds.errors';
 
 /**
  * Result of a successful session retrieval.
@@ -331,10 +331,24 @@ export class PdsSessionService {
       );
 
       // Create session with PDS
-      const session = await this.pdsAccountService.createSession(
-        identity.did,
-        password,
-      );
+      let session: CreateSessionResponse;
+      try {
+        session = await this.pdsAccountService.createSession(
+          identity.did,
+          password,
+        );
+      } catch (error) {
+        // A definitive 401 means the PDS password no longer matches the
+        // stored credentials. The only flow that changes a custodial
+        // account's password is the user's own email-token reset (take-
+        // ownership step 1), so this is an ownership handoff that never got
+        // recorded — finish it. Strictly 401 only: network errors and 5xx
+        // must not end custody.
+        if (error instanceof PdsApiError && error.statusCode === 401) {
+          await this.completeOrphanedTakeOwnership(tenantId, identity.did);
+        }
+        throw error;
+      }
 
       // Cache the session
       const cacheKey = this.getCacheKey(tenantId, identity.did);
@@ -359,6 +373,46 @@ export class PdsSessionService {
         { tenantId, error: error.message },
       );
       return null;
+    }
+  }
+
+  /**
+   * Finish a take-ownership handoff that was never recorded: clear the stale
+   * credentials, mark the identity non-custodial, and drop any cached
+   * session. Called when stored custodial credentials are definitively
+   * rejected by the PDS — those credentials can never work again, so leaving
+   * them keeps the account failing silently on every publish attempt.
+   *
+   * Never throws: repair failure must not mask the original session error.
+   */
+  private async completeOrphanedTakeOwnership(
+    tenantId: string,
+    did: string,
+  ): Promise<void> {
+    try {
+      const identity = await this.userAtprotoIdentityService.findByDid(
+        tenantId,
+        did,
+      );
+      if (!identity || !identity.isCustodial) {
+        return;
+      }
+
+      await this.userAtprotoIdentityService.update(tenantId, identity.id, {
+        pdsCredentials: null,
+        isCustodial: false,
+      });
+      await this.invalidateSession(tenantId, did);
+
+      this.logger.warn(
+        `Completed orphaned take-ownership for DID ${did}: stored credentials were stale, account is now non-custodial`,
+        { tenantId },
+      );
+    } catch (repairError) {
+      this.logger.error(
+        `Failed to repair orphaned custodial identity for DID ${did}`,
+        { tenantId, error: repairError.message },
+      );
     }
   }
 

@@ -668,6 +668,28 @@ describe('AtprotoIdentityController', () => {
       expect(result).toEqual({ success: true });
     });
 
+    it('should still return success when ending custody fails after the PDS reset', async () => {
+      // Arrange
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
+      jest.spyOn(pdsAccountService, 'resetPassword').mockResolvedValue();
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockRejectedValue(new Error('DB write failed'));
+
+      // Act
+      const result = await controller.resetPdsPassword(mockRequest, {
+        token: 'valid-reset-token',
+        password: 'new-secure-password-123',
+      });
+
+      // Assert - the PDS write succeeded and the token is consumed, so the
+      // response must not read as a failed reset; the client's follow-up
+      // take-ownership/complete call is the retry for the custody flip
+      expect(result).toEqual({ success: true });
+    });
+
     it('should throw NotFoundException when user not found', async () => {
       // Arrange
       jest.spyOn(userService, 'findById').mockResolvedValueOnce(null);

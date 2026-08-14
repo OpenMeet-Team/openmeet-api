@@ -357,7 +357,20 @@ export class AtprotoIdentityController {
     // take-ownership/complete leaves stale stored credentials whenever that
     // follow-up never arrives, and stale credentials silently break event
     // publishing for the account.
-    await this.recoveryService.completeTakeOwnership(tenantId, user.ulid);
+    try {
+      await this.recoveryService.completeTakeOwnership(tenantId, user.ulid);
+    } catch (error) {
+      // The PDS reset already succeeded and the token is consumed, so this
+      // must not surface as a failed reset — an error here would also stop
+      // the client from making its take-ownership/complete call, which is
+      // the retry for this exact write. If that retry never comes either,
+      // the stale credentials produce a definitive 401 on the next session
+      // attempt and PdsSessionService finishes the handoff from there.
+      this.logger.error(
+        `PDS password reset succeeded but ending custody failed for user ${user.ulid}; awaiting client retry or session-401 repair`,
+        { tenantId, error: error.message },
+      );
+    }
 
     return { success: true };
   }
