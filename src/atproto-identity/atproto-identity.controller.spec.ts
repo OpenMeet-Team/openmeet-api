@@ -619,30 +619,30 @@ describe('AtprotoIdentityController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when user already owns identity', async () => {
-      // Arrange
+    it('should return success when user already owns identity (idempotent no-op)', async () => {
+      // Arrange - the service resolves without doing anything in this case
       jest
         .spyOn(recoveryService, 'completeTakeOwnership')
-        .mockRejectedValue(
-          new BadRequestException(
-            'User already owns their AT Protocol identity',
-          ),
-        );
+        .mockResolvedValue(undefined);
 
-      // Act & Assert
-      await expect(
-        controller.completeTakeOwnership(mockRequest),
-      ).rejects.toThrow(BadRequestException);
+      // Act
+      const result = await controller.completeTakeOwnership(mockRequest);
+
+      // Assert
+      expect(result).toEqual({ success: true });
     });
   });
 
   describe('resetPdsPassword', () => {
-    it('should reset password when user has custodial identity', async () => {
+    it('should reset password and end custody in the same request', async () => {
       // Arrange
       jest
         .spyOn(identityService, 'findByUserUlid')
         .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
       jest.spyOn(pdsAccountService, 'resetPassword').mockResolvedValue();
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockResolvedValue(undefined);
 
       // Act
       const result = await controller.resetPdsPassword(mockRequest, {
@@ -659,6 +659,11 @@ describe('AtprotoIdentityController', () => {
       expect(pdsAccountService.resetPassword).toHaveBeenCalledWith(
         'valid-reset-token',
         'new-secure-password-123',
+      );
+      // Custody ends server-side, not via a later client call
+      expect(recoveryService.completeTakeOwnership).toHaveBeenCalledWith(
+        'test-tenant',
+        '01234567890123456789012345',
       );
       expect(result).toEqual({ success: true });
     });
@@ -724,6 +729,9 @@ describe('AtprotoIdentityController', () => {
           password: 'new-secure-password-123',
         }),
       ).rejects.toThrow(BadRequestException);
+
+      // A failed reset must leave custody untouched
+      expect(recoveryService.completeTakeOwnership).not.toHaveBeenCalled();
     });
   });
 

@@ -285,7 +285,9 @@ export class AtprotoIdentityController {
   /**
    * Reset PDS password using a token received via email.
    *
-   * User must have a custodial identity to use this endpoint.
+   * User must have a custodial identity to use this endpoint. On success the
+   * identity stops being custodial: stored credentials are cleared and the
+   * cached PDS session is invalidated in the same request.
    * Rate limited to prevent abuse - password reset is a sensitive operation.
    */
   @ApiBearerAuth()
@@ -301,7 +303,8 @@ export class AtprotoIdentityController {
     summary: 'Reset PDS password using token from email',
   })
   @ApiOkResponse({
-    description: 'Password reset successful',
+    description:
+      'Password reset successful; the identity is no longer custodial',
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -348,6 +351,13 @@ export class AtprotoIdentityController {
       }
       throw error;
     }
+
+    // The user now owns the password they just set, so custody ends here, in
+    // the same request as the PDS write. Waiting for the client to call
+    // take-ownership/complete leaves stale stored credentials whenever that
+    // follow-up never arrives, and stale credentials silently break event
+    // publishing for the account.
+    await this.recoveryService.completeTakeOwnership(tenantId, user.ulid);
 
     return { success: true };
   }
