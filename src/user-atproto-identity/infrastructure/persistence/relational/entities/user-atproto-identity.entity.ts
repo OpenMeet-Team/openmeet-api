@@ -12,6 +12,12 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 
 /**
+ * States of the take-ownership password-reset marker. See the
+ * takeOwnershipStatus column doc for the meaning of each state.
+ */
+export type TakeOwnershipStatus = 'pending' | 'ambiguous' | 'confirmed';
+
+/**
  * Entity representing a user's AT Protocol identity.
  *
  * Links OpenMeet users to their AT Protocol DID and PDS.
@@ -90,6 +96,37 @@ export class UserAtprotoIdentityEntity extends EntityRelationalHelper {
    */
   @Column({ type: 'boolean', default: true })
   isCustodial: boolean;
+
+  /**
+   * Provenance record for the take-ownership password reset, written before
+   * the reset is submitted to the PDS and advanced as evidence accumulates:
+   *
+   * - 'pending'   — a reset request was prepared; the PDS may never have
+   *                 received it. Records intent only, NOT proof of a reset.
+   * - 'ambiguous' — the PDS gave no definitive answer (timeout, 5xx); the
+   *                 reset may have committed with the response lost, or the
+   *                 request may never have arrived at all.
+   * - 'confirmed' — the PDS acknowledged the reset but ending custody in the
+   *                 same request failed; custody must still be ended.
+   *
+   * A PDS login 401 alone is ambiguous (the PDS returns the same 401 for
+   * unknown accounts to prevent enumeration, so wrong PDS URL / incomplete
+   * restore / deleted account all look like a bad password). Only
+   * 'confirmed' authorizes automatically ending custody in response to a
+   * 401; 'ambiguous' is surfaced for reconciliation instead, since its 401
+   * could still be systemic, and 'pending' proves nothing.
+   *
+   * State changes go through the compare-and-set
+   * transitionTakeOwnershipStatus so the marker only advances toward
+   * stronger evidence; stale writers lose instead of overwriting. It is
+   * only ever removed by proof: the custody flip itself, or a successful
+   * login with the stored credentials (which shows no reset committed)
+   * sweeping 'pending'/'ambiguous'. Rejection responses do not clear it — a
+   * rejected retry cannot vouch for an earlier attempt whose token it may
+   * itself have consumed.
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  takeOwnershipStatus: TakeOwnershipStatus | null;
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;

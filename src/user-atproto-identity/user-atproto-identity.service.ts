@@ -1,8 +1,11 @@
 import { Injectable, Inject, Scope } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
-import { UserAtprotoIdentityEntity } from './infrastructure/persistence/relational/entities/user-atproto-identity.entity';
+import {
+  TakeOwnershipStatus,
+  UserAtprotoIdentityEntity,
+} from './infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { NullableType } from '../utils/types/nullable.type';
 
 /**
@@ -142,6 +145,10 @@ export class UserAtprotoIdentityService {
       pdsUrl: string;
       pdsCredentials: string | null;
       isCustodial: boolean;
+      // Only null is accepted here: flips clear the marker together with
+      // the credentials, but setting a state must go through the
+      // compare-and-set transitionTakeOwnershipStatus, never a blind write
+      takeOwnershipStatus: null;
     }>,
   ): Promise<NullableType<UserAtprotoIdentityEntity>> {
     await this.getTenantRepository(tenantId);
@@ -153,5 +160,56 @@ export class UserAtprotoIdentityService {
 
     Object.assign(existing, data);
     return this.repository.save(existing);
+  }
+
+  /**
+   * Compare-and-set transition of the take-ownership marker.
+   *
+   * The marker must only ever move toward stronger evidence, and several
+   * writers race on it: the reset request, the sweep in session creation,
+   * and the custody flip. An unconditional write lets a stale reader
+   * overwrite a stronger state — e.g. a session attempt that read 'pending'
+   * clearing the marker after the reset was confirmed. This transition only
+   * applies while the row still holds one of the expected states and is
+   * still custodial, so stale writers lose instead.
+   *
+   * @returns true when the transition was applied
+   */
+  async transitionTakeOwnershipStatus(
+    tenantId: string,
+    id: number,
+    expected: (TakeOwnershipStatus | null)[],
+    to: TakeOwnershipStatus | null,
+  ): Promise<boolean> {
+    await this.getTenantRepository(tenantId);
+
+    const expectedStatuses = expected.filter(
+      (status): status is TakeOwnershipStatus => status !== null,
+    );
+    const expectNull = expected.includes(null);
+
+    const result = await this.repository
+      .createQueryBuilder()
+      .update()
+      .set({ takeOwnershipStatus: to })
+      .where('id = :id', { id })
+      .andWhere('"isCustodial" = true')
+      .andWhere(
+        new Brackets((qb) => {
+          if (expectedStatuses.length > 0) {
+            qb.where('"takeOwnershipStatus" IN (:...expectedStatuses)', {
+              expectedStatuses,
+            });
+            if (expectNull) {
+              qb.orWhere('"takeOwnershipStatus" IS NULL');
+            }
+          } else {
+            qb.where('"takeOwnershipStatus" IS NULL');
+          }
+        }),
+      )
+      .execute();
+
+    return (result.affected ?? 0) > 0;
   }
 }

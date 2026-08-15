@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { AtprotoIdentityController } from './atproto-identity.controller';
 import { AtprotoIdentityService } from './atproto-identity.service';
@@ -39,6 +40,7 @@ describe('AtprotoIdentityController', () => {
     pdsUrl: 'https://pds.openmeet.net',
     pdsCredentials: 'encrypted-credentials-should-not-be-exposed',
     isCustodial: true,
+    takeOwnershipStatus: null,
     createdAt: new Date('2025-01-01T00:00:00Z'),
     updatedAt: new Date('2025-01-01T00:00:00Z'),
   };
@@ -75,6 +77,8 @@ describe('AtprotoIdentityController', () => {
   beforeEach(async () => {
     const mockIdentityService = {
       findByUserUlid: jest.fn(),
+      update: jest.fn(),
+      transitionTakeOwnershipStatus: jest.fn().mockResolvedValue(true),
     };
 
     const mockAtprotoIdentityService = {
@@ -619,30 +623,30 @@ describe('AtprotoIdentityController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when user already owns identity', async () => {
-      // Arrange
+    it('should return success when user already owns identity (idempotent no-op)', async () => {
+      // Arrange - the service resolves without doing anything in this case
       jest
         .spyOn(recoveryService, 'completeTakeOwnership')
-        .mockRejectedValue(
-          new BadRequestException(
-            'User already owns their AT Protocol identity',
-          ),
-        );
+        .mockResolvedValue(undefined);
 
-      // Act & Assert
-      await expect(
-        controller.completeTakeOwnership(mockRequest),
-      ).rejects.toThrow(BadRequestException);
+      // Act
+      const result = await controller.completeTakeOwnership(mockRequest);
+
+      // Assert
+      expect(result).toEqual({ success: true });
     });
   });
 
   describe('resetPdsPassword', () => {
-    it('should reset password when user has custodial identity', async () => {
+    it('should reset password and end custody in the same request', async () => {
       // Arrange
       jest
         .spyOn(identityService, 'findByUserUlid')
         .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
       jest.spyOn(pdsAccountService, 'resetPassword').mockResolvedValue();
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockResolvedValue(undefined);
 
       // Act
       const result = await controller.resetPdsPassword(mockRequest, {
@@ -660,7 +664,58 @@ describe('AtprotoIdentityController', () => {
         'valid-reset-token',
         'new-secure-password-123',
       );
+      // The pending handoff is recorded before the PDS write so repair
+      // paths have provenance for this identity...
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledWith('test-tenant', 1, [null, 'pending'], 'pending');
+      // ...and upgraded to 'confirmed' once the PDS acknowledges the reset
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledWith(
+        'test-tenant',
+        1,
+        [null, 'pending', 'ambiguous', 'confirmed'],
+        'confirmed',
+      );
+      // Custody ends server-side, not via a later client call
+      expect(recoveryService.completeTakeOwnership).toHaveBeenCalledWith(
+        'test-tenant',
+        '01234567890123456789012345',
+      );
       expect(result).toEqual({ success: true });
+    });
+
+    it('should still return success when ending custody fails after the PDS reset', async () => {
+      // Arrange
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
+      jest.spyOn(pdsAccountService, 'resetPassword').mockResolvedValue();
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockRejectedValue(new Error('DB write failed'));
+
+      // Act
+      const result = await controller.resetPdsPassword(mockRequest, {
+        token: 'valid-reset-token',
+        password: 'new-secure-password-123',
+      });
+
+      // Assert - the PDS write succeeded and the token is consumed, so the
+      // response must not read as a failed reset; the client's follow-up
+      // take-ownership/complete call is the retry for the custody flip
+      expect(result).toEqual({ success: true });
+      // The 'confirmed' marker survives so the session-401 repair can also
+      // finish the handoff if the client never completes
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenLastCalledWith(
+        'test-tenant',
+        1,
+        [null, 'pending', 'ambiguous', 'confirmed'],
+        'confirmed',
+      );
     });
 
     it('should throw NotFoundException when user not found', async () => {
@@ -706,7 +761,7 @@ describe('AtprotoIdentityController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when PDS returns PdsApiError', async () => {
+    it('should throw BadRequestException when the PDS definitively rejects the reset', async () => {
       // Arrange
       jest
         .spyOn(identityService, 'findByUserUlid')
@@ -724,6 +779,149 @@ describe('AtprotoIdentityController', () => {
           password: 'new-secure-password-123',
         }),
       ).rejects.toThrow(BadRequestException);
+
+      // A definitively rejected reset leaves custody untouched. The marker
+      // stays 'pending' (never withdrawn, never upgraded): 'pending' is
+      // inert for the 401 repair and a later successful login sweeps it
+      expect(recoveryService.completeTakeOwnership).not.toHaveBeenCalled();
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledWith('test-tenant', 1, [null, 'pending'], 'pending');
+    });
+
+    it("should mark the reset 'ambiguous' and throw BadGatewayException when the PDS gives no definitive answer", async () => {
+      // Arrange - a 502 from the PDS does not prove the reset failed; it
+      // may have committed with the response lost
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
+      jest
+        .spyOn(pdsAccountService, 'resetPassword')
+        .mockRejectedValue(new PdsApiError('Bad gateway', 502));
+
+      // Act & Assert
+      await expect(
+        controller.resetPdsPassword(mockRequest, {
+          token: 'valid-reset-token',
+          password: 'new-secure-password-123',
+        }),
+      ).rejects.toThrow(BadGatewayException);
+
+      expect(recoveryService.completeTakeOwnership).not.toHaveBeenCalled();
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenLastCalledWith(
+        'test-tenant',
+        1,
+        [null, 'pending'],
+        'ambiguous',
+      );
+    });
+
+    it("should mark the reset 'ambiguous' on a network failure with no PDS response", async () => {
+      // Arrange - no statusCode at all: the request may never have arrived,
+      // or the response was lost after the PDS committed the reset
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(mockIdentityEntity as UserAtprotoIdentityEntity);
+      jest
+        .spyOn(pdsAccountService, 'resetPassword')
+        .mockRejectedValue(new PdsApiError('socket hang up'));
+
+      // Act & Assert
+      await expect(
+        controller.resetPdsPassword(mockRequest, {
+          token: 'valid-reset-token',
+          password: 'new-secure-password-123',
+        }),
+      ).rejects.toThrow(BadGatewayException);
+
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenLastCalledWith(
+        'test-tenant',
+        1,
+        [null, 'pending'],
+        'ambiguous',
+      );
+    });
+
+    it("should not downgrade an existing 'ambiguous' marker when a retry is definitively rejected", async () => {
+      // Arrange - an earlier attempt ended ambiguous; this retry's token is
+      // rejected, which proves nothing about the earlier attempt (it may
+      // have been rejected precisely because that attempt consumed it).
+      // The compare-and-set refuses the 'pending' write against the
+      // stronger stored state
+      jest.spyOn(identityService, 'findByUserUlid').mockResolvedValue({
+        ...mockIdentityEntity,
+        takeOwnershipStatus: 'ambiguous',
+      } as UserAtprotoIdentityEntity);
+      jest
+        .spyOn(identityService, 'transitionTakeOwnershipStatus')
+        .mockResolvedValue(false);
+      jest
+        .spyOn(pdsAccountService, 'resetPassword')
+        .mockRejectedValue(
+          new PdsApiError('Token has expired', 400, 'ExpiredToken'),
+        );
+
+      // Act & Assert
+      await expect(
+        controller.resetPdsPassword(mockRequest, {
+          token: 'expired-token',
+          password: 'new-secure-password-123',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      // Only the pending transition was attempted, and its expected-state
+      // list can never overwrite 'ambiguous' or 'confirmed'
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenCalledWith('test-tenant', 1, [null, 'pending'], 'pending');
+      expect(identityService.update).not.toHaveBeenCalled();
+    });
+
+    it("should upgrade an existing 'ambiguous' marker to 'confirmed' when a retry succeeds", async () => {
+      // Arrange - the retry succeeding proves the earlier ambiguous attempt
+      // never consumed the token; this reset is the one that committed
+      jest.spyOn(identityService, 'findByUserUlid').mockResolvedValue({
+        ...mockIdentityEntity,
+        takeOwnershipStatus: 'ambiguous',
+      } as UserAtprotoIdentityEntity);
+      // The 'pending' transition loses against the stored 'ambiguous'; the
+      // 'confirmed' transition applies from any state
+      jest
+        .spyOn(identityService, 'transitionTakeOwnershipStatus')
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+      jest.spyOn(pdsAccountService, 'resetPassword').mockResolvedValue();
+      jest
+        .spyOn(recoveryService, 'completeTakeOwnership')
+        .mockResolvedValue(undefined);
+
+      // Act
+      const result = await controller.resetPdsPassword(mockRequest, {
+        token: 'valid-reset-token',
+        password: 'new-secure-password-123',
+      });
+
+      // Assert
+      expect(result).toEqual({ success: true });
+      expect(
+        identityService.transitionTakeOwnershipStatus,
+      ).toHaveBeenLastCalledWith(
+        'test-tenant',
+        1,
+        [null, 'pending', 'ambiguous', 'confirmed'],
+        'confirmed',
+      );
+      expect(recoveryService.completeTakeOwnership).toHaveBeenCalled();
     });
   });
 

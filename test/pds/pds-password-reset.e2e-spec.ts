@@ -146,7 +146,23 @@ describeIfPds('PDS Password Reset (e2e)', () => {
       expect(userHandle).toBeDefined();
     });
 
-    it('should reset PDS password and verify new password works', async () => {
+    it('should reject an invalid token and leave custody untouched', async () => {
+      // Valid format but non-existent token — PDS rejects it. This runs
+      // before the real reset, while the identity is still custodial.
+      await serverApp
+        .post('/api/atproto/identity/reset-pds-password')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ token: 'AAAAA-BBBBB', password: 'ValidPassword123!' })
+        .expect(400);
+
+      const identityResponse = await serverApp
+        .get('/api/atproto/identity')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+      expect(identityResponse.body.isCustodial).toBe(true);
+    });
+
+    it('should reset PDS password, verify new password works, and end custody', async () => {
       const newPassword = 'NewSecurePassword789!';
 
       // Get reset token via email
@@ -172,6 +188,26 @@ describeIfPds('PDS Password Reset (e2e)', () => {
       expect(sessionResponse.body.handle).toBe(userHandle);
       expect(sessionResponse.body.did).toBeDefined();
       expect(sessionResponse.body.accessJwt).toBeDefined();
+
+      // Custody must end in the same request as the reset: the API no
+      // longer knows the password, and stale stored credentials would
+      // silently break event publishing for this account
+      const identityResponse = await serverApp
+        .get('/api/atproto/identity')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+      expect(identityResponse.body.isCustodial).toBe(false);
+    });
+
+    it('should treat completeTakeOwnership as success after custody already ended', async () => {
+      // The platform client still calls take-ownership/complete after the
+      // reset; it must see an idempotent success, not a 400
+      const completeResponse = await serverApp
+        .post('/api/atproto/identity/take-ownership/complete')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(completeResponse.body).toEqual({ success: true });
     });
   });
 
@@ -193,8 +229,9 @@ describeIfPds('PDS Password Reset (e2e)', () => {
         .expect(422);
     });
 
-    it('should reject expired or invalid token from PDS', async () => {
-      // Valid format but non-existent token — PDS will reject it
+    it('should reject reset attempts once the user owns the identity', async () => {
+      // The flow above ended custody, so the non-custodial guard fires
+      // before any PDS call regardless of token validity
       await serverApp
         .post('/api/atproto/identity/reset-pds-password')
         .set('Authorization', `Bearer ${authToken}`)

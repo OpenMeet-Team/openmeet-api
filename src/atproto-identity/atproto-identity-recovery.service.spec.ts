@@ -6,6 +6,7 @@ import { AtprotoIdentityRecoveryService } from './atproto-identity-recovery.serv
 import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atproto-identity.service';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 import { UserService } from '../user/user.service';
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 
@@ -14,6 +15,7 @@ describe('AtprotoIdentityRecoveryService', () => {
   let userAtprotoIdentityService: jest.Mocked<UserAtprotoIdentityService>;
   let pdsAccountService: jest.Mocked<PdsAccountService>;
   let pdsCredentialService: jest.Mocked<PdsCredentialService>;
+  let pdsSessionService: jest.Mocked<PdsSessionService>;
   let userService: jest.Mocked<UserService>;
 
   const mockUser = {
@@ -59,6 +61,10 @@ describe('AtprotoIdentityRecoveryService', () => {
       encrypt: jest.fn(),
     };
 
+    const mockPdsSessionService = {
+      invalidateSession: jest.fn(),
+    };
+
     const mockUserService = {
       findByUlid: jest.fn(),
     };
@@ -86,6 +92,10 @@ describe('AtprotoIdentityRecoveryService', () => {
           useValue: mockPdsCredentialService,
         },
         {
+          provide: PdsSessionService,
+          useValue: mockPdsSessionService,
+        },
+        {
           provide: UserService,
           useValue: mockUserService,
         },
@@ -106,6 +116,7 @@ describe('AtprotoIdentityRecoveryService', () => {
     userAtprotoIdentityService = module.get(UserAtprotoIdentityService);
     pdsAccountService = module.get(PdsAccountService);
     pdsCredentialService = module.get(PdsCredentialService);
+    pdsSessionService = module.get(PdsSessionService);
     userService = module.get(UserService);
   });
 
@@ -526,14 +537,22 @@ describe('AtprotoIdentityRecoveryService', () => {
       // Act
       await service.completeTakeOwnership('test-tenant', mockUser.ulid);
 
-      // Assert - credentials cleared and marked as non-custodial
+      // Assert - credentials cleared, marked non-custodial, pending-handoff
+      // marker resolved in the same write
       expect(userAtprotoIdentityService.update).toHaveBeenCalledWith(
         'test-tenant',
         mockIdentityEntity.id,
         {
           pdsCredentials: null,
           isCustodial: false,
+          takeOwnershipStatus: null,
         },
+      );
+
+      // Assert - cached session invalidated so it cannot serve a stale agent
+      expect(pdsSessionService.invalidateSession).toHaveBeenCalledWith(
+        'test-tenant',
+        mockIdentityEntity.did,
       );
     });
 
@@ -547,7 +566,7 @@ describe('AtprotoIdentityRecoveryService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when identity is already non-custodial', async () => {
+    it('should succeed as a no-op when identity is already non-custodial', async () => {
       // Arrange
       const nonCustodialIdentity = {
         ...mockIdentityEntity,
@@ -557,10 +576,12 @@ describe('AtprotoIdentityRecoveryService', () => {
         nonCustodialIdentity as UserAtprotoIdentityEntity,
       );
 
-      // Act & Assert
+      // Act & Assert - idempotent: resolves without touching the identity
       await expect(
         service.completeTakeOwnership('test-tenant', mockUser.ulid),
-      ).rejects.toThrow(BadRequestException);
+      ).resolves.toBeUndefined();
+      expect(userAtprotoIdentityService.update).not.toHaveBeenCalled();
+      expect(pdsSessionService.invalidateSession).not.toHaveBeenCalled();
     });
   });
 });

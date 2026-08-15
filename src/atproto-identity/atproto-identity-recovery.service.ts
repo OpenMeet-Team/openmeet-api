@@ -13,6 +13,7 @@ import { UserAtprotoIdentityService } from '../user-atproto-identity/user-atprot
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { PdsAccountService } from '../pds/pds-account.service';
 import { PdsCredentialService } from '../pds/pds-credential.service';
+import { PdsSessionService } from '../pds/pds-session.service';
 import { isServiceNotConfiguredError } from '../pds/pds-error-detection';
 import { UserService } from '../user/user.service';
 import { AllConfigType } from '../config/config.type';
@@ -40,6 +41,7 @@ export class AtprotoIdentityRecoveryService {
     private readonly userAtprotoIdentityService: UserAtprotoIdentityService,
     private readonly pdsAccountService: PdsAccountService,
     private readonly pdsCredentialService: PdsCredentialService,
+    private readonly pdsSessionService: PdsSessionService,
     private readonly userService: UserService,
     private readonly configService: ConfigService<AllConfigType>,
     @Inject(REQUEST) private readonly request?: any,
@@ -248,11 +250,16 @@ export class AtprotoIdentityRecoveryService {
   }
 
   /**
-   * Complete take ownership: user confirms they've set password, we clear credentials.
+   * Complete take ownership: clear credentials, mark non-custodial, and
+   * invalidate any cached PDS session so it cannot serve a stale agent.
+   *
+   * Idempotent: an already-non-custodial identity is a successful no-op, so
+   * clients that call this after the server has already ended custody (the
+   * platform's reset flow) see success rather than a 400.
    *
    * @param tenantId - The tenant ID
    * @param userUlid - The user's ULID
-   * @throws BadRequestException if no custodial identity exists
+   * @throws BadRequestException if the user has no AT Protocol identity
    */
   async completeTakeOwnership(
     tenantId: string,
@@ -266,16 +273,22 @@ export class AtprotoIdentityRecoveryService {
       throw new BadRequestException('User has no AT Protocol identity');
     }
     if (!identity.isCustodial) {
-      throw new BadRequestException(
-        'User already owns their AT Protocol identity',
+      this.logger.log(
+        `Take ownership already complete for user ${userUlid}: identity is non-custodial`,
       );
+      return;
     }
 
-    // Clear credentials and mark as non-custodial
+    // Clear credentials and mark as non-custodial; the pending-handoff
+    // marker is resolved by the same write
     await this.userAtprotoIdentityService.update(tenantId, identity.id, {
       pdsCredentials: null,
       isCustodial: false,
+      takeOwnershipStatus: null,
     });
+
+    // The cached session was minted from the credentials we just cleared
+    await this.pdsSessionService.invalidateSession(tenantId, identity.did);
 
     this.logger.log(
       `Completed take ownership for user ${userUlid}: cleared credentials, now non-custodial`,

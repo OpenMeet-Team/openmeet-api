@@ -9,7 +9,7 @@ import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructu
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { Agent } from '@atproto/api';
-import { SessionUnavailableError } from './pds.errors';
+import { PdsApiError, SessionUnavailableError } from './pds.errors';
 
 // Mock the @atproto/api Agent and CredentialSession
 const mockResumeSession = jest.fn().mockResolvedValue(undefined);
@@ -28,6 +28,8 @@ describe('PdsSessionService', () => {
   let mockUserAtprotoIdentityService: {
     findByUserUlid: jest.Mock;
     findByDid: jest.Mock;
+    update: jest.Mock;
+    transitionTakeOwnershipStatus: jest.Mock;
   };
   let mockPdsCredentialService: {
     decrypt: jest.Mock;
@@ -68,6 +70,7 @@ describe('PdsSessionService', () => {
       pdsUrl: testPdsUrl,
       pdsCredentials: encryptedCredentials,
       isCustodial: true,
+      takeOwnershipStatus: null,
       createdAt: new Date(),
       updatedAt: new Date(),
       ...overrides,
@@ -81,6 +84,8 @@ describe('PdsSessionService', () => {
     mockUserAtprotoIdentityService = {
       findByUserUlid: jest.fn(),
       findByDid: jest.fn(),
+      update: jest.fn(),
+      transitionTakeOwnershipStatus: jest.fn().mockResolvedValue(true),
     };
 
     mockPdsCredentialService = {
@@ -371,6 +376,269 @@ describe('PdsSessionService', () => {
         const result = await service.getSessionForUser(tenantId, userUlid);
 
         expect(result).toBeNull();
+        // A plain error is not a definitive PDS rejection - no repair
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('orphaned take-ownership repair', () => {
+      const arrangeCustodialSessionAttempt = () => {
+        const custodialIdentity = createMockIdentity();
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+          custodialIdentity,
+        );
+        mockElastiCacheService.get.mockResolvedValue(null);
+        mockPdsCredentialService.decrypt.mockReturnValue(decryptedPassword);
+        return custodialIdentity;
+      };
+
+      it('should finish take-ownership on 401 when a reset was confirmed but custody never flipped', async () => {
+        const custodialIdentity = arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          createMockIdentity({ takeOwnershipStatus: 'confirmed' }),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError(
+            'Invalid identifier or password',
+            401,
+            'AuthenticationRequired',
+          ),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        // Session still fails this cycle...
+        expect(result).toBeNull();
+        // ...but the recorded handoff is completed
+        expect(mockUserAtprotoIdentityService.update).toHaveBeenCalledWith(
+          tenantId,
+          custodialIdentity.id,
+          {
+            pdsCredentials: null,
+            isCustodial: false,
+            takeOwnershipStatus: null,
+          },
+        );
+        // ...and the cached session is invalidated
+        expect(mockElastiCacheService.del).toHaveBeenCalled();
+      });
+
+      it("should not auto-repair on 401 when the marker is only 'ambiguous'", async () => {
+        // Ambiguity includes "the reset request never reached the PDS", so
+        // this 401 could still be systemic (wrong PDS URL, incomplete
+        // restore). Destroying credentials needs the certainty of
+        // 'confirmed'; ambiguous cases are surfaced for reconciliation
+        arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          createMockIdentity({ takeOwnershipStatus: 'ambiguous' }),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Invalid identifier or password', 401),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it('should not end custody on 401 without a recorded marker', async () => {
+        // The PDS returns the same 401 for unknown accounts (anti-
+        // enumeration), so a systemic failure like a wrong PDS URL or an
+        // incomplete PDS restore must never convert custodial identities
+        arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          createMockIdentity({ takeOwnershipStatus: null }),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Invalid identifier or password', 401),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it("should not end custody on 401 when the marker is only 'pending'", async () => {
+        // 'pending' records intent before the PDS submission — a crash in
+        // that window leaves it behind without any reset having happened,
+        // so it must never satisfy the repair on its own
+        arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          createMockIdentity({ takeOwnershipStatus: 'pending' }),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Invalid identifier or password', 401),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it('should not end custody on a non-401 PDS error', async () => {
+        arrangeCustodialSessionAttempt();
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Bad gateway', 502),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it('should not end custody on a PDS error with no status (network failure)', async () => {
+        arrangeCustodialSessionAttempt();
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('socket hang up'),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it('should skip repair when the identity is already non-custodial at lookup', async () => {
+        arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          createMockIdentity({ isCustodial: false, pdsCredentials: null }),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Invalid identifier or password', 401),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+        expect(mockUserAtprotoIdentityService.update).not.toHaveBeenCalled();
+      });
+
+      it('should still return null when the repair itself fails', async () => {
+        arrangeCustodialSessionAttempt();
+        mockUserAtprotoIdentityService.findByDid.mockResolvedValue(
+          createMockIdentity({ takeOwnershipStatus: 'confirmed' }),
+        );
+        mockUserAtprotoIdentityService.update.mockRejectedValue(
+          new Error('DB write failed'),
+        );
+        mockPdsAccountService.createSession.mockRejectedValue(
+          new PdsApiError('Invalid identifier or password', 401),
+        );
+
+        // Must not throw: repair failure cannot mask the session failure
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).toBeNull();
+      });
+    });
+
+    describe('stale marker sweep on successful login', () => {
+      const sessionResponse = {
+        did: testDid,
+        handle: testHandle,
+        accessJwt: 'fresh-access-jwt',
+        refreshJwt: 'fresh-refresh-jwt',
+      };
+
+      const arrangeSuccessfulFreshSession = (
+        takeOwnershipStatus: 'pending' | 'ambiguous' | 'confirmed' | null,
+      ) => {
+        const custodialIdentity = createMockIdentity({ takeOwnershipStatus });
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+          custodialIdentity,
+        );
+        mockElastiCacheService.get.mockResolvedValue(null);
+        mockPdsCredentialService.decrypt.mockReturnValue(decryptedPassword);
+        mockPdsAccountService.createSession.mockResolvedValue(sessionResponse);
+        return custodialIdentity;
+      };
+
+      it("should clear a 'pending' marker when the stored credentials still authenticate", async () => {
+        // A successful login proves no reset committed, so a marker stranded
+        // by a crash before the PDS submission is swept instead of lingering
+        const custodialIdentity = arrangeSuccessfulFreshSession('pending');
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).not.toBeNull();
+        // Compare-and-set against exactly the state that was read, so the
+        // sweep loses if the marker advanced while the login was in flight
+        expect(
+          mockUserAtprotoIdentityService.transitionTakeOwnershipStatus,
+        ).toHaveBeenCalledWith(
+          tenantId,
+          custodialIdentity.id,
+          ['pending'],
+          null,
+        );
+      });
+
+      it("should clear an 'ambiguous' marker when the stored credentials still authenticate", async () => {
+        const custodialIdentity = arrangeSuccessfulFreshSession('ambiguous');
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).not.toBeNull();
+        expect(
+          mockUserAtprotoIdentityService.transitionTakeOwnershipStatus,
+        ).toHaveBeenCalledWith(
+          tenantId,
+          custodialIdentity.id,
+          ['ambiguous'],
+          null,
+        );
+      });
+
+      it("should NOT clear a 'confirmed' marker even when the stored credentials authenticate", async () => {
+        // 'confirmed' means the PDS acknowledged a reset; old credentials
+        // still working is an anomaly (e.g. PDS restore), not refutation
+        arrangeSuccessfulFreshSession('confirmed');
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).not.toBeNull();
+        expect(
+          mockUserAtprotoIdentityService.transitionTakeOwnershipStatus,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('should not touch identities without a marker', async () => {
+        arrangeSuccessfulFreshSession(null);
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).not.toBeNull();
+        expect(
+          mockUserAtprotoIdentityService.transitionTakeOwnershipStatus,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('should still return the session when the sweep loses the compare-and-set race', async () => {
+        arrangeSuccessfulFreshSession('pending');
+        mockUserAtprotoIdentityService.transitionTakeOwnershipStatus.mockResolvedValue(
+          false,
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).not.toBeNull();
+        expect(result!.source).toBe('fresh');
+      });
+
+      it('should still return the session when the sweep write fails', async () => {
+        arrangeSuccessfulFreshSession('pending');
+        mockUserAtprotoIdentityService.transitionTakeOwnershipStatus.mockRejectedValue(
+          new Error('DB write failed'),
+        );
+
+        const result = await service.getSessionForUser(tenantId, userUlid);
+
+        expect(result).not.toBeNull();
+        expect(result!.source).toBe('fresh');
       });
     });
   });
