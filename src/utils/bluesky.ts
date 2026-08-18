@@ -16,7 +16,7 @@ import { createRequestLock } from '../auth-bluesky/stores/redlock';
  * Default OAuth scopes if ATPROTO_OAUTH_SCOPES env var is not set.
  */
 const DEFAULT_ATPROTO_OAUTH_SCOPES =
-  'atproto account:email rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app#bsky_appview repo:community.lexicon.calendar.event repo:community.lexicon.calendar.rsvp';
+  'atproto account:email identity:handle rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app#bsky_appview repo:community.lexicon.calendar.event repo:community.lexicon.calendar.rsvp';
 
 /**
  * Get the configured ATProto OAuth scopes from env var or default.
