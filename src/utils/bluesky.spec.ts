@@ -1,4 +1,5 @@
-import { createPlcFallbackFetch } from './bluesky';
+import { ConfigService } from '@nestjs/config';
+import { createPlcFallbackFetch, getAtprotoConfiguredScopes } from './bluesky';
 
 describe('createPlcFallbackFetch', () => {
   let mockGlobalFetch: jest.Mock;
@@ -181,5 +182,35 @@ describe('createPlcFallbackFetch', () => {
       expect(mockGlobalFetch).toHaveBeenCalledTimes(2);
       expect(result).toBe(publicResponse);
     });
+  });
+});
+
+describe('getAtprotoConfiguredScopes', () => {
+  const configWith = (scopes?: string) =>
+    ({ get: () => scopes }) as unknown as ConfigService;
+
+  it('should use the configured scopes when ATPROTO_OAUTH_SCOPES is set', () => {
+    const result = getAtprotoConfiguredScopes(configWith('atproto repo:a.b.c'));
+    expect(result).toBe('atproto repo:a.b.c');
+  });
+
+  it('should fall back to the defaults when ATPROTO_OAUTH_SCOPES is unset', () => {
+    const scopes = getAtprotoConfiguredScopes(configWith(undefined)).split(' ');
+    expect(scopes).toEqual(
+      expect.arrayContaining([
+        'atproto',
+        'account:email',
+        'repo:community.lexicon.calendar.event',
+        'repo:community.lexicon.calendar.rsvp',
+      ]),
+    );
+  });
+
+  // Without this scope the PDS rejects com.atproto.identity.updateHandle with a
+  // 403 for anyone whose session is OAuth rather than custodial - so taking
+  // ownership of your own account costs you the ability to rename it.
+  it('should request identity:handle so users can change their own handle', () => {
+    const scopes = getAtprotoConfiguredScopes(configWith(undefined)).split(' ');
+    expect(scopes).toContain('identity:handle');
   });
 });

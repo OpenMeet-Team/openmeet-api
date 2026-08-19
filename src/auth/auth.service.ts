@@ -61,7 +61,10 @@ import { MeResponse } from './dto/me-response.dto';
 import { AtprotoIdentityDto } from '../atproto-identity/dto/atproto-identity.dto';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { getTenantConfig } from '../utils/tenant-config';
-import { checkScopeMismatch } from '../utils/check-scope-mismatch';
+import {
+  checkScopeMismatch,
+  getRequiredScopesForIdentity,
+} from '../utils/check-scope-mismatch';
 import { getAtprotoConfiguredScopes } from '../utils/bluesky';
 import { OAuthSession } from '@atproto/oauth-client';
 import { CreateLoginLinkResponseDto } from './dto/create-login-link-response.dto';
@@ -670,6 +673,7 @@ export class AuthService {
         if (identity) {
           // Map to DTO, explicitly excluding pdsCredentials
           const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+          const isOurPds = identity.pdsUrl === ourPdsUrl;
           const serviceHandleDomains =
             this.configService.get('pds.serviceHandleDomains', {
               infer: true,
@@ -706,7 +710,9 @@ export class AuthService {
                       this.configService,
                     );
                     scopeMissingScopes = checkScopeMismatch(
-                      configuredScopes,
+                      getRequiredScopesForIdentity(configuredScopes, {
+                        isOurPds,
+                      }),
                       tokenInfo.scope,
                     );
                     scopeHasMismatch = scopeMissingScopes.length > 0;
@@ -726,7 +732,7 @@ export class AuthService {
             handle: identity.handle,
             pdsUrl: identity.pdsUrl,
             isCustodial: identity.isCustodial,
-            isOurPds: identity.pdsUrl === ourPdsUrl,
+            isOurPds,
             hasActiveSession,
             scopeMismatch: scopeHasMismatch,
             missingScopes: scopeMissingScopes,
