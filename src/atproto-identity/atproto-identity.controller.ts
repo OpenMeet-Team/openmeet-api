@@ -43,6 +43,8 @@ import { NullableType } from '../utils/types/nullable.type';
 import { AllConfigType } from '../config/config.type';
 import { UserAtprotoIdentityEntity } from '../user-atproto-identity/infrastructure/persistence/relational/entities/user-atproto-identity.entity';
 import { AuthBlueskyService } from '../auth-bluesky/auth-bluesky.service';
+import { getRequiredScopesForIdentity } from '../utils/check-scope-mismatch';
+import { getAtprotoConfiguredScopes } from '../utils/bluesky';
 
 @ApiTags('AT Protocol Identity')
 @Controller({
@@ -543,6 +545,7 @@ export class AtprotoIdentityController {
     tenantId: string,
   ): Promise<AtprotoIdentityDto> {
     const ourPdsUrl = this.configService.get('pds.url', { infer: true });
+    const isOurPds = identity.pdsUrl === ourPdsUrl;
     const serviceHandleDomains =
       this.configService.get('pds.serviceHandleDomains', { infer: true }) || '';
     const validHandleDomains = serviceHandleDomains
@@ -599,8 +602,16 @@ export class AtprotoIdentityController {
           identity.did,
         );
         if (mismatchData && mismatchData.length > 0) {
-          scopeMismatch = true;
-          missingScopes = mismatchData;
+          // The stored list was measured against the global scope list, so
+          // narrow it to what this identity is actually required to hold.
+          const requiredScopes = getRequiredScopesForIdentity(
+            getAtprotoConfiguredScopes(this.configService),
+            { isOurPds },
+          ).split(/\s+/);
+          missingScopes = mismatchData.filter((scope) =>
+            requiredScopes.includes(scope),
+          );
+          scopeMismatch = missingScopes.length > 0;
         }
       } catch (error) {
         this.logger.warn('Failed to check scope mismatch', {
@@ -615,7 +626,7 @@ export class AtprotoIdentityController {
       handle: identity.handle,
       pdsUrl: identity.pdsUrl,
       isCustodial: identity.isCustodial,
-      isOurPds: identity.pdsUrl === ourPdsUrl,
+      isOurPds,
       hasActiveSession,
       scopeMismatch,
       missingScopes,

@@ -981,6 +981,91 @@ describe('AuthService', () => {
       expect(result?.atprotoIdentity?.scopeMismatch).toBe(false);
       expect(result?.atprotoIdentity?.missingScopes).toEqual([]);
     });
+
+    describe('identity:handle is only required for our PDS', () => {
+      // identity:handle authorizes a handle rename. updateHandle rejects any
+      // identity that is not on our PDS, so an external identity is never
+      // required to hold it and must not be asked to reconnect for it.
+      const ourPdsIdentity = {
+        ...baseIdentity,
+        did: 'did:plc:ourpds456',
+        handle: 'test-user.opnmt.me',
+        pdsUrl: 'https://pds.openmeet.net',
+      };
+
+      const sessionGranting = (scope: string) => ({
+        sessionManager: {
+          getTokenInfo: jest.fn().mockResolvedValue({ scope }),
+        },
+      });
+
+      beforeEach(() => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'pds.url') return 'https://pds.openmeet.net';
+          if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
+          if (key === 'ATPROTO_OAUTH_SCOPES')
+            return 'atproto identity:handle repo:community.lexicon.calendar.fake';
+          return null;
+        });
+      });
+
+      it('should report identity:handle missing for an our-PDS identity', async () => {
+        // Arrange: took ownership, session predates the identity:handle scope
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+          ourPdsIdentity,
+        );
+        mockBlueskyService.tryResumeSession.mockResolvedValue(
+          sessionGranting('atproto repo:community.lexicon.calendar.fake'),
+        );
+
+        // Act
+        const result = await authService.me(jwtPayload);
+
+        // Assert
+        expect(result?.atprotoIdentity?.isOurPds).toBe(true);
+        expect(result?.atprotoIdentity?.scopeMismatch).toBe(true);
+        expect(result?.atprotoIdentity?.missingScopes).toEqual([
+          'identity:handle',
+        ]);
+      });
+
+      it('should not report identity:handle missing for an external-PDS identity', async () => {
+        // Arrange: same stale session shape, but hosted on bsky.social
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+          baseIdentity,
+        );
+        mockBlueskyService.tryResumeSession.mockResolvedValue(
+          sessionGranting('atproto repo:community.lexicon.calendar.fake'),
+        );
+
+        // Act
+        const result = await authService.me(jwtPayload);
+
+        // Assert
+        expect(result?.atprotoIdentity?.isOurPds).toBe(false);
+        expect(result?.atprotoIdentity?.scopeMismatch).toBe(false);
+        expect(result?.atprotoIdentity?.missingScopes).toEqual([]);
+      });
+
+      it('should still report other missing scopes for an external-PDS identity', async () => {
+        // Arrange: external identity missing identity:handle AND a real scope
+        mockUserAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+          baseIdentity,
+        );
+        mockBlueskyService.tryResumeSession.mockResolvedValue(
+          sessionGranting('atproto'),
+        );
+
+        // Act
+        const result = await authService.me(jwtPayload);
+
+        // Assert
+        expect(result?.atprotoIdentity?.scopeMismatch).toBe(true);
+        expect(result?.atprotoIdentity?.missingScopes).toEqual([
+          'repo:community.lexicon.calendar.fake',
+        ]);
+      });
+    });
   });
 
   describe('validateSocialLogin - PDS Account Auto-Creation', () => {

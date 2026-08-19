@@ -31,6 +31,8 @@ describe('AtprotoIdentityController', () => {
   let pdsAccountService: PdsAccountService;
   let pdsSessionService: PdsSessionService;
   let blueskyService: BlueskyService;
+  let authBlueskyService: AuthBlueskyService;
+  let configService: ConfigService;
 
   const mockIdentityEntity: Partial<UserAtprotoIdentityEntity> = {
     id: 1,
@@ -179,6 +181,8 @@ describe('AtprotoIdentityController', () => {
     pdsAccountService = module.get<PdsAccountService>(PdsAccountService);
     pdsSessionService = module.get<PdsSessionService>(PdsSessionService);
     blueskyService = module.get<BlueskyService>(BlueskyService);
+    authBlueskyService = module.get<AuthBlueskyService>(AuthBlueskyService);
+    configService = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {
@@ -1266,6 +1270,88 @@ describe('AtprotoIdentityController', () => {
       await expect(
         controller.updateHandle({ handle: 'new-handle.opnmt.me' }, mockRequest),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getIdentity - identity:handle is only required for our PDS', () => {
+    // identity:handle authorizes a handle rename. updateHandle rejects any
+    // identity that is not on our PDS, so an external identity is never
+    // required to hold it and must not be asked to reconnect for it.
+    const ourPdsNonCustodial: Partial<UserAtprotoIdentityEntity> = {
+      ...mockIdentityEntity,
+      pdsCredentials: null,
+      isCustodial: false,
+    };
+
+    beforeEach(() => {
+      // Both cases hold a live OAuth session; only the host PDS differs.
+      jest.spyOn(blueskyService, 'tryResumeSession').mockResolvedValue({
+        sessionManager: {},
+      } as never);
+      jest.spyOn(configService, 'get').mockImplementation((key: string) => {
+        if (key === 'pds.url') return 'https://pds.openmeet.net';
+        if (key === 'pds.serviceHandleDomains') return '.opnmt.me';
+        if (key === 'ATPROTO_OAUTH_SCOPES')
+          return 'atproto account:email identity:handle';
+        return null;
+      });
+    });
+
+    it('should report identity:handle missing for an our-PDS identity', async () => {
+      // Arrange
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(ourPdsNonCustodial as UserAtprotoIdentityEntity);
+      jest
+        .spyOn(authBlueskyService, 'getScopeMismatch')
+        .mockResolvedValue(['identity:handle']);
+
+      // Act
+      const result = await controller.getIdentity(mockRequest);
+
+      // Assert
+      expect(result?.isOurPds).toBe(true);
+      expect(result?.scopeMismatch).toBe(true);
+      expect(result?.missingScopes).toEqual(['identity:handle']);
+    });
+
+    it('should not report identity:handle missing for an external-PDS identity', async () => {
+      // Arrange
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(
+          mockNonCustodialIdentity as UserAtprotoIdentityEntity,
+        );
+      jest
+        .spyOn(authBlueskyService, 'getScopeMismatch')
+        .mockResolvedValue(['identity:handle']);
+
+      // Act
+      const result = await controller.getIdentity(mockRequest);
+
+      // Assert
+      expect(result?.isOurPds).toBe(false);
+      expect(result?.scopeMismatch).toBe(false);
+      expect(result?.missingScopes).toEqual([]);
+    });
+
+    it('should still report other missing scopes for an external-PDS identity', async () => {
+      // Arrange: stored flag holds identity:handle alongside a real gap
+      jest
+        .spyOn(identityService, 'findByUserUlid')
+        .mockResolvedValue(
+          mockNonCustodialIdentity as UserAtprotoIdentityEntity,
+        );
+      jest
+        .spyOn(authBlueskyService, 'getScopeMismatch')
+        .mockResolvedValue(['identity:handle', 'account:email']);
+
+      // Act
+      const result = await controller.getIdentity(mockRequest);
+
+      // Assert
+      expect(result?.scopeMismatch).toBe(true);
+      expect(result?.missingScopes).toEqual(['account:email']);
     });
   });
 });
