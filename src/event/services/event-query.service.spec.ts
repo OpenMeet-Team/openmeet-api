@@ -1001,4 +1001,80 @@ describe('EventQueryService', () => {
       expect(result).toHaveLength(0);
     });
   });
+  describe('findEventsBySeriesSlug visibility predicate', () => {
+    const buildQueryBuilderMock = () => ({
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    });
+
+    const runWith = async (options: {
+      page: number;
+      limit: number;
+      publicOnly?: boolean;
+    }) => {
+      const qb = buildQueryBuilderMock();
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(qb),
+          }),
+        } as any);
+
+      await service.findEventsBySeriesSlug('test-series', options);
+      return qb;
+    };
+
+    it('should restrict status and visibility when publicOnly is set', async () => {
+      const qb = await runWith({ page: 1, limit: 10, publicOnly: true });
+
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'event.status IN (:...visibleStatuses)',
+        {
+          visibleStatuses: [EventStatus.Published, EventStatus.Cancelled],
+        },
+      );
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'event.visibility IN (:...publicVisibilities)',
+        {
+          publicVisibilities: [
+            EventVisibility.Public,
+            EventVisibility.Unlisted,
+          ],
+        },
+      );
+    });
+
+    it('should never expose draft, pending or private occurrences when publicOnly is set', async () => {
+      const qb = await runWith({ page: 1, limit: 10, publicOnly: true });
+
+      const statusCall = qb.andWhere.mock.calls.find(
+        (call) => call[0] === 'event.status IN (:...visibleStatuses)',
+      );
+      const visibilityCall = qb.andWhere.mock.calls.find(
+        (call) => call[0] === 'event.visibility IN (:...publicVisibilities)',
+      );
+
+      expect(statusCall).toBeDefined();
+      expect(visibilityCall).toBeDefined();
+
+      const allowedStatuses = statusCall![1].visibleStatuses;
+      const allowedVisibilities = visibilityCall![1].publicVisibilities;
+
+      expect(allowedStatuses).not.toContain(EventStatus.Draft);
+      expect(allowedStatuses).not.toContain(EventStatus.Pending);
+      expect(allowedVisibilities).not.toContain(EventVisibility.Private);
+    });
+
+    it('should not restrict the query when publicOnly is unset', async () => {
+      const qb = await runWith({ page: 1, limit: 10 });
+
+      expect(qb.andWhere).not.toHaveBeenCalled();
+    });
+  });
 });
