@@ -1697,11 +1697,17 @@ export class EventQueryService {
 
   /**
    * Find all events (occurrences) that belong to a series by the series slug
+   *
+   * Pass publicOnly when the results are going to an unauthenticated caller.
+   * It limits the query to occurrences that are safe to show anonymously.
+   * Internal callers such as series materialization and template lookup must
+   * leave it unset. They need to see every occurrence, drafts included, or
+   * they will create duplicates of occurrences that already exist.
    */
   @Trace('event-query.findEventsBySeriesSlug')
   async findEventsBySeriesSlug(
     seriesSlug: string,
-    options?: { page: number; limit: number },
+    options?: { page: number; limit: number; publicOnly?: boolean },
   ): Promise<[EventEntity[], number]> {
     try {
       await this.initializeRepository();
@@ -1722,6 +1728,21 @@ export class EventQueryService {
         .orderBy('event.startDate', 'ASC')
         .skip((page - 1) * limit)
         .take(limit);
+
+      // This is the same rule VisibilityGuard applies to GET /events/:slug.
+      // It runs in SQL rather than after the fetch so paging stays correct.
+      if (options?.publicOnly) {
+        queryBuilder
+          .andWhere('event.status IN (:...visibleStatuses)', {
+            visibleStatuses: [EventStatus.Published, EventStatus.Cancelled],
+          })
+          .andWhere('event.visibility IN (:...publicVisibilities)', {
+            publicVisibilities: [
+              EventVisibility.Public,
+              EventVisibility.Unlisted,
+            ],
+          });
+      }
 
       try {
         const [events, total] = await queryBuilder.getManyAndCount();

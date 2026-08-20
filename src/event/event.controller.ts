@@ -452,11 +452,18 @@ export class EventController {
         `Starting database query for series ${seriesSlug} events at ${new Date().toISOString()}`,
       );
 
+      // This route is @Public() and VisibilityGuard cannot check it. The guard
+      // reads a :slug param, and the only param here is :seriesSlug, so the
+      // guard falls through and allows the request. Anonymous callers get the
+      // same restriction the guard would have applied, enforced in the query.
+      const isAnonymous = !_req.user;
+
       const findEventsPromise = this.eventQueryService.findEventsBySeriesSlug(
         seriesSlug,
         {
           page: +pagination.page || 1,
           limit: +pagination.limit || 10,
+          publicOnly: isAnonymous,
         },
       );
 
@@ -486,6 +493,19 @@ export class EventController {
       this.logger.log(
         `Returning ${events.length} events for series ${seriesSlug}`,
       );
+
+      // Neither entity carries @Exclude, so every loaded column would be sent.
+      // sourceData holds the original poster's DID, handle, CID and rkey, and
+      // matrixRoomId is an internal room address. Remove both before they go
+      // to an unauthenticated caller.
+      if (isAnonymous) {
+        for (const event of events) {
+          event.sourceData = null;
+          // Column is nullable; the entity types it as a bare string.
+          event.matrixRoomId = null as unknown as string;
+        }
+      }
+
       return events;
     } catch (error) {
       this.logger.error(
