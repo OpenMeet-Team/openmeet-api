@@ -85,6 +85,7 @@ const mockEventQueryService = {
   getEventsByCreator: jest.fn(),
   getEventsByAttendee: jest.fn(),
   showEventBySlug: jest.fn(),
+  findEventsBySeriesSlug: jest.fn(),
 };
 
 const mockEventRecommendationService = {
@@ -728,6 +729,80 @@ describe('EventController', () => {
       await expect(
         controller.syncAtproto('non-existent-event', mockUser),
       ).rejects.toThrow('Event not found');
+    });
+  });
+  describe('getEventsBySeries', () => {
+    const buildEvent = () =>
+      ({
+        ...mockEvent,
+        sourceData: { did: 'did:plc:abc123', handle: 'someone.bsky.social' },
+        matrixRoomId: '!room:matrix.openmeet.net',
+      }) as unknown as EventEntity;
+
+    beforeEach(() => {
+      mockEventQueryService.findEventsBySeriesSlug.mockReset();
+    });
+
+    it('should restrict the query to publicly visible occurrences for anonymous callers', async () => {
+      mockEventQueryService.findEventsBySeriesSlug.mockResolvedValue([[], 0]);
+
+      await controller.getEventsBySeries('test-series', {} as any, {
+        user: undefined,
+      });
+
+      expect(mockEventQueryService.findEventsBySeriesSlug).toHaveBeenCalledWith(
+        'test-series',
+        expect.objectContaining({ publicOnly: true }),
+      );
+    });
+
+    it('should leave the query unrestricted for authenticated callers', async () => {
+      mockEventQueryService.findEventsBySeriesSlug.mockResolvedValue([[], 0]);
+
+      await controller.getEventsBySeries('test-series', {} as any, {
+        user: mockUser,
+      });
+
+      expect(mockEventQueryService.findEventsBySeriesSlug).toHaveBeenCalledWith(
+        'test-series',
+        expect.objectContaining({ publicOnly: false }),
+      );
+    });
+
+    it('should withhold sourceData and matrixRoomId from anonymous callers', async () => {
+      mockEventQueryService.findEventsBySeriesSlug.mockResolvedValue([
+        [buildEvent()],
+        1,
+      ]);
+
+      const result = await controller.getEventsBySeries(
+        'test-series',
+        {} as any,
+        { user: undefined },
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].sourceData).toBeNull();
+      expect(result[0].matrixRoomId).toBeNull();
+    });
+
+    it('should leave those fields intact for authenticated callers', async () => {
+      mockEventQueryService.findEventsBySeriesSlug.mockResolvedValue([
+        [buildEvent()],
+        1,
+      ]);
+
+      const result = await controller.getEventsBySeries(
+        'test-series',
+        {} as any,
+        { user: mockUser },
+      );
+
+      expect(result[0].sourceData).toEqual({
+        did: 'did:plc:abc123',
+        handle: 'someone.bsky.social',
+      });
+      expect(result[0].matrixRoomId).toBe('!room:matrix.openmeet.net');
     });
   });
 });
