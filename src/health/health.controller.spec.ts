@@ -10,6 +10,7 @@ import {
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
 import { MatrixHealthIndicator } from '../matrix/health/matrix.health';
+import { GlobalExceptionFilter } from '../filters/global-exception.filter';
 
 describe('HealthController', () => {
   let controller: HealthController;
@@ -149,6 +150,9 @@ describe('HealthController (HTTP, real Terminus check pipeline)', () => {
     }).compile();
 
     app = module.createNestApplication({ logger: false });
+    // Mirror production: GlobalExceptionFilter (APP_FILTER in InterceptorsModule)
+    // catches the ServiceUnavailableException, keeps its 503, and rewrites the body.
+    app.useGlobalFilters(new GlobalExceptionFilter({ inc: jest.fn() } as any));
     await app.init();
   });
 
@@ -166,7 +170,8 @@ describe('HealthController (HTTP, real Terminus check pipeline)', () => {
     const res = await request(app.getHttpServer()).get('/health/readiness');
 
     expect(res.status).toBe(503);
-    expect(res.body.status).toBe('error');
+    expect(res.body.statusCode).toBe(503);
+    expect(res.body.path).toBe('/health/readiness');
   });
 
   it('should answer 200 when the database ping succeeds', async () => {
