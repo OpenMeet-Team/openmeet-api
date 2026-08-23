@@ -38,18 +38,11 @@ export class HealthController {
   @Get('readiness')
   @ApiOperation({ summary: 'Readiness probe' })
   async readiness() {
-    try {
-      return await this.health.check([
-        () => this.db.pingCheck('database'),
-        () => this.matrix.isHealthy('matrix'),
-      ]);
-    } catch (error) {
-      return {
-        status: 'error',
-        database: 'disconnected',
-        error: error.message,
-      };
-    }
+    // Let the ServiceUnavailableException propagate: the 503 is how the probe
+    // learns the pod cannot serve, so Kubernetes pulls it from the Service.
+    // Database only — a Matrix outage degrades chat, not the API, and must not
+    // take every api pod out of rotation (see /health/matrix for that signal).
+    return await this.health.check([() => this.db.pingCheck('database')]);
   }
 
   @HealthCheck()
