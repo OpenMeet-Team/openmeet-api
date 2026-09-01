@@ -52,6 +52,7 @@ describe('AtprotoIdentityRecoveryService', () => {
 
     const mockPdsAccountService = {
       searchAccountsByEmail: jest.fn(),
+      getAccountInfo: jest.fn(),
       adminUpdateAccountPassword: jest.fn(),
       requestPasswordReset: jest.fn(),
       createSession: jest.fn(),
@@ -468,6 +469,7 @@ describe('AtprotoIdentityRecoveryService', () => {
       userAtprotoIdentityService.findByUserUlid.mockResolvedValue(
         mockIdentityEntity as UserAtprotoIdentityEntity,
       );
+      pdsAccountService.getAccountInfo.mockResolvedValue(mockPdsAccount as any);
       pdsAccountService.requestPasswordReset.mockResolvedValue(undefined);
 
       // Act
@@ -477,10 +479,75 @@ describe('AtprotoIdentityRecoveryService', () => {
       );
 
       // Assert
-      expect(pdsAccountService.requestPasswordReset).toHaveBeenCalledWith(
-        mockUser.email,
+      expect(pdsAccountService.getAccountInfo).toHaveBeenCalledWith(
+        mockIdentityEntity.did,
       );
-      expect(result).toEqual({ email: mockUser.email });
+      expect(pdsAccountService.requestPasswordReset).toHaveBeenCalledWith(
+        mockPdsAccount.email,
+      );
+      expect(result).toEqual({ email: mockPdsAccount.email });
+    });
+
+    it('should address the reset to the account on the PDS when the OpenMeet email has drifted', async () => {
+      // Arrange - the OpenMeet email now belongs to somebody else on the PDS
+      userService.findByUlid.mockResolvedValue({
+        ...mockUser,
+        email: 'someone-elses-address@example.com',
+      } as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        mockIdentityEntity as UserAtprotoIdentityEntity,
+      );
+      pdsAccountService.getAccountInfo.mockResolvedValue(mockPdsAccount as any);
+      pdsAccountService.requestPasswordReset.mockResolvedValue(undefined);
+
+      // Act
+      const result = await service.initiateTakeOwnership(
+        'test-tenant',
+        mockUser.ulid,
+      );
+
+      // Assert - the reset goes to the account the DID owns, not to the
+      // OpenMeet address, so no other account can be reset by this flow
+      expect(pdsAccountService.requestPasswordReset).toHaveBeenCalledWith(
+        mockPdsAccount.email,
+      );
+      expect(pdsAccountService.requestPasswordReset).not.toHaveBeenCalledWith(
+        'someone-elses-address@example.com',
+      );
+      expect(result).toEqual({ email: mockPdsAccount.email });
+    });
+
+    it('should throw NotFoundException when the DID has no account on the PDS', async () => {
+      // Arrange
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        mockIdentityEntity as UserAtprotoIdentityEntity,
+      );
+      pdsAccountService.getAccountInfo.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(
+        service.initiateTakeOwnership('test-tenant', mockUser.ulid),
+      ).rejects.toThrow(NotFoundException);
+      expect(pdsAccountService.requestPasswordReset).not.toHaveBeenCalled();
+    });
+
+    it('should fail visibly when the account on the PDS has no email address', async () => {
+      // Arrange - nothing can be delivered, so this must not report success
+      userService.findByUlid.mockResolvedValue(mockUser as any);
+      userAtprotoIdentityService.findByUserUlid.mockResolvedValue(
+        mockIdentityEntity as UserAtprotoIdentityEntity,
+      );
+      pdsAccountService.getAccountInfo.mockResolvedValue({
+        did: mockPdsAccount.did,
+        handle: mockPdsAccount.handle,
+      } as any);
+
+      // Act & Assert
+      await expect(
+        service.initiateTakeOwnership('test-tenant', mockUser.ulid),
+      ).rejects.toThrow(BadRequestException);
+      expect(pdsAccountService.requestPasswordReset).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when user not found', async () => {
