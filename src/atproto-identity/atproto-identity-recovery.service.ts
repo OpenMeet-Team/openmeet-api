@@ -207,19 +207,24 @@ export class AtprotoIdentityRecoveryService {
    * Initiate take ownership: trigger PDS password reset email.
    * User will receive email to set their own password.
    *
+   * The reset is addressed by DID. The email comes from the AT Protocol
+   * account itself, not from the OpenMeet user record, so a drifted OpenMeet
+   * email cannot send a reset code for a different account.
+   *
    * @param tenantId - The tenant ID
    * @param userUlid - The user's ULID
    * @returns Object with the email address the reset was sent to
-   * @throws NotFoundException if user not found
-   * @throws BadRequestException if no custodial identity exists
+   * @throws NotFoundException if the user or the AT Protocol account is not found
+   * @throws BadRequestException if no custodial identity exists, or the
+   *   AT Protocol account has no email address to deliver a reset to
    */
   async initiateTakeOwnership(
     tenantId: string,
     userUlid: string,
   ): Promise<{ email: string }> {
     const user = await this.userService.findByUlid(userUlid, tenantId);
-    if (!user || !user.email) {
-      throw new NotFoundException('User not found or has no email');
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
     // Check if user has custodial identity
@@ -239,14 +244,47 @@ export class AtprotoIdentityRecoveryService {
       );
     }
 
+    // Resolve the address from the DID, never from the OpenMeet email. The
+    // two can drift apart, because changing an OpenMeet email does not write
+    // the PDS side. requestPasswordReset sends to whichever account owns the
+    // address it is given, so a drifted address would mail a reset code for
+    // an account the user does not own. The DID is the identity, so the
+    // address has to come from it.
+    const account = await this.pdsAccountService.getAccountInfo(identity.did);
+    if (!account) {
+      throw new NotFoundException(
+        'No AT Protocol account was found for this identity, so no password ' +
+          'reset can be sent.',
+      );
+    }
+    if (!account.email) {
+      throw new BadRequestException(
+        'This AT Protocol account has no email address on file, so a ' +
+          'password reset cannot be delivered. Contact support to set one ' +
+          'before taking ownership.',
+      );
+    }
+    if (
+      user.email &&
+      account.email.toLowerCase() !== user.email.toLowerCase()
+    ) {
+      // The addresses themselves are not logged. Both are recoverable from
+      // the DID by an operator who needs them.
+      this.logger.warn(
+        `AT Protocol account email differs from the OpenMeet email for ` +
+          `${identity.did}; the reset was addressed to the account on the PDS`,
+      );
+    }
+
     // Trigger PDS password reset email
-    await this.pdsAccountService.requestPasswordReset(user.email);
+    await this.pdsAccountService.requestPasswordReset(account.email);
 
     this.logger.log(
-      `Initiated take ownership for user ${userUlid}: password reset email sent to ${user.email}`,
+      `Initiated take ownership for user ${userUlid}: password reset email ` +
+        `sent for ${identity.did}`,
     );
 
-    return { email: user.email };
+    return { email: account.email };
   }
 
   /**
