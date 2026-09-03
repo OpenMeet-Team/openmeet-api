@@ -314,10 +314,10 @@ describe('RsvpIntegrationService', () => {
 
       // findBySourceAttributes returns empty (no imported event with this sourceId)
       eventQueryService.findBySourceAttributes.mockResolvedValue([]);
-      // But findByAtprotoUri finds the native event
-      (eventQueryService as any).findByAtprotoUri = jest
-        .fn()
-        .mockResolvedValue([nativeEvent]);
+      // But findByAtprotoUri finds the native event. Driven through the
+      // declared mock, not assigned onto it here: a test-time graft would
+      // pass even if the provider never exposed the method at all.
+      eventQueryService.findByAtprotoUri.mockResolvedValue([nativeEvent]);
 
       const nativeEventRsvp: ExternalRsvpDto = {
         ...mockRsvpDto,
@@ -335,7 +335,7 @@ describe('RsvpIntegrationService', () => {
 
       // Assert - should have tried atprotoUri lookup after sourceAttributes failed
       expect(eventQueryService.findBySourceAttributes).toHaveBeenCalled();
-      expect((eventQueryService as any).findByAtprotoUri).toHaveBeenCalledWith(
+      expect(eventQueryService.findByAtprotoUri).toHaveBeenCalledWith(
         'at://did:plc:openmeet/community.lexicon.calendar.event/native123',
         'test-tenant',
       );
