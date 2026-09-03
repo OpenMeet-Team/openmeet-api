@@ -341,6 +341,82 @@ describe('RsvpIntegrationService', () => {
       );
       expect(eventAttendeeService.createFromIngestion).toHaveBeenCalled();
     });
+
+    // A rejection captured as a value, so a test can interrogate the error the
+    // caller actually receives instead of only matching its message.
+    const rejectionFrom = async (promise: Promise<unknown>): Promise<any> =>
+      promise.then(
+        () => {
+          throw new Error('expected processExternalRsvp to reject');
+        },
+        (error) => error,
+      );
+
+    it('should surface a failure inside the atprotoUri fallback as a lookup failure, not as a clean miss', async () => {
+      // The shape observed in prod 2026-08-05 (om-5n5k): the sourceId lookup
+      // misses, the fallback is entered, something inside it throws, and the
+      // caller is told the generic not-found. That makes "the lookup itself
+      // broke" indistinguishable from "the event genuinely is not here".
+      const internalFailure = new TypeError(
+        "Cannot read properties of undefined (reading 'name')",
+      );
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      eventQueryService.findByAtprotoUri.mockRejectedValue(internalFailure);
+
+      const errorLog = jest
+        .spyOn(service['logger'], 'error')
+        .mockImplementation(() => undefined);
+
+      const raised = await rejectionFrom(
+        service.processExternalRsvp(mockRsvpDto, 'test-tenant'),
+      );
+
+      // Distinguishable by the caller: a classified error that names the
+      // lookup that broke and keeps the original failure attached.
+      expect(raised.name).toBe('EventLookupFailedError');
+      expect(raised.message).toContain('atprotoUri');
+      expect(raised.message).toContain(internalFailure.message);
+      expect(raised.message).not.toMatch(/not found/);
+      expect(raised.cause).toBe(internalFailure);
+
+      // Distinguishable in the logs: an ERROR that says the fallback failed,
+      // not a WARN that reads as a survivable hiccup.
+      const logged = errorLog.mock.calls.map((call) => String(call[0]));
+      expect(
+        logged.some((line) => /atprotoUri/.test(line) && /failed/i.test(line)),
+      ).toBe(true);
+    });
+
+    it('should still report a genuine miss with the unchanged not-found error', async () => {
+      // Both lookups run to completion and find nothing. This is the honest
+      // miss and its surface must not change.
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      eventQueryService.findByAtprotoUri.mockResolvedValue([]);
+
+      const raised = await rejectionFrom(
+        service.processExternalRsvp(mockRsvpDto, 'test-tenant'),
+      );
+
+      expect(raised.name).toBe('Error');
+      expect(raised.message).toBe(
+        `Event with source ID ${mockRsvpDto.eventSourceId} not found`,
+      );
+      expect(eventQueryService.findByAtprotoUri).toHaveBeenCalledWith(
+        mockRsvpDto.eventSourceId,
+        'test-tenant',
+      );
+    });
+
+    it('should not consult the atprotoUri fallback when the sourceId lookup hits', async () => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([mockEvent]);
+      eventAttendeeService.createFromIngestion.mockResolvedValue({
+        id: 1,
+      } as unknown as EventAttendeesEntity);
+
+      await service.processExternalRsvp(mockRsvpDto, 'test-tenant');
+
+      expect(eventQueryService.findByAtprotoUri).not.toHaveBeenCalled();
+    });
   });
 
   describe('processExternalRsvp - membership/approval gate', () => {
