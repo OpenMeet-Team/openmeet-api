@@ -26,6 +26,29 @@ import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 
+/**
+ * An event lookup that did not run to completion.
+ *
+ * A lookup that THREW has established nothing about whether the event exists,
+ * so it must never be reported as a miss. Conflating the two is om-5n5k: the
+ * atprotoUri fallback failed internally, the caller was handed the generic
+ * "event ... not found", and a path that had never once run to completion in
+ * production looked, in every log and every response, like it had run and
+ * found nothing.
+ *
+ * `cause` carries the original failure so the thing that actually broke stays
+ * attached to the report.
+ */
+export class EventLookupFailedError extends Error {
+  readonly cause: unknown;
+
+  constructor(message: string, cause: unknown) {
+    super(message);
+    this.name = 'EventLookupFailedError';
+    this.cause = cause;
+  }
+}
+
 @Injectable()
 export class RsvpIntegrationService {
   private readonly logger = new Logger(RsvpIntegrationService.name);
@@ -170,10 +193,31 @@ export class RsvpIntegrationService {
         this.logger.debug(
           `Event not found by sourceId, trying atprotoUri: ${rsvpData.eventSourceId}`,
         );
-        events = await this.eventQueryService.findByAtprotoUri(
-          rsvpData.eventSourceId,
-          tenantId,
-        );
+        try {
+          events = await this.eventQueryService.findByAtprotoUri(
+            rsvpData.eventSourceId,
+            tenantId,
+          );
+        } catch (lookupError) {
+          // Deliberately does NOT fall through to the miss below. `events` is
+          // still empty here, so letting this error reach the generic
+          // not-found would report a lookup that never completed as a lookup
+          // that completed and found nothing (om-5n5k).
+          const reason =
+            lookupError instanceof Error
+              ? lookupError.message
+              : String(lookupError);
+          const detail = `atprotoUri fallback lookup failed for ${rsvpData.eventSourceId}: ${reason}`;
+
+          // ERROR, not WARN: the request is over. The prod symptom was a WARN
+          // that read as a survivable hiccup on the way to a clean miss.
+          this.logger.error(
+            detail,
+            lookupError instanceof Error ? lookupError.stack : undefined,
+          );
+
+          throw new EventLookupFailedError(detail, lookupError);
+        }
       }
 
       if (!events.length) {
