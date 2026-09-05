@@ -1,6 +1,5 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
-import { ScheduleModule } from '@nestjs/schedule';
 import {
   PrometheusModule,
   makeGaugeProvider,
@@ -149,7 +148,8 @@ const atprotoHandleMetrics = [
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    // @Cron methods are discovered by the single global
+    // ScheduleModule.forRoot() in AppModule; no import is needed here.
     PrometheusModule.register({
       defaultMetrics: {
         enabled: true,

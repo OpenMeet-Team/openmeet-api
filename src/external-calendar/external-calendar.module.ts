@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ExternalCalendarService } from './external-calendar.service';
 import { ExternalCalendarController } from './external-calendar.controller';
 import { AvailabilityController } from './availability.controller';
@@ -10,7 +9,9 @@ import { CalendarSourceModule } from '../calendar-source/calendar-source.module'
 import { TenantModule } from '../tenant/tenant.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), TenantModule, CalendarSourceModule],
+  // @Cron methods are discovered by the single global
+  // ScheduleModule.forRoot() in AppModule; no import is needed here.
+  imports: [TenantModule, CalendarSourceModule],
   controllers: [ExternalCalendarController, AvailabilityController],
   providers: [
     ExternalCalendarService,
