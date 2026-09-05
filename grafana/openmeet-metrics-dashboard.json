@@ -1189,7 +1189,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(max by (tenant) (users_total{namespace=~\"$namespace\", tenant=~\"$tenant\"}))",
+          "expr": "sum(max by (tenant) (users_total{namespace=~\"$namespace\", tenant=~\"$tenant\", tenant!=\"all\"}))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1249,7 +1249,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(max by (tenant) (groups_total{namespace=~\"$namespace\", tenant=~\"$tenant\"}))",
+          "expr": "sum(max by (tenant) (groups_total{namespace=~\"$namespace\", tenant=~\"$tenant\", tenant!=\"all\"}))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1501,7 +1501,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(max by (tenant) (active_users_30d{namespace=~\"$namespace\", tenant=~\"$tenant\"}))",
+          "expr": "sum(max by (tenant) (active_users_30d{namespace=~\"$namespace\", tenant=~\"$tenant\", tenant!=\"all\"}))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1561,7 +1561,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(max by (tenant) (events_total{namespace=~\"$namespace\", tenant=~\"$tenant\"}))",
+          "expr": "sum(max by (tenant) (events_total{namespace=~\"$namespace\", tenant=~\"$tenant\", tenant!=\"all\"}))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
