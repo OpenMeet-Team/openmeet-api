@@ -2,6 +2,7 @@ import { MetricsService } from './metrics.service';
 import { Gauge } from 'prom-client';
 import { DataSource } from 'typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { TenantConfig } from '../core/constants/constant';
 
 // Helper to create a mock Gauge
 function createMockGauge(): jest.Mocked<Gauge<string>> {
@@ -15,6 +16,30 @@ function createMockGauge(): jest.Mocked<Gauge<string>> {
   } as unknown as jest.Mocked<Gauge<string>>;
 }
 
+type MockQueryRunner = {
+  connect: jest.Mock;
+  query: jest.Mock;
+  release: jest.Mock;
+};
+
+// Helper to create a mock QueryRunner that answers the advisory-lock probe.
+function createMockQueryRunner(locked = true): MockQueryRunner {
+  return {
+    connect: jest.fn().mockResolvedValue(undefined),
+    query: jest.fn((sql: string) =>
+      Promise.resolve(
+        sql.includes('pg_try_advisory_lock')
+          ? [{ locked }]
+          : [{ pg_advisory_unlock: true }],
+      ),
+    ),
+    release: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+// TenantConfig carries a lot of required fields; the rollup only reads `id`.
+const rollupTenants = [{ id: 'test-tenant' }] as unknown as TenantConfig[];
+
 describe('MetricsService', () => {
   let service: MetricsService;
   let usersGauge: jest.Mocked<Gauge<string>>;
@@ -24,6 +49,7 @@ describe('MetricsService', () => {
   let groupMembersGauge: jest.Mocked<Gauge<string>>;
   let activeUsers30dGauge: jest.Mocked<Gauge<string>>;
   let mockDataSource: jest.Mocked<DataSource>;
+  let mockQueryRunner: MockQueryRunner;
   let mockTenantConnectionService: jest.Mocked<TenantConnectionService>;
   let mockTenantConnection: jest.Mocked<DataSource>;
 
@@ -35,8 +61,11 @@ describe('MetricsService', () => {
     groupMembersGauge = createMockGauge();
     activeUsers30dGauge = createMockGauge();
 
+    mockQueryRunner = createMockQueryRunner();
+
     mockDataSource = {
       query: jest.fn(),
+      createQueryRunner: jest.fn(() => mockQueryRunner),
     } as unknown as jest.Mocked<DataSource>;
 
     mockTenantConnection = {
@@ -336,6 +365,133 @@ describe('MetricsService', () => {
         { tenant: 'all' },
         45,
       );
+    });
+  });
+
+  describe('rollup advisory lock', () => {
+    function singleTenantRollup() {
+      mockTenantConnection.query.mockResolvedValueOnce([
+        {
+          users: 100,
+          events: 50,
+          groups: 25,
+          event_attendees: 200,
+          group_members: 75,
+          active_users: 30,
+        },
+      ]);
+      mockTenantConnectionService.getAllTenants.mockResolvedValue(
+        rollupTenants,
+      );
+      mockTenantConnectionService.getTenantConnection.mockResolvedValue(
+        mockTenantConnection,
+      );
+    }
+
+    function statements(runner: MockQueryRunner): string[] {
+      return runner.query.mock.calls.map((call) => call[0] as string);
+    }
+
+    it('acquires the lock, runs the rollup, then releases the lock', async () => {
+      singleTenantRollup();
+
+      await service.updateMetrics();
+
+      expect(statements(mockQueryRunner)).toEqual([
+        expect.stringContaining('pg_try_advisory_lock'),
+        expect.stringContaining('pg_advisory_unlock'),
+      ]);
+      // The work actually happened.
+      expect(mockTenantConnection.query).toHaveBeenCalledTimes(1);
+      expect(usersGauge.set).toHaveBeenCalledWith({ tenant: 'all' }, 100);
+      expect(mockQueryRunner.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses the non-blocking try variant, never the blocking one', async () => {
+      singleTenantRollup();
+
+      await service.updateMetrics();
+
+      const sql = statements(mockQueryRunner);
+      expect(sql[0]).toContain('pg_try_advisory_lock');
+      expect(sql.some((s) => /\bpg_advisory_lock\s*\(/.test(s))).toBe(false);
+    });
+
+    it('locks and unlocks with the same key', async () => {
+      singleTenantRollup();
+
+      await service.updateMetrics();
+
+      const [lockCall, unlockCall] = mockQueryRunner.query.mock.calls;
+      expect(lockCall[1]).toEqual(unlockCall[1]);
+      expect(typeof (lockCall[1] as unknown[])[0]).toBe('number');
+    });
+
+    it('skips the rollup without doing any work when the lock is held elsewhere', async () => {
+      mockQueryRunner = createMockQueryRunner(false);
+      (mockDataSource.createQueryRunner as jest.Mock).mockReturnValue(
+        mockQueryRunner,
+      );
+      singleTenantRollup();
+
+      await service.updateMetrics();
+
+      expect(mockTenantConnectionService.getAllTenants).not.toHaveBeenCalled();
+      expect(
+        mockTenantConnectionService.getTenantConnection,
+      ).not.toHaveBeenCalled();
+      expect(mockTenantConnection.query).not.toHaveBeenCalled();
+      expect(usersGauge.set).not.toHaveBeenCalled();
+      // Nothing was acquired, so nothing must be unlocked...
+      expect(statements(mockQueryRunner)).toEqual([
+        expect.stringContaining('pg_try_advisory_lock'),
+      ]);
+      // ...but the pinned connection still goes back to the pool.
+      expect(mockQueryRunner.release).toHaveBeenCalledTimes(1);
+    });
+
+    // Advisory locks are session scoped: if the unlock lands on a different
+    // pooled backend than the lock, the lock leaks forever and the rollup
+    // stops permanently. Both statements must ride one pinned QueryRunner.
+    it('issues the lock and the unlock on the same QueryRunner instance', async () => {
+      const handedOut: MockQueryRunner[] = [];
+      (mockDataSource.createQueryRunner as jest.Mock).mockImplementation(() => {
+        const runner = createMockQueryRunner();
+        handedOut.push(runner);
+        return runner;
+      });
+      singleTenantRollup();
+
+      await service.updateMetrics();
+
+      expect(mockDataSource.createQueryRunner).toHaveBeenCalledTimes(1);
+      expect(handedOut).toHaveLength(1);
+      expect(handedOut[0].connect).toHaveBeenCalledTimes(1);
+      expect(statements(handedOut[0])).toEqual([
+        expect.stringContaining('pg_try_advisory_lock'),
+        expect.stringContaining('pg_advisory_unlock'),
+      ]);
+      // Never the pool-borrowing shortcut.
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+    });
+
+    it('unlocks and releases even when the rollup body throws', async () => {
+      // The rollup body is private; reach it through its structural shape
+      // rather than widening the service to `any`.
+      const rollupBody = service as unknown as {
+        collectAllTenantMetrics: () => Promise<void>;
+      };
+      jest
+        .spyOn(rollupBody, 'collectAllTenantMetrics')
+        .mockRejectedValue(new Error('rollup exploded'));
+
+      await expect(service.updateMetrics()).rejects.toThrow('rollup exploded');
+
+      expect(statements(mockQueryRunner)).toEqual([
+        expect.stringContaining('pg_try_advisory_lock'),
+        expect.stringContaining('pg_advisory_unlock'),
+      ]);
+      expect(mockQueryRunner.release).toHaveBeenCalledTimes(1);
     });
   });
 });

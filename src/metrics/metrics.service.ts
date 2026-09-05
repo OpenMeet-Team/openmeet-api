@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Gauge } from 'prom-client';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -6,8 +6,16 @@ import { DataSource } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TenantConnectionService } from '../tenant/tenant.service';
 
+/**
+ * Advisory-lock key for the tenant metrics rollup. Any stable bigint works;
+ * it only has to be unique among the advisory locks taken on this database.
+ */
+const METRICS_ROLLUP_LOCK_KEY = 2094601703;
+
 @Injectable()
 export class MetricsService implements OnModuleInit {
+  private readonly logger = new Logger(MetricsService.name);
+
   constructor(
     @InjectMetric('users_total')
     private readonly usersGauge: Gauge<string>,
@@ -33,6 +41,51 @@ export class MetricsService implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_5_MINUTES)
   public async updateMetrics() {
+    await this.withRollupLock(() => this.collectAllTenantMetrics());
+  }
+
+  /**
+   * Runs `work` on at most one replica at a time, guarded by a postgres
+   * advisory lock. Losing the race is the normal steady state for every
+   * replica but one, so it is logged at debug level and is not an error.
+   *
+   * Advisory locks are SESSION scoped, and `dataSource.query()` borrows an
+   * arbitrary connection from the pool -- if the lock and the unlock land on
+   * different backends the lock leaks until the holding connection is closed
+   * and the rollup stops for good. Both statements are therefore issued on one
+   * pinned QueryRunner, the unlock runs in a `finally` so a throwing body
+   * cannot strand it, and the runner is only released after the unlock.
+   */
+  private async withRollupLock(work: () => Promise<void>): Promise<void> {
+    const runner = this.dataSource.createQueryRunner();
+    try {
+      await runner.connect();
+
+      const [{ locked }] = await runner.query(
+        'SELECT pg_try_advisory_lock($1) AS locked',
+        [METRICS_ROLLUP_LOCK_KEY],
+      );
+
+      if (!locked) {
+        this.logger.debug(
+          'Metrics rollup is already running on another replica; skipping',
+        );
+        return;
+      }
+
+      try {
+        await work();
+      } finally {
+        await runner.query('SELECT pg_advisory_unlock($1)', [
+          METRICS_ROLLUP_LOCK_KEY,
+        ]);
+      }
+    } finally {
+      await runner.release();
+    }
+  }
+
+  private async collectAllTenantMetrics() {
     try {
       // Get all tenant IDs
       const allTenants = await (
