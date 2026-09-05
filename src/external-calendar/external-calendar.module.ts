@@ -10,7 +10,8 @@ import { CalendarSourceModule } from '../calendar-source/calendar-source.module'
 import { TenantModule } from '../tenant/tenant.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), TenantModule, CalendarSourceModule],
+  // Bare import: ScheduleModule.forRoot() lives in AppModule and is global.
+  imports: [ScheduleModule, TenantModule, CalendarSourceModule],
   controllers: [ExternalCalendarController, AvailabilityController],
   providers: [
     ExternalCalendarService,

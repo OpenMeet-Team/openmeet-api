@@ -149,7 +149,8 @@ const atprotoHandleMetrics = [
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    // Bare import: ScheduleModule.forRoot() lives in AppModule and is global.
+    ScheduleModule,
     PrometheusModule.register({
       defaultMetrics: {
         enabled: true,

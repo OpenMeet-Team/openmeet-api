@@ -31,7 +31,8 @@ import { TenantModule } from '../tenant/tenant.module';
  */
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    // Bare import: ScheduleModule.forRoot() lives in AppModule and is global.
+    ScheduleModule,
     PdsModule,
     forwardRef(() => BlueskyModule),
     AtprotoIdentityModule,

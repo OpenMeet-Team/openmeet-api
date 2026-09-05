@@ -72,6 +72,7 @@ import { UserAtprotoIdentityModule } from './user-atproto-identity/user-atproto-
 import { AtprotoIdentityModule } from './atproto-identity/atproto-identity.module';
 import { MeModule } from './me/me.module';
 import { DIDApiModule } from './did-api/did-api.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -123,6 +124,12 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       inject: [ConfigService],
     }),
     EventEmitterModule.forRoot(),
+    // The ONLY ScheduleModule.forRoot() in the application. It registers
+    // globally, so feature modules import the bare ScheduleModule (or nothing)
+    // and their @Cron methods are still discovered. Calling forRoot() in more
+    // than one module creates one ScheduleExplorer per call site and fires
+    // every cron once per call site.
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         ttl: 60000, // 60 seconds
