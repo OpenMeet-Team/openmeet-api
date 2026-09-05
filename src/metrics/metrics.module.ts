@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import {
@@ -181,16 +181,4 @@ const atprotoHandleMetrics = [
     ...atprotoHandleMetrics,
   ],
 })
-export class MetricsModule implements OnModuleInit {
-  constructor(private metricsService: MetricsService) {}
-
-  async onModuleInit() {
-    console.log('MetricsModule initialized - ensuring metrics are populated');
-    // Force metrics update on module initialization
-    try {
-      await this.metricsService.updateMetrics();
-    } catch (error) {
-      console.error('Error initializing metrics:', error);
-    }
-  }
-}
+export class MetricsModule {}

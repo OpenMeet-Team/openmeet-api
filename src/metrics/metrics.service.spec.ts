@@ -3,6 +3,7 @@ import { Gauge } from 'prom-client';
 import { DataSource } from 'typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { TenantConfig } from '../core/constants/constant';
+import { Logger } from '@nestjs/common';
 
 // Helper to create a mock Gauge
 function createMockGauge(): jest.Mocked<Gauge<string>> {
@@ -492,6 +493,33 @@ describe('MetricsService', () => {
         expect.stringContaining('pg_advisory_unlock'),
       ]);
       expect(mockQueryRunner.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs the startup rollup through the lock exactly once', async () => {
+      singleTenantRollup();
+
+      await service.onModuleInit();
+
+      // MetricsModule used to trigger a second startup rollup of its own.
+      expect(mockDataSource.createQueryRunner).toHaveBeenCalledTimes(1);
+      expect(mockTenantConnection.query).toHaveBeenCalledTimes(1);
+      expect(statements(mockQueryRunner)).toEqual([
+        expect.stringContaining('pg_try_advisory_lock'),
+        expect.stringContaining('pg_advisory_unlock'),
+      ]);
+    });
+
+    it('does not abort bootstrap when the startup rollup fails', async () => {
+      mockQueryRunner.connect.mockRejectedValue(new Error('db unreachable'));
+      const logged = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => {});
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+
+      expect(logged).toHaveBeenCalled();
+      expect(mockQueryRunner.release).toHaveBeenCalledTimes(1);
+      logged.mockRestore();
     });
   });
 });

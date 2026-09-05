@@ -35,8 +35,19 @@ export class MetricsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // Initialize metrics on startup
-    await this.updateMetrics();
+    // The application's only startup rollup. MetricsModule used to call
+    // updateMetrics() from its own onModuleInit as well, so every replica ran
+    // the whole aggregation twice on boot; this one goes through the same
+    // advisory lock as the cron, so only one replica pays for it.
+    //
+    // A database hiccup at boot must not abort bootstrap -- the 5-minute cron
+    // populates the gauges on the next tick. (The cron path needs no guard of
+    // its own: @nestjs/schedule wraps scheduled methods in try/catch.)
+    try {
+      await this.updateMetrics();
+    } catch (error) {
+      this.logger.error('Initial metrics rollup failed', error);
+    }
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)
