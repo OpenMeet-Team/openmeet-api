@@ -72,6 +72,7 @@ import { UserAtprotoIdentityModule } from './user-atproto-identity/user-atproto-
 import { AtprotoIdentityModule } from './atproto-identity/atproto-identity.module';
 import { MeModule } from './me/me.module';
 import { DIDApiModule } from './did-api/did-api.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -123,6 +124,15 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       inject: [ConfigService],
     }),
     EventEmitterModule.forRoot(),
+    // The ONLY ScheduleModule registration in the application. forRoot() sets
+    // global: true and its ScheduleExplorer scans every provider in the
+    // container, so feature modules import nothing and their @Cron methods are
+    // still discovered. Two rules follow: calling forRoot() in more than one
+    // module creates one ScheduleExplorer per call site and fires every cron
+    // once per call site; and importing the BARE ScheduleModule creates a
+    // second module whose SchedulerOrchestrator cannot resolve
+    // SchedulerRegistry (only forRoot() provides it), which fails bootstrap.
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         ttl: 60000, // 60 seconds

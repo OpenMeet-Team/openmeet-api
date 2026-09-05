@@ -1,5 +1,4 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { AtprotoPublisherService } from './atproto-publisher.service';
 import { AtprotoSyncScheduler } from './atproto-sync-scheduler';
 import { PdsModule } from '../pds/pds.module';
@@ -31,7 +30,8 @@ import { TenantModule } from '../tenant/tenant.module';
  */
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    // @Cron methods are discovered by the single global
+    // ScheduleModule.forRoot() in AppModule; no import is needed here.
     PdsModule,
     forwardRef(() => BlueskyModule),
     AtprotoIdentityModule,
