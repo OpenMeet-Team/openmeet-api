@@ -25,6 +25,7 @@ export class EventIntegrationService {
   private readonly tracer = trace.getTracer('event-integration-service');
   private lastGeocodingRequest = 0;
   private readonly geocodingDelayMs = 1100; // Nominatim rate limit: 1 req/sec, so wait 1.1s to be safe
+  private readonly geocodingTimeoutMs = 5000;
 
   constructor(
     private readonly tenantService: TenantConnectionService,
@@ -458,6 +459,7 @@ export class EventIntegrationService {
             headers: {
               'User-Agent': 'OpenMeet/1.0 (https://openmeet.net)',
             },
+            timeout: this.geocodingTimeoutMs,
           },
         );
 
@@ -491,6 +493,12 @@ export class EventIntegrationService {
         this.logger.warn(
           `Error geocoding "${currentAddress}": ${error.message}`,
         );
+
+        // Rate limited: every shorter variant would be refused too, and each
+        // retry costs another geocodingDelayMs inside the request
+        if (axios.isAxiosError(error) && error.response?.status === 429) {
+          return null;
+        }
 
         // On error, also try with shorter address
         const commaIndex = currentAddress.indexOf(',');
@@ -762,13 +770,19 @@ export class EventIntegrationService {
 
     // Handle location
     if (eventData.location) {
+      // A re-sent record with the same address keeps its stored coordinates;
+      // geocoding it again on every update is what got us 429'd by Nominatim
+      const alreadyGeocoded =
+        eventData.location.description === existingEvent.location &&
+        !!existingEvent.lat &&
+        !!existingEvent.lon;
       if (eventData.location.description) {
         existingEvent.location = eventData.location.description;
       }
       if (eventData.location.lat && eventData.location.lon) {
         existingEvent.lat = eventData.location.lat;
         existingEvent.lon = eventData.location.lon;
-      } else if (eventData.location.description) {
+      } else if (eventData.location.description && !alreadyGeocoded) {
         // Try to geocode the address if we have a description but no coordinates
         const coords = await this.geocodeAddress(
           eventData.location.description,
