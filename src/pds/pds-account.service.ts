@@ -227,9 +227,13 @@ export class PdsAccountService {
             | { error?: string; message?: string }
             | undefined;
 
-          // AT Protocol returns "InvalidRequest" with message about resolution failure
-          // when a handle doesn't exist. Other 400 errors (like InvalidHandle for
+          // PDS 0.4.5036+ returns "HandleNotFound" when a handle doesn't exist;
+          // older versions return "InvalidRequest" with a message about the
+          // resolution failure. Other 400 errors (like InvalidHandle for
           // malformed input) should be thrown.
+          if (data?.error === 'HandleNotFound') {
+            return true;
+          }
           if (
             data?.error === 'InvalidRequest' &&
             data?.message &&

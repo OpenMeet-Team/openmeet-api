@@ -19,6 +19,7 @@ import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { FileService } from '../../file/file.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import axios from 'axios';
 
 // Add constants for metrics tokens
 const PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL =
@@ -583,6 +584,68 @@ describe('EventIntegrationService', () => {
         eventRepository.save.mock.invocationCallOrder[0],
       );
       expect(residualMs).toBeGreaterThanOrEqual(simulatedCreatorIoMs - 1);
+    });
+
+    it('should not re-geocode an update whose address is unchanged and already geocoded', async () => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        {
+          ...mockExistingEvent,
+          location: '123 Main St, Louisville, KY',
+          lat: 38.25,
+          lon: -85.76,
+        } as unknown as EventEntity,
+      ]);
+      const geocodeSpy = jest
+        .spyOn(service as any, 'geocodeAddress')
+        .mockResolvedValue(null);
+
+      const result = await service.processExternalEvent(
+        eventWithAddressOnly,
+        'tenant1',
+      );
+
+      expect(geocodeSpy).not.toHaveBeenCalled();
+      expect(result.lat).toBe(38.25);
+      expect(result.lon).toBe(-85.76);
+    });
+
+    it('should geocode an update whose address changed', async () => {
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        {
+          ...mockExistingEvent,
+          location: '1 Old Rd, Lexington, KY',
+          lat: 38.04,
+          lon: -84.5,
+        } as unknown as EventEntity,
+      ]);
+      const geocodeSpy = jest
+        .spyOn(service as any, 'geocodeAddress')
+        .mockResolvedValue({ lat: 38.25, lon: -85.76 });
+
+      const result = await service.processExternalEvent(
+        eventWithAddressOnly,
+        'tenant1',
+      );
+
+      expect(geocodeSpy).toHaveBeenCalledWith('123 Main St, Louisville, KY');
+      expect(result.lat).toBe(38.25);
+    });
+
+    it('should stop at the first 429 instead of retrying shorter addresses', async () => {
+      const getSpy = jest.spyOn(axios, 'get').mockRejectedValue(
+        Object.assign(new Error('Request failed with status code 429'), {
+          isAxiosError: true,
+          response: { status: 429 },
+        }),
+      );
+
+      const coords = await (service as any).geocodeAddress(
+        'Boulder, Boulder, CO, US',
+      );
+
+      expect(coords).toBeNull();
+      expect(getSpy).toHaveBeenCalledTimes(1);
+      getSpy.mockRestore();
     });
   });
 
