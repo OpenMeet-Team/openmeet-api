@@ -243,6 +243,32 @@ describe('PdsAccountService', () => {
       );
     });
 
+    it('should return true when a newer PDS reports HandleNotFound (400)', async () => {
+      const errorResponse: AxiosError = {
+        isAxiosError: true,
+        response: {
+          data: {
+            error: 'HandleNotFound',
+            message: 'Unable to resolve handle',
+          },
+          status: 400,
+          statusText: 'Bad Request',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        },
+        message: 'Request failed with status code 400',
+        name: 'AxiosError',
+        config: { headers: new AxiosHeaders() },
+        toJSON: () => ({}),
+      };
+
+      httpService.get.mockReturnValue(throwError(() => errorResponse));
+
+      const result = await service.isHandleAvailable('available.dev.opnmt.me');
+
+      expect(result).toBe(true);
+    });
+
     it('should return false when handle exists', async () => {
       const successResponse: AxiosResponse = {
         data: {
