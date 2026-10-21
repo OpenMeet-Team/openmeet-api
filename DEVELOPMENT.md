@@ -15,7 +15,7 @@ npm install
 docker compose -f docker-compose-dev.yml up -d
 
 # With ATProto devnet (PDS + PLC + Jetstream + TAP):
-# Requires: git clone https://github.com/OpenMeet-Team/atproto-devnet.git ../atproto-devnet
+# Requires: git clone https://github.com/OpenMeet-Team/snowglobe.git ../atproto-devnet
 ./scripts/devnet-up.sh
 
 # 4. Run migrations (first time only, or after pulling new migrations)

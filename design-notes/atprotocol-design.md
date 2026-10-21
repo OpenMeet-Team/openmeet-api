@@ -1363,7 +1363,7 @@ export PDS_INVITE_CODE=pds-xxx-xxxxx-xxxxx
 
 #### Local Development
 
-For local development with [atproto-devnet](https://github.com/OpenMeet-Team/atproto-devnet):
+For local development with [snowglobe](https://github.com/OpenMeet-Team/snowglobe) (formerly atproto-devnet):
 
 ```bash
 # Start devnet (PDS + PLC + Jetstream + TAP)
