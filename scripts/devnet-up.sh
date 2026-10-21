@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DEVNET_DIR="$(cd "$PROJECT_DIR/../atproto-devnet" 2>/dev/null && pwd)" || {
   echo "Error: atproto-devnet not found at ../atproto-devnet/"
-  echo "Clone it: git clone https://github.com/OpenMeet-Team/atproto-devnet.git ../atproto-devnet"
+  echo "Clone it: git clone https://github.com/OpenMeet-Team/snowglobe.git ../atproto-devnet"
   exit 1
 }
 

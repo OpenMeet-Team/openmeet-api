@@ -142,11 +142,11 @@ npm run migration:reset
 
 ### ATProto Devnet (Local Development)
 
-For local AT Protocol testing (PDS, PLC, Jetstream, TAP), use the [atproto-devnet](https://github.com/OpenMeet-Team/atproto-devnet) repo:
+For local AT Protocol testing (PDS, PLC, Jetstream, TAP), use the [snowglobe](https://github.com/OpenMeet-Team/snowglobe) (formerly atproto-devnet) repo:
 
 ```bash
 # Clone devnet as a sibling directory (one-time setup)
-git clone https://github.com/OpenMeet-Team/atproto-devnet.git ../atproto-devnet
+git clone https://github.com/OpenMeet-Team/snowglobe.git ../atproto-devnet
 
 # Start everything (generates fresh PDS invite code automatically)
 ./scripts/devnet-up.sh

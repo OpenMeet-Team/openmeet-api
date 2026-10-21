@@ -41,7 +41,7 @@ jobs:
       - name: Checkout atproto-devnet
         uses: actions/checkout@v4
         with:
-          repository: OpenMeet-Team/atproto-devnet
+          repository: OpenMeet-Team/snowglobe
           path: atproto-devnet
           ref: v0.1.0
 
